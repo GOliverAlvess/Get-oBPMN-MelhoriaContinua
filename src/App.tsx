@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Component } from 'react';
+import React, { useState, useEffect, Component, useRef } from 'react';
 import { 
   LayoutDashboard, 
   Plus, 
@@ -27,6 +27,7 @@ import { ptBR } from 'date-fns/locale';
 import { 
   auth, 
   db, 
+  dbId,
   googleProvider, 
   signInWithPopup, 
   onAuthStateChanged, 
@@ -189,21 +190,43 @@ export default function App() {
   };
 
   const [isSaving, setIsSaving] = useState(false);
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Improved update function for child components
   const syncProjectToFirestore = async (projectToSync: Project) => {
-    // Update local state immediately for better UX
-    setProjects(prev => prev.map(p => p.id === projectToSync.id ? projectToSync : p));
+    // 1. Update local state immediately for UI responsiveness
+    setProjects(prev => {
+      const exists = prev.find(p => p.id === projectToSync.id);
+      if (exists && JSON.stringify(exists) === JSON.stringify(projectToSync)) {
+        return prev;
+      }
+      return prev.map(p => p.id === projectToSync.id ? projectToSync : p);
+    });
+    
+    // 2. Debounce the Firestore write
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
     setIsSaving(true);
     
-    try {
-      const projectRef = doc(db, 'projects', projectToSync.id);
-      await setDoc(projectRef, projectToSync);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `projects/${projectToSync.id}`);
-    } finally {
-      setTimeout(() => setIsSaving(false), 1000);
-    }
+    saveTimeoutRef.current = setTimeout(async () => {
+      try {
+        console.log("⏳ Iniciando salvamento no Firestore para o projeto:", projectToSync.id);
+        const projectRef = doc(db, 'projects', projectToSync.id);
+        await setDoc(projectRef, projectToSync);
+        console.log("✅ Projeto salvo com sucesso!");
+      } catch (error: any) {
+        console.error("❌ Erro ao salvar no Firestore:", error);
+        if (error.message?.includes('offline')) {
+          console.error("DICA: Verifique se o banco de dados '" + (dbId || '(default)') + "' existe no seu console Firebase.");
+        }
+        // Don't throw here to avoid crashing the UI, but log it
+      } finally {
+        // Keep the saving indicator for a bit so the user sees it happened
+        setTimeout(() => setIsSaving(false), 800);
+      }
+    }, 1500); // 1.5s debounce
   };
 
   const handleCreateProject = async () => {

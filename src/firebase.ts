@@ -19,6 +19,8 @@ const firebaseConfig = {
 // Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);
 // Use the named database if provided, otherwise use the default one
+export const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
+console.log(`📡 Usando banco de dados Firestore: ${dbId}`);
 export const db = firebaseConfig.firestoreDatabaseId 
   ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
   : getFirestore(app);

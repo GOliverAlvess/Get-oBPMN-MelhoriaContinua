@@ -71,12 +71,25 @@ export default function MappingTab({ project, setProjects }: { project: Project,
 
   // Auto-save logic
   useEffect(() => {
+    // Check if anything actually changed compared to the project prop
+    const nodesChanged = JSON.stringify(nodes) !== JSON.stringify(project.mapping.nodes);
+    const edgesChanged = JSON.stringify(edges) !== JSON.stringify(project.mapping.edges);
+    const orientationChanged = orientation !== project.mapping.orientation;
+
+    if (!nodesChanged && !edgesChanged && !orientationChanged) return;
+
     const timer = setTimeout(() => {
       setProjects({ 
         ...project, 
-        mapping: { ...project.mapping, nodes, edges, orientation, lastEdited: new Date().toISOString() } 
+        mapping: { 
+          ...project.mapping, 
+          nodes, 
+          edges, 
+          orientation, 
+          lastEdited: new Date().toISOString() 
+        } 
       });
-    }, 1000);
+    }, 2000); // 2s debounce for mapping
     return () => clearTimeout(timer);
   }, [nodes, edges, orientation, project.id, setProjects]);
 

@@ -17,7 +17,16 @@ const firebaseConfig = {
 };
 
 // Log de diagnóstico (visível no F12 do navegador)
-console.log("Firebase Initialized with Project ID:", firebaseConfig.projectId);
+const maskedKey = firebaseConfig.apiKey 
+  ? `${firebaseConfig.apiKey.substring(0, 5)}...${firebaseConfig.apiKey.substring(firebaseConfig.apiKey.length - 4)}`
+  : "NÃO ENCONTRADA";
+
+console.log("--- DEBUG FIREBASE ---");
+console.log("Project ID:", firebaseConfig.projectId);
+console.log("API Key sendo usada:", maskedKey);
+console.log("Tamanho da API Key:", firebaseConfig.apiKey?.length || 0);
+console.log("----------------------");
+
 if (!firebaseConfig.apiKey) console.error("CRÍTICO: API Key do Firebase não encontrada!");
 
 // Initialize Firebase SDK

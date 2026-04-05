@@ -3,12 +3,26 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, User 
 import { getFirestore, doc, getDocFromServer, collection, onSnapshot, query, where, setDoc, updateDoc, deleteDoc, addDoc, getDocs, getDoc } from 'firebase/firestore';
 
 // Import the Firebase configuration
-import firebaseConfig from '../firebase-applet-config.json';
+import firebaseConfigJson from '../firebase-applet-config.json';
+
+// Use environment variables if available (Vercel/Production), otherwise fallback to JSON
+const firebaseConfig: any = {
+  apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || (firebaseConfigJson as any).apiKey,
+  authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || (firebaseConfigJson as any).authDomain,
+  projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || (firebaseConfigJson as any).projectId,
+  storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || (firebaseConfigJson as any).storageBucket,
+  messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || (firebaseConfigJson as any).messagingSenderId,
+  appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || (firebaseConfigJson as any).appId,
+  firestoreDatabaseId: (import.meta as any).env?.VITE_FIREBASE_FIRESTORE_DATABASE_ID || (firebaseConfigJson as any).firestoreDatabaseId
+};
 
 // Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
-export const auth = getAuth();
+// Use the named database if provided, otherwise use the default one
+export const db = firebaseConfig.firestoreDatabaseId 
+  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  : getFirestore(app);
+export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
 export enum OperationType {

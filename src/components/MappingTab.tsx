@@ -51,7 +51,7 @@ const SHAPES: { type: BPMNShapeType; label: string; path: string }[] = [
   { type: 'data-storage', label: 'Banco de Dados', path: 'M 5 15 A 45 10 0 0 1 95 15 L 95 85 A 45 10 0 0 1 5 85 Z' },
 ];
 
-export default function MappingTab({ project, setProjects }: { project: Project, setProjects: React.Dispatch<React.SetStateAction<Project[]>> }) {
+export default function MappingTab({ project, setProjects }: { project: Project, setProjects: (p: Project) => void }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(project.mapping.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(project.mapping.edges);
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>(project.mapping.orientation);
@@ -62,11 +62,10 @@ export default function MappingTab({ project, setProjects }: { project: Project,
   // Auto-save logic
   useEffect(() => {
     const timer = setTimeout(() => {
-      setProjects(prev => prev.map(p => 
-        p.id === project.id 
-          ? { ...p, mapping: { ...p.mapping, nodes, edges, orientation, lastEdited: new Date().toISOString() } }
-          : p
-      ));
+      setProjects({ 
+        ...project, 
+        mapping: { ...project.mapping, nodes, edges, orientation, lastEdited: new Date().toISOString() } 
+      });
     }, 1000);
     return () => clearTimeout(timer);
   }, [nodes, edges, orientation, project.id, setProjects]);
@@ -127,11 +126,10 @@ export default function MappingTab({ project, setProjects }: { project: Project,
       backgroundColor: selectedNode.data.backgroundColor,
       borderColor: selectedNode.data.borderColor
     };
-    setProjects(prev => prev.map(p => 
-      p.id === project.id 
-        ? { ...p, savedColors: [...(p.savedColors || []), newSavedColor] } 
-        : p
-    ));
+    setProjects({ 
+      ...project, 
+      savedColors: [...(project.savedColors || []), newSavedColor] 
+    });
     setNewColorName('');
   };
 

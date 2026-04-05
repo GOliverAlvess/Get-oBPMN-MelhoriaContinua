@@ -23,7 +23,7 @@ import { cn } from '../lib/utils';
 
 export default function PDCAEditor({ project, setProjects, onBack }: { 
   project: Project, 
-  setProjects: React.Dispatch<React.SetStateAction<Project[]>>,
+  setProjects: (p: Project) => void,
   onBack: () => void
 }) {
   const [activeCycleId, setActiveCycleId] = useState<string | null>(project.pdcaCycles[0]?.id || null);
@@ -60,19 +60,14 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
       act: { standardization: '', documentation: '', correctiveAction: '', lessonsLearned: '' }
     };
 
-    setProjects(prev => prev.map(p => 
-      p.id === project.id ? { ...p, pdcaCycles: [newCycle, ...p.pdcaCycles] } : p
-    ));
+    setProjects({ ...project, pdcaCycles: [newCycle, ...project.pdcaCycles] });
     setActiveCycleId(newCycle.id);
   };
 
   const updateCycle = (newData: Partial<PDCACycle>) => {
     if (!activeCycleId) return;
-    setProjects(prev => prev.map(p => 
-      p.id === project.id 
-        ? { ...p, pdcaCycles: p.pdcaCycles.map(c => c.id === activeCycleId ? { ...c, ...newData } : c) } 
-        : p
-    ));
+    const newCycles = project.pdcaCycles.map(c => c.id === activeCycleId ? { ...c, ...newData } : c);
+    setProjects({ ...project, pdcaCycles: newCycles });
   };
 
   const updatePlan = (newPlan: any) => {

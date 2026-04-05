@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import { 
   LayoutDashboard, 
   Plus, 
@@ -23,73 +23,210 @@ import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+import { 
+  auth, 
+  db, 
+  googleProvider, 
+  signInWithPopup, 
+  onAuthStateChanged, 
+  collection, 
+  onSnapshot, 
+  query, 
+  where, 
+  setDoc, 
+  doc, 
+  addDoc, 
+  deleteDoc, 
+  handleFirestoreError, 
+  OperationType,
+  getDocs,
+  getDoc
+} from './firebase';
+import type { FirebaseUser } from './firebase';
 import { Project, ProjectStatus, User } from './types';
 import { cn } from './lib/utils';
 
-// Mock Initial Data
-const INITIAL_USERS: User[] = [
-  { id: '1', name: 'Carlos Silva' },
-  { id: '2', name: 'Ana Oliveira' },
-  { id: '3', name: 'Roberto Santos' },
-];
+// Error Boundary Component
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+}
 
-const INITIAL_PROJECTS: Project[] = [
-  {
-    id: 'p1',
-    name: 'Otimização de Logística Reversa',
-    createdAt: new Date().toISOString(),
-    progress: 45,
-    status: 'Em Execução',
-    assignedTo: '1',
-    scope: {
-      title: 'Otimização de Logística Reversa',
-      responsible: 'Carlos Silva',
-      problemDescription: 'Alto custo com devoluções não processadas.',
-      measurableObjective: 'Reduzir custo em 20%',
-      involvedSectors: [{ id: 's1', name: 'Logística' }],
-      toolsUsed: [{ id: 't1', name: 'SAP' }],
-      startDate: '2024-01-10',
-      forecastCompletion: '2024-06-30',
-      financial: {
-        currentImpact: { value: 50000, type: 'continuo', period: 'mensal' },
-        gainProjection: { value: 10000, type: 'fixo', period: 'mensal' }
-      }
-    },
-    mapping: { nodes: [], edges: [], orientation: 'horizontal', lastEdited: new Date().toISOString() },
-    pdcaCycles: [],
-    savedColors: []
-  },
-  {
-    id: 'p2',
-    name: 'Redução de Setup Máquina A',
-    createdAt: new Date().toISOString(),
-    progress: 15,
-    status: 'Planejamento',
-    assignedTo: '2',
-    scope: {
-      title: 'Redução de Setup Máquina A',
-      responsible: 'Ana Oliveira',
-      problemDescription: 'Tempo de setup excedendo 4 horas.',
-      measurableObjective: 'Reduzir para 2 horas',
-      involvedSectors: [{ id: 's2', name: 'Produção' }],
-      toolsUsed: [{ id: 't2', name: 'Cronômetro' }],
-      startDate: '2024-02-15',
-      forecastCompletion: '2024-04-15',
-      financial: {
-        currentImpact: { value: 20000, type: 'continuo', period: 'mensal' },
-        gainProjection: { value: 8000, type: 'fixo', period: 'mensal' }
-      }
-    },
-    mapping: { nodes: [], edges: [], orientation: 'horizontal', lastEdited: new Date().toISOString() },
-    pdcaCycles: [],
-    savedColors: []
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: any;
+}
+
+class ErrorBoundary extends Component<any, any> {
+  public state: any = { hasError: false, error: null };
+
+  constructor(props: any) {
+    super(props);
   }
-];
+
+  static getDerivedStateFromError(error: any): any {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      let errorMessage = "Ocorreu um erro inesperado.";
+      try {
+        const firestoreError = JSON.parse(this.state.error.message);
+        errorMessage = `Erro no Firestore (${firestoreError.operationType}): ${firestoreError.error}`;
+      } catch (e) {
+        errorMessage = this.state.error?.message || errorMessage;
+      }
+
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+          <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center space-y-6 border border-slate-100">
+            <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto">
+              <AlertCircle size={32} />
+            </div>
+            <h2 className="text-2xl font-bold text-slate-900">Ops! Algo deu errado</h2>
+            <p className="text-slate-500 text-sm leading-relaxed">{errorMessage}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-indigo-600 text-white py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all"
+            >
+              Recarregar Aplicativo
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (this as any).props.children;
+  }
+}
 
 export default function App() {
-  const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'scope' | 'mapping' | 'pdca'>('scope');
+
+  // Auth State Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Firestore Data Listeners
+  useEffect(() => {
+    if (!user) return;
+
+    // Listen for Users
+    const usersUnsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const usersData = snapshot.docs.map(doc => doc.data() as User);
+      setUsers(usersData);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
+
+    // Listen for Projects
+    const projectsUnsubscribe = onSnapshot(collection(db, 'projects'), (snapshot) => {
+      const projectsData = snapshot.docs.map(doc => doc.data() as Project);
+      setProjects(projectsData);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'projects'));
+
+    return () => {
+      usersUnsubscribe();
+      projectsUnsubscribe();
+    };
+  }, [user]);
+
+  // Sync User Profile to Firestore
+  useEffect(() => {
+    if (user) {
+      const userDocRef = doc(db, 'users', user.uid);
+      setDoc(userDocRef, {
+        id: user.uid,
+        name: user.displayName || 'Usuário sem nome',
+      }, { merge: true }).catch(error => handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`));
+    }
+  }, [user]);
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (error) {
+      console.error("Login failed", error);
+    }
+  };
+
+  const handleLogout = () => auth.signOut();
+
+  const updateProjectInFirestore = async (updatedProjects: Project[] | ((prev: Project[]) => Project[])) => {
+    // If it's a function, we need to get the current state
+    let newProjects: Project[];
+    if (typeof updatedProjects === 'function') {
+      newProjects = updatedProjects(projects);
+    } else {
+      newProjects = updatedProjects;
+    }
+
+    // Find which project changed (assuming only one changes at a time for simplicity)
+    // In a real app, you'd pass the specific project to update
+    // For now, let's just update the local state and the Firestore will sync back via onSnapshot
+    // But we need to actually write to Firestore here
+    setProjects(newProjects);
+  };
+
+  // Improved update function for child components
+  const syncProjectToFirestore = async (projectToSync: Project) => {
+    try {
+      const projectRef = doc(db, 'projects', projectToSync.id);
+      await setDoc(projectRef, projectToSync);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `projects/${projectToSync.id}`);
+    }
+  };
+
+  const handleCreateProject = async () => {
+    if (!user) return;
+    const newId = uuidv4();
+    const newProject: Project = {
+      id: newId,
+      name: 'Novo Projeto',
+      createdAt: new Date().toISOString(),
+      progress: 0,
+      status: 'Planejamento',
+      assignedTo: user.uid,
+      scope: {
+        title: 'Novo Projeto',
+        responsible: user.displayName || 'Admin',
+        problemDescription: '',
+        measurableObjective: '',
+        involvedSectors: [],
+        toolsUsed: [],
+        startDate: new Date().toISOString(),
+        forecastCompletion: new Date().toISOString(),
+        financial: {
+          currentImpact: { value: 0, type: 'continuo', period: 'mensal' },
+          gainProjection: { value: 0, type: 'fixo', period: 'mensal' }
+        }
+      },
+      mapping: { nodes: [], edges: [], orientation: 'horizontal', lastEdited: new Date().toISOString() },
+      pdcaCycles: [],
+      savedColors: []
+    };
+
+    try {
+      await setDoc(doc(db, 'projects', newId), newProject);
+      setSelectedProjectId(newId);
+      setActiveTab('scope');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, `projects/${newId}`);
+    }
+  };
 
   const selectedProject = projects.find(p => p.id === selectedProjectId);
 
@@ -102,89 +239,132 @@ export default function App() {
     setSelectedProjectId(null);
   };
 
-  return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans">
-      {/* Sidebar */}
-      <aside className="fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 z-50 hidden lg:flex flex-col">
-        <div className="p-6 border-b border-slate-100">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
-              <LayoutDashboard size={24} />
-            </div>
-            <h1 className="font-bold text-xl tracking-tight text-slate-800">ProcessFlow</h1>
-          </div>
+  if (!isAuthReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="flex flex-col items-center gap-4">
+          <RefreshCw className="text-indigo-600 animate-spin" size={40} />
+          <p className="text-slate-500 font-medium">Carregando...</p>
         </div>
+      </div>
+    );
+  }
 
-        <nav className="flex-1 p-4 space-y-2">
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+        <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center space-y-8 border border-slate-100">
+          <div className="w-20 h-20 bg-indigo-600 rounded-2xl flex items-center justify-center text-white mx-auto shadow-xl shadow-indigo-100">
+            <LayoutDashboard size={40} />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">ProcessFlow</h2>
+            <p className="text-slate-500 text-sm">Gestão de Processos, BPMN e PDCA em um só lugar.</p>
+          </div>
           <button 
-            onClick={handleBackToKanban}
-            className={cn(
-              "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
-              !selectedProjectId ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-500 hover:bg-slate-50"
-            )}
+            onClick={handleLogin}
+            className="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-200 text-slate-700 py-4 rounded-2xl font-bold hover:bg-slate-50 hover:border-indigo-200 transition-all group"
           >
-            <LayoutDashboard size={20} />
-            <span>Projetos (Kanban)</span>
+            <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
+            Entrar com Google
           </button>
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 transition-all duration-200">
-            <Users size={20} />
-            <span>Equipe</span>
-          </button>
-          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 transition-all duration-200">
-            <Settings size={20} />
-            <span>Configurações</span>
-          </button>
-        </nav>
-
-        <div className="p-4 border-t border-slate-100">
-          <div className="flex items-center gap-3 px-4 py-3">
-            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
-              <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-800 truncate">Admin User</p>
-              <p className="text-xs text-slate-500 truncate">bielalves201@gmail.com</p>
-            </div>
-            <LogOut size={18} className="text-slate-400 hover:text-red-500 cursor-pointer" />
-          </div>
+          <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Acesso Seguro via Firebase</p>
         </div>
-      </aside>
+      </div>
+    );
+  }
 
-      {/* Main Content */}
-      <main className={cn(
-        "transition-all duration-300 min-h-screen",
-        "lg:ml-64 p-4 lg:p-8"
-      )}>
-        <AnimatePresence mode="wait">
-          {!selectedProjectId ? (
-            <KanbanView 
-              key="kanban"
-              projects={projects} 
-              users={INITIAL_USERS} 
-              onProjectClick={handleProjectClick} 
-            />
-          ) : (
-            <ProjectDetailView 
-              key="detail"
-              project={selectedProject!} 
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              onBack={handleBackToKanban}
-              setProjects={setProjects}
-            />
-          )}
-        </AnimatePresence>
-      </main>
-    </div>
+  return (
+    <ErrorBoundary>
+      <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans">
+        {/* Sidebar */}
+        <aside className="fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 z-50 hidden lg:flex flex-col">
+          <div className="p-6 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+                <LayoutDashboard size={24} />
+              </div>
+              <h1 className="font-bold text-xl tracking-tight text-slate-800">ProcessFlow</h1>
+            </div>
+          </div>
+
+          <nav className="flex-1 p-4 space-y-2">
+            <button 
+              onClick={handleBackToKanban}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
+                !selectedProjectId ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              <LayoutDashboard size={20} />
+              <span>Projetos (Kanban)</span>
+            </button>
+            <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 transition-all duration-200">
+              <Users size={20} />
+              <span>Equipe</span>
+            </button>
+            <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 transition-all duration-200">
+              <Settings size={20} />
+              <span>Configurações</span>
+            </button>
+          </nav>
+
+          <div className="p-4 border-t border-slate-100">
+            <div className="flex items-center gap-3 px-4 py-3">
+              <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
+                <img src={user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`} alt="User" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-slate-800 truncate">{user.displayName}</p>
+                <p className="text-xs text-slate-500 truncate">{user.email}</p>
+              </div>
+              <LogOut 
+                size={18} 
+                className="text-slate-400 hover:text-red-500 cursor-pointer" 
+                onClick={handleLogout}
+              />
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <main className={cn(
+          "transition-all duration-300 min-h-screen",
+          "lg:ml-64 p-4 lg:p-8"
+        )}>
+          <AnimatePresence mode="wait">
+            {!selectedProjectId ? (
+              <KanbanView 
+                key="kanban"
+                projects={projects} 
+                users={users} 
+                onProjectClick={handleProjectClick} 
+                onCreateProject={handleCreateProject}
+              />
+            ) : (
+              <ProjectDetailView 
+                key="detail"
+                project={selectedProject!} 
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                onBack={handleBackToKanban}
+                setProjects={syncProjectToFirestore as any}
+              />
+            )}
+          </AnimatePresence>
+        </main>
+      </div>
+    </ErrorBoundary>
   );
 }
 
 // --- KANBAN VIEW ---
 
-function KanbanView({ projects, users, onProjectClick }: { 
+function KanbanView({ projects, users, onProjectClick, onCreateProject }: { 
   projects: Project[], 
   users: User[], 
   onProjectClick: (id: string) => void,
+  onCreateProject: () => void,
   key?: string
 }) {
   return (
@@ -199,7 +379,10 @@ function KanbanView({ projects, users, onProjectClick }: {
           <h2 className="text-3xl font-bold text-slate-900">Gestão de Projetos</h2>
           <p className="text-slate-500 mt-1">Visualize e gerencie o fluxo de melhoria contínua.</p>
         </div>
-        <button className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200">
+        <button 
+          onClick={onCreateProject}
+          className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+        >
           <Plus size={20} />
           <span>Novo Projeto</span>
         </button>
@@ -232,7 +415,10 @@ function KanbanView({ projects, users, onProjectClick }: {
                 />
               ))}
               
-              <button className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:border-indigo-300 hover:text-indigo-400 transition-all flex items-center justify-center gap-2 group">
+              <button 
+                onClick={onCreateProject}
+                className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:border-indigo-300 hover:text-indigo-400 transition-all flex items-center justify-center gap-2 group"
+              >
                 <Plus size={18} className="group-hover:scale-110 transition-transform" />
                 <span className="text-sm font-medium">Adicionar Projeto</span>
               </button>
@@ -308,7 +494,7 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
   activeTab: string, 
   setActiveTab: (tab: any) => void,
   onBack: () => void,
-  setProjects: React.Dispatch<React.SetStateAction<Project[]>>,
+  setProjects: (p: Project) => void,
   key?: string
 }) {
   return (
@@ -392,30 +578,22 @@ function TabButton({ active, onClick, icon, label }: { active: boolean, onClick:
 
 // --- SCOPE TAB ---
 
-function ScopeTab({ project, setProjects }: { project: Project, setProjects: React.Dispatch<React.SetStateAction<Project[]>> }) {
+function ScopeTab({ project, setProjects }: { project: Project, setProjects: (p: Project) => void }) {
   const updateScope = (field: string, value: any) => {
-    setProjects(prev => prev.map(p => 
-      p.id === project.id 
-        ? { ...p, scope: { ...p.scope, [field]: value } } 
-        : p
-    ));
+    setProjects({ ...project, scope: { ...project.scope, [field]: value } });
   };
 
   const updateFinancial = (section: 'currentImpact' | 'gainProjection', field: string, value: any) => {
-    setProjects(prev => prev.map(p => 
-      p.id === project.id 
-        ? { 
-            ...p, 
-            scope: { 
-              ...p.scope, 
-              financial: { 
-                ...p.scope.financial, 
-                [section]: { ...p.scope.financial[section], [field]: value } 
-              } 
-            } 
-          } 
-        : p
-    ));
+    setProjects({ 
+      ...project, 
+      scope: { 
+        ...project.scope, 
+        financial: { 
+          ...project.scope.financial, 
+          [section]: { ...project.scope.financial[section], [field]: value } 
+        } 
+      } 
+    });
   };
 
   return (
@@ -644,7 +822,7 @@ import PDCAEditor from './components/PDCAEditor';
 
 // --- PDCA TAB ---
 
-function PDCATab({ project, setProjects }: { project: Project, setProjects: React.Dispatch<React.SetStateAction<Project[]>> }) {
+function PDCATab({ project, setProjects }: { project: Project, setProjects: (p: Project) => void }) {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
 
   if (isEditorOpen) {

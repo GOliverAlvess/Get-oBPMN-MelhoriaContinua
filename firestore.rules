@@ -1,0 +1,108 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //
+    // Collection: projects
+    // Document ID: {projectId}
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - createdAt: string (required, date-time)
+    //   - progress: number (required, 0-100)
+    //   - status: string (required, enum)
+    //   - assignedTo: string (required, userId)
+    //   - scope: map (required)
+    //   - mapping: map (required)
+    //   - pdcaCycles: list (optional)
+    //   - savedColors: list (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "bielalves201@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['id', 'name']) &&
+             data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100;
+    }
+
+    function isValidProject(data) {
+      return hasRequiredFields(['id', 'name', 'createdAt', 'progress', 'status', 'assignedTo', 'scope', 'mapping']) &&
+             data.id is string && data.id.size() > 0 &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
+             isValidDateString(data.createdAt) &&
+             data.progress is number && data.progress >= 0 && data.progress <= 100 &&
+             data.status in ['Planejamento', 'Em Execução', 'Concluído', 'Suspenso'] &&
+             data.assignedTo is string &&
+             data.scope is map &&
+             data.mapping is map;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /projects/{projectId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidProject(request.resource.data);
+      allow update: if isAuthenticated() && isValidProject(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

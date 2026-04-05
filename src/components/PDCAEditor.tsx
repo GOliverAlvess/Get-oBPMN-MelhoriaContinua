@@ -75,6 +75,12 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
     updateCycle({ plan: { ...activeCycle.plan, ...newPlan } });
   };
 
+  function isValidDate(dateStr: string) {
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    return d instanceof Date && !isNaN(d.getTime());
+  }
+
   return (
     <div className="flex flex-col h-full bg-slate-50">
       {/* Header */}
@@ -150,7 +156,9 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
                   )}>
                     {cycle.title}
                   </p>
-                  <p className="text-[10px] text-slate-400 mt-1">{format(new Date(cycle.createdAt), 'dd/MM/yyyy HH:mm')}</p>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {isValidDate(cycle.createdAt) ? format(new Date(cycle.createdAt), 'dd/MM/yyyy HH:mm') : 'Data Inválida'}
+                  </p>
                 </button>
               ))}
             </div>

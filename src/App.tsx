@@ -106,6 +106,12 @@ class ErrorBoundary extends Component<any, any> {
   }
 }
 
+function isValidDate(dateStr: string) {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  return d instanceof Date && !isNaN(d.getTime());
+}
+
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
@@ -190,43 +196,47 @@ export default function App() {
   };
 
   const [isSaving, setIsSaving] = useState(false);
-  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Improved update function for child components
   const syncProjectToFirestore = async (projectToSync: Project) => {
-    // 1. Update local state immediately for UI responsiveness
-    setProjects(prev => {
-      const exists = prev.find(p => p.id === projectToSync.id);
-      if (exists && JSON.stringify(exists) === JSON.stringify(projectToSync)) {
-        return prev;
-      }
-      return prev.map(p => p.id === projectToSync.id ? projectToSync : p);
-    });
-    
-    // 2. Debounce the Firestore write
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
+    // Update local state immediately for UI responsiveness
+    setProjects(prev => prev.map(p => p.id === projectToSync.id ? projectToSync : p));
+  };
 
+  const handleManualSave = async (projectToSave: Project) => {
     setIsSaving(true);
-    
-    saveTimeoutRef.current = setTimeout(async () => {
-      try {
-        console.log("⏳ Iniciando salvamento no Firestore para o projeto:", projectToSync.id);
-        const projectRef = doc(db, 'projects', projectToSync.id);
-        await setDoc(projectRef, projectToSync);
-        console.log("✅ Projeto salvo com sucesso!");
-      } catch (error: any) {
-        console.error("❌ Erro ao salvar no Firestore:", error);
-        if (error.message?.includes('offline')) {
-          console.error("DICA: Verifique se o banco de dados '" + (dbId || '(default)') + "' existe no seu console Firebase.");
+    try {
+      console.log("⏳ Iniciando salvamento MANUAL no Firestore para o projeto:", projectToSave.id);
+      const projectRef = doc(db, 'projects', projectToSave.id);
+      
+      // Ensure date is valid ISO string for security rules
+      const finalProject = {
+        ...projectToSave,
+        createdAt: isValidDate(projectToSave.createdAt) 
+          ? projectToSave.createdAt 
+          : new Date().toISOString(),
+        scope: {
+          ...projectToSave.scope,
+          startDate: isValidDate(projectToSave.scope.startDate) 
+            ? projectToSave.scope.startDate 
+            : new Date().toISOString().split('T')[0],
+          forecastCompletion: isValidDate(projectToSave.scope.forecastCompletion) 
+            ? projectToSave.scope.forecastCompletion 
+            : new Date().toISOString().split('T')[0]
         }
-        // Don't throw here to avoid crashing the UI, but log it
-      } finally {
-        // Keep the saving indicator for a bit so the user sees it happened
-        setTimeout(() => setIsSaving(false), 800);
+      };
+
+      await setDoc(projectRef, finalProject);
+      console.log("✅ Projeto salvo com sucesso!");
+    } catch (error: any) {
+      console.error("❌ Erro ao salvar no Firestore:", error);
+      if (error.message?.includes('offline') || error.message?.includes('not found')) {
+        console.error("DICA: Verifique se o banco de dados '" + (dbId || '(default)') + "' existe no seu console Firebase.");
       }
-    }, 1500); // 1.5s debounce
+      handleFirestoreError(error, OperationType.WRITE, `projects/${projectToSave.id}`);
+    } finally {
+      setTimeout(() => setIsSaving(false), 1000);
+    }
   };
 
   const handleCreateProject = async () => {
@@ -388,6 +398,7 @@ export default function App() {
                 setActiveTab={setActiveTab}
                 onBack={handleBackToKanban}
                 setProjects={syncProjectToFirestore as any}
+                onSave={handleManualSave}
                 isSaving={isSaving}
               />
             )}
@@ -504,7 +515,7 @@ function ProjectCard({ project, onClick }: { project: Project, onClick: () => vo
         <div className="flex items-center justify-between text-xs text-slate-500">
           <div className="flex items-center gap-1.5">
             <Calendar size={14} />
-            <span>{format(new Date(project.createdAt), 'dd MMM yyyy', { locale: ptBR })}</span>
+            <span>{isValidDate(project.createdAt) ? format(new Date(project.createdAt), 'dd MMM yyyy', { locale: ptBR }) : 'Data Inválida'}</span>
           </div>
           <div className="flex items-center gap-1.5">
             <Clock size={14} />
@@ -529,12 +540,13 @@ function ProjectCard({ project, onClick }: { project: Project, onClick: () => vo
 
 // --- PROJECT DETAIL VIEW ---
 
-function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjects, isSaving }: { 
+function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjects, onSave, isSaving }: { 
   project: Project, 
   activeTab: string, 
   setActiveTab: (tab: any) => void,
   onBack: () => void,
   setProjects: (p: Project) => void,
+  onSave: (p: Project) => void,
   isSaving: boolean,
   key?: string
 }) {
@@ -571,7 +583,7 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
               <span className="w-1 h-1 bg-slate-300 rounded-full" />
               <span className="flex items-center gap-1">
                 <Clock size={14} />
-                Iniciado em {format(new Date(project.scope.startDate), 'dd/MM/yyyy')}
+                Iniciado em {isValidDate(project.createdAt) ? format(new Date(project.createdAt), 'dd/MM/yyyy') : 'Data Inválida'}
               </span>
             </div>
           </div>
@@ -579,11 +591,12 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
 
         <div className="flex items-center gap-4">
           <button 
-            onClick={() => setProjects(project)}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-xl font-bold text-sm hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100"
+            onClick={() => onSave(project)}
+            disabled={isSaving}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-xl font-bold text-sm hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save size={18} />
-            Salvar Alterações
+            {isSaving ? 'Salvando...' : 'Salvar Alterações'}
           </button>
           
           <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">

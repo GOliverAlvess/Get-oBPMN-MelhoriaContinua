@@ -59,7 +59,10 @@ service cloud.firestore {
     }
 
     function isValidDateString(dateStr) {
-      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+      return dateStr is string && (
+        dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$") ||
+        dateStr.matches("^\\d{4}-\\d{2}-\\d{2}$")
+      );
     }
 
     // ===============================================================
@@ -95,10 +98,10 @@ service cloud.firestore {
     }
 
     match /projects/{projectId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidProject(request.resource.data);
-      allow update: if isAuthenticated() && isValidProject(request.resource.data);
-      allow delete: if isAdmin();
+      allow read: if isAuthenticated() && (resource == null || resource.data.assignedTo == request.auth.uid);
+      allow create: if isAuthenticated() && request.resource.data.assignedTo == request.auth.uid && isValidProject(request.resource.data);
+      allow update: if isAuthenticated() && resource.data.assignedTo == request.auth.uid && request.resource.data.assignedTo == request.auth.uid && isValidProject(request.resource.data);
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.assignedTo == request.auth.uid);
     }
 
     match /{path=**} {

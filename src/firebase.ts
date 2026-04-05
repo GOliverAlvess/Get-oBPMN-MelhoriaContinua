@@ -13,17 +13,15 @@ const firebaseConfig = {
   storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || (firebaseConfigJson as any).storageBucket,
   messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || (firebaseConfigJson as any).messagingSenderId,
   appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || (firebaseConfigJson as any).appId,
-  firestoreDatabaseId: (import.meta as any).env?.VITE_FIREBASE_FIRESTORE_DATABASE_ID || (firebaseConfigJson as any).firestoreDatabaseId
+  firestoreDatabaseId: (import.meta as any).env?.VITE_FIREBASE_FIRESTORE_DATABASE_ID || (firebaseConfigJson as any).firestoreDatabaseId || 'ai-studio-0a603de1-f7ee-49a8-b6ea-91e90cc784f2'
 };
 
 // Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);
 // Use the named database if provided, otherwise use the default one
-export const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
+export const dbId = firebaseConfig.firestoreDatabaseId;
 console.log(`📡 Usando banco de dados Firestore: ${dbId}`);
-export const db = firebaseConfig.firestoreDatabaseId 
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : getFirestore(app);
+export const db = getFirestore(app, dbId);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });

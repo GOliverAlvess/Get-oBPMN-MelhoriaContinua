@@ -7,27 +7,14 @@ import firebaseConfigJson from '../firebase-applet-config.json';
 
 // Use environment variables if available (Vercel/Production), otherwise fallback to JSON
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || firebaseConfigJson.apiKey,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || firebaseConfigJson.storageBucket,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJson.messagingSenderId,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || firebaseConfigJson.appId,
-  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || firebaseConfigJson.firestoreDatabaseId
+  apiKey: (import.meta as any).env?.VITE_FIREBASE_API_KEY || (firebaseConfigJson as any).apiKey,
+  authDomain: (import.meta as any).env?.VITE_FIREBASE_AUTH_DOMAIN || (firebaseConfigJson as any).authDomain,
+  projectId: (import.meta as any).env?.VITE_FIREBASE_PROJECT_ID || (firebaseConfigJson as any).projectId,
+  storageBucket: (import.meta as any).env?.VITE_FIREBASE_STORAGE_BUCKET || (firebaseConfigJson as any).storageBucket,
+  messagingSenderId: (import.meta as any).env?.VITE_FIREBASE_MESSAGING_SENDER_ID || (firebaseConfigJson as any).messagingSenderId,
+  appId: (import.meta as any).env?.VITE_FIREBASE_APP_ID || (firebaseConfigJson as any).appId,
+  firestoreDatabaseId: (import.meta as any).env?.VITE_FIREBASE_FIRESTORE_DATABASE_ID || (firebaseConfigJson as any).firestoreDatabaseId
 };
-
-// Log de diagnóstico (visível no F12 do navegador)
-const maskedKey = firebaseConfig.apiKey 
-  ? `${firebaseConfig.apiKey.substring(0, 5)}...${firebaseConfig.apiKey.substring(firebaseConfig.apiKey.length - 4)}`
-  : "NÃO ENCONTRADA";
-
-console.log("--- DEBUG FIREBASE ---");
-console.log("Project ID:", firebaseConfig.projectId);
-console.log("API Key sendo usada:", maskedKey);
-console.log("Tamanho da API Key:", firebaseConfig.apiKey?.length || 0);
-console.log("----------------------");
-
-if (!firebaseConfig.apiKey) console.error("CRÍTICO: API Key do Firebase não encontrada!");
 
 // Initialize Firebase SDK
 const app = initializeApp(firebaseConfig);

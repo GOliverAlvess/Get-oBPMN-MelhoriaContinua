@@ -54,6 +54,16 @@ const SHAPES: { type: BPMNShapeType; label: string; path: string }[] = [
 export default function MappingTab({ project, setProjects }: { project: Project, setProjects: (p: Project) => void }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(project.mapping.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(project.mapping.edges);
+
+  // Sync with project prop if it changes from outside (e.g. Firestore update)
+  useEffect(() => {
+    // Only update if the content is actually different to avoid loops
+    const nodesChanged = JSON.stringify(nodes) !== JSON.stringify(project.mapping.nodes);
+    const edgesChanged = JSON.stringify(edges) !== JSON.stringify(project.mapping.edges);
+    
+    if (nodesChanged) setNodes(project.mapping.nodes);
+    if (edgesChanged) setEdges(project.mapping.edges);
+  }, [project.mapping.nodes, project.mapping.edges]);
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>(project.mapping.orientation);
   const [selectedNode, setSelectedNode] = useState<Node<BPMNTaskData> | null>(null);
   const [isSelectingShape, setIsSelectingShape] = useState(false);

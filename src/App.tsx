@@ -16,7 +16,8 @@ import {
   FileText,
   Settings,
   LogOut,
-  ArrowRight
+  ArrowRight,
+  Save
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -187,13 +188,21 @@ export default function App() {
     setProjects(newProjects);
   };
 
+  const [isSaving, setIsSaving] = useState(false);
+
   // Improved update function for child components
   const syncProjectToFirestore = async (projectToSync: Project) => {
+    // Update local state immediately for better UX
+    setProjects(prev => prev.map(p => p.id === projectToSync.id ? projectToSync : p));
+    setIsSaving(true);
+    
     try {
       const projectRef = doc(db, 'projects', projectToSync.id);
       await setDoc(projectRef, projectToSync);
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `projects/${projectToSync.id}`);
+    } finally {
+      setTimeout(() => setIsSaving(false), 1000);
     }
   };
 
@@ -356,6 +365,7 @@ export default function App() {
                 setActiveTab={setActiveTab}
                 onBack={handleBackToKanban}
                 setProjects={syncProjectToFirestore as any}
+                isSaving={isSaving}
               />
             )}
           </AnimatePresence>
@@ -496,12 +506,13 @@ function ProjectCard({ project, onClick }: { project: Project, onClick: () => vo
 
 // --- PROJECT DETAIL VIEW ---
 
-function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjects }: { 
+function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjects, isSaving }: { 
   project: Project, 
   activeTab: string, 
   setActiveTab: (tab: any) => void,
   onBack: () => void,
   setProjects: (p: Project) => void,
+  isSaving: boolean,
   key?: string
 }) {
   return (
@@ -520,7 +531,15 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
             <ChevronRight size={24} className="rotate-180" />
           </button>
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">{project.name}</h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-bold text-slate-900">{project.name}</h2>
+              {isSaving && (
+                <span className="flex items-center gap-1.5 text-[10px] font-black text-indigo-500 uppercase tracking-widest animate-pulse">
+                  <RefreshCw size={10} className="animate-spin" />
+                  Salvando...
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
               <span className="flex items-center gap-1">
                 <Users size={14} />
@@ -535,25 +554,35 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
           </div>
         </div>
 
-        <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
-          <TabButton 
-            active={activeTab === 'scope'} 
-            onClick={() => setActiveTab('scope')} 
-            icon={<FileText size={18} />} 
-            label="Escopo" 
-          />
-          <TabButton 
-            active={activeTab === 'mapping'} 
-            onClick={() => setActiveTab('mapping')} 
-            icon={<GitBranch size={18} />} 
-            label="Mapeamento" 
-          />
-          <TabButton 
-            active={activeTab === 'pdca'} 
-            onClick={() => setActiveTab('pdca')} 
-            icon={<RefreshCw size={18} />} 
-            label="PDCA" 
-          />
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => setProjects(project)}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-xl font-bold text-sm hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100"
+          >
+            <Save size={18} />
+            Salvar Alterações
+          </button>
+          
+          <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+            <TabButton 
+              active={activeTab === 'scope'} 
+              onClick={() => setActiveTab('scope')} 
+              icon={<FileText size={18} />} 
+              label="Escopo" 
+            />
+            <TabButton 
+              active={activeTab === 'mapping'} 
+              onClick={() => setActiveTab('mapping')} 
+              icon={<GitBranch size={18} />} 
+              label="Mapeamento" 
+            />
+            <TabButton 
+              active={activeTab === 'pdca'} 
+              onClick={() => setActiveTab('pdca')} 
+              icon={<RefreshCw size={18} />} 
+              label="PDCA" 
+            />
+          </div>
         </div>
       </div>
 

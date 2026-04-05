@@ -1,0 +1,577 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  LayoutDashboard, 
+  Plus, 
+  Search, 
+  MoreVertical, 
+  Calendar, 
+  CheckCircle2, 
+  Clock, 
+  AlertCircle,
+  ChevronRight,
+  Target,
+  GitBranch,
+  RefreshCw,
+  Users,
+  FileText,
+  Settings,
+  LogOut,
+  ArrowRight
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { v4 as uuidv4 } from 'uuid';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+
+import { Project, ProjectStatus, User } from './types';
+import { cn } from './lib/utils';
+
+// Mock Initial Data
+const INITIAL_USERS: User[] = [
+  { id: '1', name: 'Carlos Silva' },
+  { id: '2', name: 'Ana Oliveira' },
+  { id: '3', name: 'Roberto Santos' },
+];
+
+const INITIAL_PROJECTS: Project[] = [
+  {
+    id: 'p1',
+    name: 'Otimização de Logística Reversa',
+    createdAt: new Date().toISOString(),
+    progress: 45,
+    status: 'Em Execução',
+    assignedTo: '1',
+    scope: {
+      title: 'Otimização de Logística Reversa',
+      responsible: 'Carlos Silva',
+      problemDescription: 'Alto custo com devoluções não processadas.',
+      measurableObjective: 'Reduzir custo em 20%',
+      involvedSectors: [{ id: 's1', name: 'Logística' }],
+      toolsUsed: [{ id: 't1', name: 'SAP' }],
+      startDate: '2024-01-10',
+      forecastCompletion: '2024-06-30',
+      financial: {
+        currentImpact: { value: 50000, type: 'continuo', period: 'mensal' },
+        gainProjection: { value: 10000, type: 'fixo', period: 'mensal' }
+      }
+    },
+    mapping: { nodes: [], edges: [], orientation: 'horizontal', lastEdited: new Date().toISOString() },
+    pdcaCycles: []
+  },
+  {
+    id: 'p2',
+    name: 'Redução de Setup Máquina A',
+    createdAt: new Date().toISOString(),
+    progress: 15,
+    status: 'Planejamento',
+    assignedTo: '2',
+    scope: {
+      title: 'Redução de Setup Máquina A',
+      responsible: 'Ana Oliveira',
+      problemDescription: 'Tempo de setup excedendo 4 horas.',
+      measurableObjective: 'Reduzir para 2 horas',
+      involvedSectors: [{ id: 's2', name: 'Produção' }],
+      toolsUsed: [{ id: 't2', name: 'Cronômetro' }],
+      startDate: '2024-02-15',
+      forecastCompletion: '2024-04-15',
+      financial: {
+        currentImpact: { value: 20000, type: 'continuo', period: 'mensal' },
+        gainProjection: { value: 8000, type: 'fixo', period: 'mensal' }
+      }
+    },
+    mapping: { nodes: [], edges: [], orientation: 'horizontal', lastEdited: new Date().toISOString() },
+    pdcaCycles: []
+  }
+];
+
+export default function App() {
+  const [projects, setProjects] = useState<Project[]>(INITIAL_PROJECTS);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'scope' | 'mapping' | 'pdca'>('scope');
+
+  const selectedProject = projects.find(p => p.id === selectedProjectId);
+
+  const handleProjectClick = (id: string) => {
+    setSelectedProjectId(id);
+    setActiveTab('scope');
+  };
+
+  const handleBackToKanban = () => {
+    setSelectedProjectId(null);
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans">
+      {/* Sidebar */}
+      <aside className="fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 z-50 hidden lg:flex flex-col">
+        <div className="p-6 border-b border-slate-100">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+              <LayoutDashboard size={24} />
+            </div>
+            <h1 className="font-bold text-xl tracking-tight text-slate-800">ProcessFlow</h1>
+          </div>
+        </div>
+
+        <nav className="flex-1 p-4 space-y-2">
+          <button 
+            onClick={handleBackToKanban}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
+              !selectedProjectId ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-500 hover:bg-slate-50"
+            )}
+          >
+            <LayoutDashboard size={20} />
+            <span>Projetos (Kanban)</span>
+          </button>
+          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 transition-all duration-200">
+            <Users size={20} />
+            <span>Equipe</span>
+          </button>
+          <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 transition-all duration-200">
+            <Settings size={20} />
+            <span>Configurações</span>
+          </button>
+        </nav>
+
+        <div className="p-4 border-t border-slate-100">
+          <div className="flex items-center gap-3 px-4 py-3">
+            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
+              <img src="https://api.dicebear.com/7.x/avataaars/svg?seed=Felix" alt="User" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-slate-800 truncate">Admin User</p>
+              <p className="text-xs text-slate-500 truncate">bielalves201@gmail.com</p>
+            </div>
+            <LogOut size={18} className="text-slate-400 hover:text-red-500 cursor-pointer" />
+          </div>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className={cn(
+        "transition-all duration-300 min-h-screen",
+        "lg:ml-64 p-4 lg:p-8"
+      )}>
+        <AnimatePresence mode="wait">
+          {!selectedProjectId ? (
+            <KanbanView 
+              key="kanban"
+              projects={projects} 
+              users={INITIAL_USERS} 
+              onProjectClick={handleProjectClick} 
+            />
+          ) : (
+            <ProjectDetailView 
+              key="detail"
+              project={selectedProject!} 
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              onBack={handleBackToKanban}
+              setProjects={setProjects}
+            />
+          )}
+        </AnimatePresence>
+      </main>
+    </div>
+  );
+}
+
+// --- KANBAN VIEW ---
+
+function KanbanView({ projects, users, onProjectClick }: { 
+  projects: Project[], 
+  users: User[], 
+  onProjectClick: (id: string) => void,
+  key?: string
+}) {
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="space-y-8"
+    >
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-3xl font-bold text-slate-900">Gestão de Projetos</h2>
+          <p className="text-slate-500 mt-1">Visualize e gerencie o fluxo de melhoria contínua.</p>
+        </div>
+        <button className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200">
+          <Plus size={20} />
+          <span>Novo Projeto</span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {users.map(user => (
+          <div key={user.id} className="flex flex-col gap-4">
+            <div className="flex items-center justify-between px-2">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs uppercase">
+                  {user.name.split(' ').map(n => n[0]).join('')}
+                </div>
+                <h3 className="font-bold text-slate-700">{user.name}</h3>
+                <span className="bg-slate-200 text-slate-600 text-xs px-2 py-0.5 rounded-full font-medium">
+                  {projects.filter(p => p.assignedTo === user.id).length}
+                </span>
+              </div>
+              <button className="text-slate-400 hover:text-slate-600">
+                <MoreVertical size={18} />
+              </button>
+            </div>
+
+            <div className="bg-slate-100/50 p-3 rounded-2xl min-h-[500px] space-y-4 border border-slate-200/50">
+              {projects.filter(p => p.assignedTo === user.id).map(project => (
+                <ProjectCard 
+                  key={project.id} 
+                  project={project} 
+                  onClick={() => onProjectClick(project.id)} 
+                />
+              ))}
+              
+              <button className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:border-indigo-300 hover:text-indigo-400 transition-all flex items-center justify-center gap-2 group">
+                <Plus size={18} className="group-hover:scale-110 transition-transform" />
+                <span className="text-sm font-medium">Adicionar Projeto</span>
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+function ProjectCard({ project, onClick }: { project: Project, onClick: () => void, key?: string }) {
+  const statusColors = {
+    'Planejamento': 'bg-amber-100 text-amber-700 border-amber-200',
+    'Em Execução': 'bg-blue-100 text-blue-700 border-blue-200',
+    'Suspenso': 'bg-rose-100 text-rose-700 border-rose-200',
+    'Concluído': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  };
+
+  return (
+    <motion.div 
+      whileHover={{ y: -4, shadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)' }}
+      onClick={onClick}
+      className="bg-white p-5 rounded-xl border border-slate-200 cursor-pointer transition-all"
+    >
+      <div className="flex justify-between items-start mb-4">
+        <span className={cn(
+          "text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-md border",
+          statusColors[project.status]
+        )}>
+          {project.status}
+        </span>
+        <button className="text-slate-300 hover:text-slate-500">
+          <MoreVertical size={16} />
+        </button>
+      </div>
+
+      <h4 className="font-bold text-slate-800 leading-tight mb-4 group-hover:text-indigo-600 transition-colors">
+        {project.name}
+      </h4>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between text-xs text-slate-500">
+          <div className="flex items-center gap-1.5">
+            <Calendar size={14} />
+            <span>{format(new Date(project.createdAt), 'dd MMM yyyy', { locale: ptBR })}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Clock size={14} />
+            <span>{project.progress}%</span>
+          </div>
+        </div>
+
+        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <motion.div 
+            initial={{ width: 0 }}
+            animate={{ width: `${project.progress}%` }}
+            className={cn(
+              "h-full rounded-full",
+              project.progress > 70 ? "bg-emerald-500" : project.progress > 30 ? "bg-indigo-500" : "bg-amber-500"
+            )}
+          />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+// --- PROJECT DETAIL VIEW ---
+
+function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjects }: { 
+  project: Project, 
+  activeTab: string, 
+  setActiveTab: (tab: any) => void,
+  onBack: () => void,
+  setProjects: React.Dispatch<React.SetStateAction<Project[]>>,
+  key?: string
+}) {
+  return (
+    <motion.div 
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -20 }}
+      className="space-y-6"
+    >
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={onBack}
+            className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500"
+          >
+            <ChevronRight size={24} className="rotate-180" />
+          </button>
+          <div>
+            <h2 className="text-2xl font-bold text-slate-900">{project.name}</h2>
+            <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
+              <span className="flex items-center gap-1">
+                <Users size={14} />
+                {project.scope.responsible}
+              </span>
+              <span className="w-1 h-1 bg-slate-300 rounded-full" />
+              <span className="flex items-center gap-1">
+                <Clock size={14} />
+                Iniciado em {format(new Date(project.scope.startDate), 'dd/MM/yyyy')}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+          <TabButton 
+            active={activeTab === 'scope'} 
+            onClick={() => setActiveTab('scope')} 
+            icon={<FileText size={18} />} 
+            label="Escopo" 
+          />
+          <TabButton 
+            active={activeTab === 'mapping'} 
+            onClick={() => setActiveTab('mapping')} 
+            icon={<GitBranch size={18} />} 
+            label="Mapeamento" 
+          />
+          <TabButton 
+            active={activeTab === 'pdca'} 
+            onClick={() => setActiveTab('pdca')} 
+            icon={<RefreshCw size={18} />} 
+            label="PDCA" 
+          />
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm min-h-[600px] overflow-hidden">
+        {activeTab === 'scope' && <ScopeTab project={project} setProjects={setProjects} />}
+        {activeTab === 'mapping' && <MappingTab project={project} setProjects={setProjects} />}
+        {activeTab === 'pdca' && <PDCATab project={project} setProjects={setProjects} />}
+      </div>
+    </motion.div>
+  );
+}
+
+function TabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-2 px-6 py-2.5 rounded-lg transition-all font-medium text-sm",
+        active 
+          ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" 
+          : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+      )}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+// --- SCOPE TAB ---
+
+function ScopeTab({ project, setProjects }: { project: Project, setProjects: React.Dispatch<React.SetStateAction<Project[]>> }) {
+  return (
+    <div className="p-8 max-w-5xl mx-auto space-y-10">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+        <div className="space-y-8">
+          <section>
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <FileText className="text-indigo-500" size={20} />
+              Informações Gerais
+            </h3>
+            <div className="space-y-4">
+              <FormField label="Título do Projeto" value={project.scope.title} readOnly />
+              <FormField label="Responsável" value={project.scope.responsible} readOnly />
+              <FormField label="Descrição do Problema" value={project.scope.problemDescription} type="textarea" readOnly />
+              <FormField label="Objetivo Mensurável" value={project.scope.measurableObjective} readOnly />
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Calendar className="text-indigo-500" size={20} />
+              Cronograma
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <FormField label="Data Início" value={project.scope.startDate} type="date" readOnly />
+              <FormField label="Previsão Conclusão" value={project.scope.forecastCompletion} type="date" readOnly />
+            </div>
+          </section>
+        </div>
+
+        <div className="space-y-8">
+          <section>
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Target className="text-indigo-500" size={20} />
+              Impacto Financeiro
+            </h3>
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-6">
+              <div>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Impacto Atual</p>
+                <div className="flex items-end gap-3">
+                  <span className="text-3xl font-black text-slate-900">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(project.scope.financial.currentImpact.value)}
+                  </span>
+                  <span className="text-sm text-slate-500 mb-1">
+                    / {project.scope.financial.currentImpact.period === 'mensal' ? 'mês' : 'ano'} ({project.scope.financial.currentImpact.type})
+                  </span>
+                </div>
+              </div>
+              <div className="h-px bg-slate-200" />
+              <div>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Projeção de Ganho</p>
+                <div className="flex items-end gap-3">
+                  <span className="text-3xl font-black text-emerald-600">
+                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(project.scope.financial.gainProjection.value)}
+                  </span>
+                  <span className="text-sm text-slate-500 mb-1">
+                    / {project.scope.financial.gainProjection.period === 'mensal' ? 'mês' : 'ano'} ({project.scope.financial.gainProjection.type})
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <Users className="text-indigo-500" size={20} />
+              Setores e Ferramentas
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Setores Envolvidos</label>
+                <div className="flex flex-wrap gap-2">
+                  {project.scope.involvedSectors.map(s => (
+                    <span key={s.id} className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-medium border border-indigo-100">
+                      {s.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Ferramentas Utilizadas</label>
+                <div className="flex flex-wrap gap-2">
+                  {project.scope.toolsUsed.map(t => (
+                    <span key={t.id} className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-sm font-medium border border-slate-200">
+                      {t.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormField({ label, value, type = 'text', readOnly = false }: { label: string, value: any, type?: string, readOnly?: boolean }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{label}</label>
+      {type === 'textarea' ? (
+        <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 min-h-[100px]">
+          {value}
+        </div>
+      ) : (
+        <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700">
+          {type === 'date' ? format(new Date(value), 'dd/MM/yyyy') : value}
+        </div>
+      )}
+    </div>
+  );
+}
+
+import MappingTab from './components/MappingTab';
+import PDCAEditor from './components/PDCAEditor';
+
+// --- PDCA TAB ---
+
+function PDCATab({ project, setProjects }: { project: Project, setProjects: React.Dispatch<React.SetStateAction<Project[]>> }) {
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+
+  if (isEditorOpen) {
+    return (
+      <div className="fixed inset-0 z-[100] bg-white">
+        <PDCAEditor 
+          project={project} 
+          setProjects={setProjects} 
+          onBack={() => setIsEditorOpen(false)} 
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-8 max-w-4xl mx-auto space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-2xl font-bold text-slate-900">Ciclos PDCA</h3>
+          <p className="text-slate-500">Gerencie a melhoria contínua baseada nos problemas identificados no mapeamento.</p>
+        </div>
+        <button 
+          onClick={() => setIsEditorOpen(true)}
+          className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center gap-2"
+        >
+          <RefreshCw size={20} />
+          <span>Abrir Editor PDCA</span>
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4">
+        {project.pdcaCycles.length === 0 ? (
+          <div className="py-20 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-slate-400">
+            <RefreshCw size={48} className="mb-4 opacity-20" />
+            <p className="font-medium">Nenhum ciclo PDCA iniciado para este projeto.</p>
+            <p className="text-sm">Identifique problemas no mapeamento para iniciar um ciclo.</p>
+          </div>
+        ) : (
+          project.pdcaCycles.map(cycle => (
+            <div 
+              key={cycle.id} 
+              onClick={() => setIsEditorOpen(true)}
+              className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:border-indigo-200 transition-all cursor-pointer group"
+            >
+              <div className="flex justify-between items-start">
+                <div>
+                  <h4 className="font-bold text-slate-800 text-lg group-hover:text-indigo-600 transition-colors">{cycle.title}</h4>
+                  <p className="text-sm text-slate-500 mt-1">Iniciado em {format(new Date(cycle.createdAt), 'dd/MM/yyyy')}</p>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <span className="bg-emerald-100 text-emerald-700 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider">
+                    Ativo
+                  </span>
+                  <div className="flex items-center gap-1 text-slate-400">
+                    <ArrowRight size={16} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}

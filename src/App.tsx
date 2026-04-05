@@ -140,7 +140,8 @@ export default function App() {
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
 
     // Listen for Projects
-    const projectsUnsubscribe = onSnapshot(collection(db, 'projects'), (snapshot) => {
+    const projectsQuery = query(collection(db, 'projects'), where('assignedTo', '==', user.uid));
+    const projectsUnsubscribe = onSnapshot(projectsQuery, (snapshot) => {
       const projectsData = snapshot.docs.map(doc => doc.data() as Project);
       setProjects(projectsData);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'projects'));
@@ -390,10 +391,10 @@ export default function App() {
                 onProjectClick={handleProjectClick} 
                 onCreateProject={handleCreateProject}
               />
-            ) : (
+            ) : selectedProject ? (
               <ProjectDetailView 
                 key="detail"
-                project={selectedProject!} 
+                project={selectedProject} 
                 activeTab={activeTab}
                 setActiveTab={setActiveTab}
                 onBack={handleBackToKanban}
@@ -401,6 +402,17 @@ export default function App() {
                 onSave={handleManualSave}
                 isSaving={isSaving}
               />
+            ) : (
+              <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+                <RefreshCw className="text-indigo-600 animate-spin" size={32} />
+                <p className="text-slate-500">Carregando projeto...</p>
+                <button 
+                  onClick={handleBackToKanban}
+                  className="text-indigo-600 font-bold hover:underline"
+                >
+                  Voltar para o Kanban
+                </button>
+              </div>
             )}
           </AnimatePresence>
         </main>

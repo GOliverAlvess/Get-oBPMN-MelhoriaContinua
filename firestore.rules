@@ -98,9 +98,9 @@ service cloud.firestore {
     }
 
     match /projects/{projectId} {
-      allow read: if isAuthenticated() && (resource == null || resource.data.assignedTo == request.auth.uid);
-      allow create: if isAuthenticated() && request.resource.data.assignedTo == request.auth.uid && isValidProject(request.resource.data);
-      allow update: if isAuthenticated() && resource.data.assignedTo == request.auth.uid && request.resource.data.assignedTo == request.auth.uid && isValidProject(request.resource.data);
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidProject(request.resource.data);
+      allow update: if isAuthenticated() && isValidProject(request.resource.data);
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.assignedTo == request.auth.uid);
     }
 

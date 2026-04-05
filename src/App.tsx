@@ -140,8 +140,7 @@ export default function App() {
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'users'));
 
     // Listen for Projects
-    const projectsQuery = query(collection(db, 'projects'), where('assignedTo', '==', user.uid));
-    const projectsUnsubscribe = onSnapshot(projectsQuery, (snapshot) => {
+    const projectsUnsubscribe = onSnapshot(collection(db, 'projects'), (snapshot) => {
       const projectsData = snapshot.docs.map(doc => doc.data() as Project);
       setProjects(projectsData);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'projects'));
@@ -401,6 +400,7 @@ export default function App() {
                 setProjects={syncProjectToFirestore as any}
                 onSave={handleManualSave}
                 isSaving={isSaving}
+                users={users}
               />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
@@ -552,7 +552,7 @@ function ProjectCard({ project, onClick }: { project: Project, onClick: () => vo
 
 // --- PROJECT DETAIL VIEW ---
 
-function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjects, onSave, isSaving }: { 
+function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjects, onSave, isSaving, users }: { 
   project: Project, 
   activeTab: string, 
   setActiveTab: (tab: any) => void,
@@ -560,6 +560,7 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
   setProjects: (p: Project) => void,
   onSave: (p: Project) => void,
   isSaving: boolean,
+  users: User[],
   key?: string
 }) {
   return (
@@ -579,7 +580,15 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
           </button>
           <div>
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-bold text-slate-900">{project.name}</h2>
+              <input 
+                value={project.name}
+                onChange={(e) => setProjects({ 
+                  ...project, 
+                  name: e.target.value,
+                  scope: { ...project.scope, title: e.target.value }
+                })}
+                className="text-2xl font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none transition-all"
+              />
               {isSaving && (
                 <span className="flex items-center gap-1.5 text-[10px] font-black text-indigo-500 uppercase tracking-widest animate-pulse">
                   <RefreshCw size={10} className="animate-spin" />
@@ -635,7 +644,7 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm min-h-[600px] overflow-hidden">
-        {activeTab === 'scope' && <ScopeTab project={project} setProjects={setProjects} />}
+        {activeTab === 'scope' && <ScopeTab project={project} setProjects={setProjects} users={users} />}
         {activeTab === 'mapping' && <MappingTab project={project} setProjects={setProjects} />}
         {activeTab === 'pdca' && <PDCATab project={project} setProjects={setProjects} />}
       </div>
@@ -662,9 +671,24 @@ function TabButton({ active, onClick, icon, label }: { active: boolean, onClick:
 
 // --- SCOPE TAB ---
 
-function ScopeTab({ project, setProjects }: { project: Project, setProjects: (p: Project) => void }) {
+function ScopeTab({ project, setProjects, users }: { project: Project, setProjects: (p: Project) => void, users: User[] }) {
   const updateScope = (field: string, value: any) => {
-    setProjects({ ...project, scope: { ...project.scope, [field]: value } });
+    const updatedProject = { ...project, scope: { ...project.scope, [field]: value } };
+    if (field === 'title') {
+      updatedProject.name = value;
+    }
+    setProjects(updatedProject);
+  };
+
+  const handleReassign = (userId: string) => {
+    const selectedUser = users.find(u => u.id === userId);
+    if (selectedUser) {
+      setProjects({ 
+        ...project, 
+        assignedTo: userId,
+        scope: { ...project.scope, responsible: selectedUser.name }
+      });
+    }
   };
 
   const updateFinancial = (section: 'currentImpact' | 'gainProjection', field: string, value: any) => {
@@ -695,11 +719,18 @@ function ScopeTab({ project, setProjects }: { project: Project, setProjects: (p:
                 value={project.scope.title} 
                 onChange={(v) => updateScope('title', v)}
               />
-              <FormField 
-                label="Responsável" 
-                value={project.scope.responsible} 
-                readOnly 
-              />
+              <div className="space-y-1.5">
+                <label className="text-sm font-semibold text-slate-700 ml-1">Responsável (Atribuído a)</label>
+                <select 
+                  value={project.assignedTo}
+                  onChange={(e) => handleReassign(e.target.value)}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                >
+                  {users.map(u => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
               <FormField 
                 label="Descrição do Problema" 
                 value={project.scope.problemDescription} 

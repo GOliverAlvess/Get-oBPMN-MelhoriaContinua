@@ -56,7 +56,8 @@ const INITIAL_PROJECTS: Project[] = [
       }
     },
     mapping: { nodes: [], edges: [], orientation: 'horizontal', lastEdited: new Date().toISOString() },
-    pdcaCycles: []
+    pdcaCycles: [],
+    savedColors: []
   },
   {
     id: 'p2',
@@ -80,7 +81,8 @@ const INITIAL_PROJECTS: Project[] = [
       }
     },
     mapping: { nodes: [], edges: [], orientation: 'horizontal', lastEdited: new Date().toISOString() },
-    pdcaCycles: []
+    pdcaCycles: [],
+    savedColors: []
   }
 ];
 
@@ -391,6 +393,31 @@ function TabButton({ active, onClick, icon, label }: { active: boolean, onClick:
 // --- SCOPE TAB ---
 
 function ScopeTab({ project, setProjects }: { project: Project, setProjects: React.Dispatch<React.SetStateAction<Project[]>> }) {
+  const updateScope = (field: string, value: any) => {
+    setProjects(prev => prev.map(p => 
+      p.id === project.id 
+        ? { ...p, scope: { ...p.scope, [field]: value } } 
+        : p
+    ));
+  };
+
+  const updateFinancial = (section: 'currentImpact' | 'gainProjection', field: string, value: any) => {
+    setProjects(prev => prev.map(p => 
+      p.id === project.id 
+        ? { 
+            ...p, 
+            scope: { 
+              ...p.scope, 
+              financial: { 
+                ...p.scope.financial, 
+                [section]: { ...p.scope.financial[section], [field]: value } 
+              } 
+            } 
+          } 
+        : p
+    ));
+  };
+
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-10">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
@@ -401,10 +428,27 @@ function ScopeTab({ project, setProjects }: { project: Project, setProjects: Rea
               Informações Gerais
             </h3>
             <div className="space-y-4">
-              <FormField label="Título do Projeto" value={project.scope.title} readOnly />
-              <FormField label="Responsável" value={project.scope.responsible} readOnly />
-              <FormField label="Descrição do Problema" value={project.scope.problemDescription} type="textarea" readOnly />
-              <FormField label="Objetivo Mensurável" value={project.scope.measurableObjective} readOnly />
+              <FormField 
+                label="Título do Projeto" 
+                value={project.scope.title} 
+                onChange={(v) => updateScope('title', v)}
+              />
+              <FormField 
+                label="Responsável" 
+                value={project.scope.responsible} 
+                readOnly 
+              />
+              <FormField 
+                label="Descrição do Problema" 
+                value={project.scope.problemDescription} 
+                type="textarea" 
+                onChange={(v) => updateScope('problemDescription', v)}
+              />
+              <FormField 
+                label="Objetivo Mensurável" 
+                value={project.scope.measurableObjective} 
+                onChange={(v) => updateScope('measurableObjective', v)}
+              />
             </div>
           </section>
 
@@ -414,8 +458,18 @@ function ScopeTab({ project, setProjects }: { project: Project, setProjects: Rea
               Cronograma
             </h3>
             <div className="grid grid-cols-2 gap-4">
-              <FormField label="Data Início" value={project.scope.startDate} type="date" readOnly />
-              <FormField label="Previsão Conclusão" value={project.scope.forecastCompletion} type="date" readOnly />
+              <FormField 
+                label="Data Início" 
+                value={project.scope.startDate} 
+                type="date" 
+                onChange={(v) => updateScope('startDate', v)}
+              />
+              <FormField 
+                label="Previsão Conclusão" 
+                value={project.scope.forecastCompletion} 
+                type="date" 
+                onChange={(v) => updateScope('forecastCompletion', v)}
+              />
             </div>
           </section>
         </div>
@@ -429,25 +483,67 @@ function ScopeTab({ project, setProjects }: { project: Project, setProjects: Rea
             <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-6">
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Impacto Atual</p>
-                <div className="flex items-end gap-3">
-                  <span className="text-3xl font-black text-slate-900">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(project.scope.financial.currentImpact.value)}
-                  </span>
-                  <span className="text-sm text-slate-500 mb-1">
-                    / {project.scope.financial.currentImpact.period === 'mensal' ? 'mês' : 'ano'} ({project.scope.financial.currentImpact.type})
-                  </span>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-slate-500 font-bold">R$</span>
+                    <input 
+                      type="number"
+                      value={project.scope.financial.currentImpact.value}
+                      onChange={(e) => updateFinancial('currentImpact', 'value', parseFloat(e.target.value) || 0)}
+                      className="text-3xl font-black text-slate-900 bg-transparent border-b border-slate-200 outline-none w-full"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <select 
+                      value={project.scope.financial.currentImpact.period}
+                      onChange={(e) => updateFinancial('currentImpact', 'period', e.target.value)}
+                      className="text-xs bg-white border border-slate-200 p-1 rounded font-bold uppercase"
+                    >
+                      <option value="mensal">Mensal</option>
+                      <option value="anual">Anual</option>
+                    </select>
+                    <select 
+                      value={project.scope.financial.currentImpact.type}
+                      onChange={(e) => updateFinancial('currentImpact', 'type', e.target.value)}
+                      className="text-xs bg-white border border-slate-200 p-1 rounded font-bold uppercase"
+                    >
+                      <option value="fixo">Fixo</option>
+                      <option value="continuo">Contínuo</option>
+                    </select>
+                  </div>
                 </div>
               </div>
               <div className="h-px bg-slate-200" />
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Projeção de Ganho</p>
-                <div className="flex items-end gap-3">
-                  <span className="text-3xl font-black text-emerald-600">
-                    {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(project.scope.financial.gainProjection.value)}
-                  </span>
-                  <span className="text-sm text-slate-500 mb-1">
-                    / {project.scope.financial.gainProjection.period === 'mensal' ? 'mês' : 'ano'} ({project.scope.financial.gainProjection.type})
-                  </span>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-500 font-bold">R$</span>
+                    <input 
+                      type="number"
+                      value={project.scope.financial.gainProjection.value}
+                      onChange={(e) => updateFinancial('gainProjection', 'value', parseFloat(e.target.value) || 0)}
+                      className="text-3xl font-black text-emerald-600 bg-transparent border-b border-emerald-100 outline-none w-full"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <select 
+                      value={project.scope.financial.gainProjection.period}
+                      onChange={(e) => updateFinancial('gainProjection', 'period', e.target.value)}
+                      className="text-xs bg-white border border-slate-200 p-1 rounded font-bold uppercase"
+                    >
+                      <option value="mensal">Mensal</option>
+                      <option value="anual">Anual</option>
+                    </select>
+                    <select 
+                      value={project.scope.financial.gainProjection.type}
+                      onChange={(e) => updateFinancial('gainProjection', 'type', e.target.value)}
+                      className="text-xs bg-white border border-slate-200 p-1 rounded font-bold uppercase"
+                    >
+                      <option value="fixo">Fixo</option>
+                      <option value="continuo">Contínuo</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
@@ -463,20 +559,50 @@ function ScopeTab({ project, setProjects }: { project: Project, setProjects: Rea
                 <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Setores Envolvidos</label>
                 <div className="flex flex-wrap gap-2">
                   {project.scope.involvedSectors.map(s => (
-                    <span key={s.id} className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-medium border border-indigo-100">
+                    <span key={s.id} className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-medium border border-indigo-100 flex items-center gap-2">
                       {s.name}
+                      <button 
+                        onClick={() => updateScope('involvedSectors', project.scope.involvedSectors.filter(item => item.id !== s.id))}
+                        className="hover:text-rose-500"
+                      >
+                        ×
+                      </button>
                     </span>
                   ))}
+                  <button 
+                    onClick={() => {
+                      const name = prompt('Nome do setor:');
+                      if (name) updateScope('involvedSectors', [...project.scope.involvedSectors, { id: uuidv4(), name }]);
+                    }}
+                    className="bg-slate-100 text-slate-400 px-3 py-1 rounded-full text-sm font-bold border border-slate-200 border-dashed hover:border-indigo-300 hover:text-indigo-500"
+                  >
+                    + Adicionar
+                  </button>
                 </div>
               </div>
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Ferramentas Utilizadas</label>
                 <div className="flex flex-wrap gap-2">
                   {project.scope.toolsUsed.map(t => (
-                    <span key={t.id} className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-sm font-medium border border-slate-200">
+                    <span key={t.id} className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-sm font-medium border border-slate-200 flex items-center gap-2">
                       {t.name}
+                      <button 
+                        onClick={() => updateScope('toolsUsed', project.scope.toolsUsed.filter(item => item.id !== t.id))}
+                        className="hover:text-rose-500"
+                      >
+                        ×
+                      </button>
                     </span>
                   ))}
+                  <button 
+                    onClick={() => {
+                      const name = prompt('Nome da ferramenta:');
+                      if (name) updateScope('toolsUsed', [...project.scope.toolsUsed, { id: uuidv4(), name }]);
+                    }}
+                    className="bg-slate-100 text-slate-400 px-3 py-1 rounded-full text-sm font-bold border border-slate-200 border-dashed hover:border-indigo-300 hover:text-indigo-500"
+                  >
+                    + Adicionar
+                  </button>
                 </div>
               </div>
             </div>
@@ -487,18 +613,27 @@ function ScopeTab({ project, setProjects }: { project: Project, setProjects: Rea
   );
 }
 
-function FormField({ label, value, type = 'text', readOnly = false }: { label: string, value: any, type?: string, readOnly?: boolean }) {
+function FormField({ label, value, type = 'text', readOnly = false, onChange }: { label: string, value: any, type?: string, readOnly?: boolean, onChange?: (v: any) => void }) {
   return (
     <div className="space-y-1.5">
       <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{label}</label>
-      {type === 'textarea' ? (
-        <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 min-h-[100px]">
+      {readOnly ? (
+        <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-400 cursor-not-allowed">
           {value}
         </div>
+      ) : type === 'textarea' ? (
+        <textarea 
+          value={value}
+          onChange={(e) => onChange?.(e.target.value)}
+          className="w-full p-3 bg-white border border-slate-200 rounded-xl text-slate-700 min-h-[100px] outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+        />
       ) : (
-        <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700">
-          {type === 'date' ? format(new Date(value), 'dd/MM/yyyy') : value}
-        </div>
+        <input 
+          type={type}
+          value={value}
+          onChange={(e) => onChange?.(e.target.value)}
+          className="w-full p-3 bg-white border border-slate-200 rounded-xl text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+        />
       )}
     </div>
   );

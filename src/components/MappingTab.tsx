@@ -22,13 +22,15 @@ import {
   AlertCircle,
   HelpCircle,
   Palette,
-  GitBranch
+  GitBranch,
+  X,
+  Check
 } from 'lucide-react';
+import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
-import { v4 as uuidv4 } from 'uuid';
 
-import { Project, BPMNTaskData } from '../types';
+import { Project, BPMNTaskData, BPMNShapeType, SavedColor } from '../types';
 import BPMNTaskNode from './BPMNTaskNode';
 import { cn } from '../lib/utils';
 
@@ -36,13 +38,17 @@ const nodeTypes = {
   bpmnTask: BPMNTaskNode,
 };
 
-const DEFAULT_COLORS = [
-  { bg: '#ffffff', border: '#e2e8f0' },
-  { bg: '#eff6ff', border: '#3b82f6' },
-  { bg: '#f0fdf4', border: '#22c55e' },
-  { bg: '#fffbeb', border: '#f59e0b' },
-  { bg: '#fef2f2', border: '#ef4444' },
-  { bg: '#faf5ff', border: '#a855f7' },
+const SHAPES: { type: BPMNShapeType; label: string; path: string }[] = [
+  { type: 'rectangle', label: 'Retângulo', path: 'M 5 5 L 95 5 L 95 95 L 5 95 Z' },
+  { type: 'rounded-rectangle', label: 'Retângulo Arredondado', path: 'M 20 5 L 80 5 A 15 15 0 0 1 95 20 L 95 80 A 15 15 0 0 1 80 95 L 20 95 A 15 15 0 0 1 5 80 L 5 20 A 15 15 0 0 1 20 5' },
+  { type: 'circle', label: 'Círculo', path: 'M 50 50 m -45, 0 a 45,45 0 1,0 90,0 a 45,45 0 1,0 -90,0' },
+  { type: 'diamond', label: 'Losango', path: 'M 50 5 L 95 50 L 50 95 L 5 50 Z' },
+  { type: 'hexagon', label: 'Hexágono', path: 'M 25 5 L 75 5 L 95 50 L 75 95 L 25 95 L 5 50 Z' },
+  { type: 'triangle', label: 'Triângulo', path: 'M 50 5 L 95 95 L 5 95 Z' },
+  { type: 'cylinder', label: 'Cilindro', path: 'M 5 20 A 45 15 0 0 1 95 20 L 95 80 A 45 15 0 0 1 5 80 Z' },
+  { type: 'cloud', label: 'Nuvem', path: 'M 25 40 A 15 15 0 0 1 50 30 A 20 20 0 0 1 85 45 A 15 15 0 0 1 75 75 A 15 15 0 0 1 25 75 A 15 15 0 0 1 15 55 A 15 15 0 0 1 25 40 Z' },
+  { type: 'document', label: 'Documento', path: 'M 10 5 L 70 5 L 90 25 L 90 95 L 10 95 Z M 70 5 L 70 25 L 90 25' },
+  { type: 'data-storage', label: 'Banco de Dados', path: 'M 5 15 A 45 10 0 0 1 95 15 L 95 85 A 45 10 0 0 1 5 85 Z' },
 ];
 
 export default function MappingTab({ project, setProjects }: { project: Project, setProjects: React.Dispatch<React.SetStateAction<Project[]>> }) {
@@ -50,6 +56,8 @@ export default function MappingTab({ project, setProjects }: { project: Project,
   const [edges, setEdges, onEdgesChange] = useEdgesState(project.mapping.edges);
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>(project.mapping.orientation);
   const [selectedNode, setSelectedNode] = useState<Node<BPMNTaskData> | null>(null);
+  const [isSelectingShape, setIsSelectingShape] = useState(false);
+  const [newColorName, setNewColorName] = useState('');
 
   // Auto-save logic
   useEffect(() => {
@@ -79,7 +87,7 @@ export default function MappingTab({ project, setProjects }: { project: Project,
     setSelectedNode(null);
   }, []);
 
-  const addNewTask = () => {
+  const addNewTask = (shapeType: BPMNShapeType) => {
     const newNode: Node<BPMNTaskData> = {
       id: uuidv4(),
       type: 'bpmnTask',
@@ -90,10 +98,13 @@ export default function MappingTab({ project, setProjects }: { project: Project,
         timeInMinutes: 0, 
         isProblemStep: false,
         backgroundColor: '#ffffff',
-        borderColor: '#e2e8f0'
+        borderColor: '#e2e8f0',
+        shapeType
       },
     };
     setNodes((nds) => nds.concat(newNode));
+    setIsSelectingShape(false);
+    setSelectedNode(newNode);
   };
 
   const updateNodeData = (id: string, newData: Partial<BPMNTaskData>) => {
@@ -106,6 +117,22 @@ export default function MappingTab({ project, setProjects }: { project: Project,
     if (selectedNode?.id === id) {
       setSelectedNode(prev => prev ? { ...prev, data: { ...prev.data, ...newData } } : null);
     }
+  };
+
+  const saveCurrentColor = () => {
+    if (!selectedNode || !newColorName) return;
+    const newSavedColor: SavedColor = {
+      id: uuidv4(),
+      name: newColorName,
+      backgroundColor: selectedNode.data.backgroundColor,
+      borderColor: selectedNode.data.borderColor
+    };
+    setProjects(prev => prev.map(p => 
+      p.id === project.id 
+        ? { ...p, savedColors: [...(p.savedColors || []), newSavedColor] } 
+        : p
+    ));
+    setNewColorName('');
   };
 
   const deleteNode = (id: string) => {
@@ -169,7 +196,7 @@ export default function MappingTab({ project, setProjects }: { project: Project,
 
         <div className="flex items-center gap-3">
           <button 
-            onClick={addNewTask}
+            onClick={() => setIsSelectingShape(true)}
             className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
           >
             <Plus size={18} />
@@ -219,6 +246,61 @@ export default function MappingTab({ project, setProjects }: { project: Project,
             <Controls />
           </ReactFlow>
         </div>
+
+        {/* Shape Selection Modal */}
+        <AnimatePresence>
+          {isSelectingShape && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-8"
+            >
+              <motion.div 
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-full"
+              >
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                  <h4 className="text-xl font-black text-slate-800 flex items-center gap-3">
+                    <Layout className="text-indigo-600" />
+                    Selecione a Forma da Etapa
+                  </h4>
+                  <button 
+                    onClick={() => setIsSelectingShape(false)}
+                    className="p-2 hover:bg-slate-200 rounded-full transition-colors"
+                  >
+                    <X size={24} className="text-slate-400" />
+                  </button>
+                </div>
+                <div className="p-8 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
+                  {SHAPES.map((shape) => (
+                    <button 
+                      key={shape.type}
+                      onClick={() => addNewTask(shape.type)}
+                      className="flex flex-col items-center gap-3 p-4 rounded-2xl hover:bg-indigo-50 border border-transparent hover:border-indigo-200 transition-all group"
+                    >
+                      <div className="w-16 h-16 flex items-center justify-center">
+                        <svg viewBox="0 0 100 100" className="w-full h-full">
+                          <path 
+                            d={shape.path} 
+                            fill="none" 
+                            stroke="currentColor" 
+                            strokeWidth="2" 
+                            className="text-slate-400 group-hover:text-indigo-600 transition-colors"
+                          />
+                        </svg>
+                      </div>
+                      <span className="text-xs font-bold text-slate-500 group-hover:text-indigo-700 text-center">
+                        {shape.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Configuration Panel */}
         <AnimatePresence>
@@ -302,24 +384,68 @@ export default function MappingTab({ project, setProjects }: { project: Project,
                   </label>
                 </div>
 
-                <div className="space-y-3 pt-4 border-t border-slate-100">
+                <div className="space-y-4 pt-4 border-t border-slate-100">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                     <Palette size={14} />
-                    Cores do Card
+                    Personalizar Cores
                   </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {DEFAULT_COLORS.map((color, idx) => (
-                      <button 
-                        key={idx}
-                        onClick={() => updateNodeData(selectedNode.id, { backgroundColor: color.bg, borderColor: color.border })}
-                        className={cn(
-                          "h-10 rounded-lg border-2 transition-all hover:scale-105",
-                          selectedNode.data.backgroundColor === color.bg ? "ring-2 ring-indigo-500 ring-offset-2" : ""
-                        )}
-                        style={{ backgroundColor: color.bg, borderColor: color.border }}
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">Fundo</span>
+                      <input 
+                        type="color" 
+                        value={selectedNode.data.backgroundColor}
+                        onChange={(e) => updateNodeData(selectedNode.id, { backgroundColor: e.target.value })}
+                        className="w-full h-10 rounded-lg cursor-pointer bg-transparent"
                       />
-                    ))}
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">Borda</span>
+                      <input 
+                        type="color" 
+                        value={selectedNode.data.borderColor}
+                        onChange={(e) => updateNodeData(selectedNode.id, { borderColor: e.target.value })}
+                        className="w-full h-10 rounded-lg cursor-pointer bg-transparent"
+                      />
+                    </div>
                   </div>
+
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        placeholder="Nome da cor..."
+                        value={newColorName}
+                        onChange={(e) => setNewColorName(e.target.value)}
+                        className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none"
+                      />
+                      <button 
+                        onClick={saveCurrentColor}
+                        disabled={!newColorName}
+                        className="p-2 bg-indigo-600 text-white rounded-lg disabled:opacity-50 hover:bg-indigo-700 transition-colors"
+                      >
+                        <Save size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {project.savedColors && project.savedColors.length > 0 && (
+                    <div className="space-y-2">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase">Cores Salvas</span>
+                      <div className="grid grid-cols-4 gap-2">
+                        {project.savedColors.map((color) => (
+                          <button 
+                            key={color.id}
+                            title={color.name}
+                            onClick={() => updateNodeData(selectedNode.id, { backgroundColor: color.backgroundColor, borderColor: color.borderColor })}
+                            className="h-8 rounded-lg border-2 transition-all hover:scale-110"
+                            style={{ backgroundColor: color.backgroundColor, borderColor: color.borderColor }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.div>

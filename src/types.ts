@@ -33,6 +33,25 @@ export interface ProjectScope {
   };
 }
 
+export type BPMNShapeType = 
+  | 'rectangle' 
+  | 'rounded-rectangle' 
+  | 'circle' 
+  | 'diamond' 
+  | 'hexagon' 
+  | 'triangle' 
+  | 'cylinder' 
+  | 'cloud' 
+  | 'document' 
+  | 'data-storage';
+
+export interface SavedColor {
+  id: string;
+  name: string;
+  backgroundColor: string;
+  borderColor: string;
+}
+
 export interface BPMNTaskData {
   label: string;
   responsibleRole: string;
@@ -40,6 +59,7 @@ export interface BPMNTaskData {
   isProblemStep: boolean;
   backgroundColor: string;
   borderColor: string;
+  shapeType: BPMNShapeType;
 }
 
 export interface ParetoItem {
@@ -118,6 +138,7 @@ export interface Project {
     lastEdited: string;
   };
   pdcaCycles: PDCACycle[];
+  savedColors: SavedColor[];
 }
 
 export interface User {

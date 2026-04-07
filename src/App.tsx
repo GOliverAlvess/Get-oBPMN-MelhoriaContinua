@@ -249,14 +249,29 @@ export default function App() {
   };
 
   const handleDeleteProject = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir este projeto?')) return;
+    console.log('🗑️ [App] Iniciando exclusão do projeto:', id);
+    
     try {
-      await deleteDoc(doc(db, 'projects', id));
-      setProjects(prev => prev.filter(p => p.id !== id));
-      alert('Projeto excluído com sucesso!');
-    } catch (error) {
-      console.error('Error deleting project:', error);
-      handleFirestoreError(error, OperationType.DELETE, `projects/${id}`);
+      const projectRef = doc(db, 'projects', id);
+      console.log('📡 [App] Chamando deleteDoc para:', projectRef.path);
+      await deleteDoc(projectRef);
+      
+      // Update local state immediately
+      setProjects(prev => {
+        const filtered = prev.filter(p => p.id !== id);
+        console.log(`✅ [App] Estado local atualizado. De ${prev.length} para ${filtered.length} projetos.`);
+        return filtered;
+      });
+      
+      console.log('✅ [App] Projeto excluído com sucesso do Firestore.');
+    } catch (error: any) {
+      console.error('❌ [App] Erro crítico ao excluir projeto:', error);
+      
+      try {
+        handleFirestoreError(error, OperationType.DELETE, `projects/${id}`);
+      } catch (e) {
+        // Ignore
+      }
     }
   };
 
@@ -474,6 +489,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
   const [groupBy, setGroupBy] = useState<'status' | 'collaborator'>('status');
   const [visibleStatuses, setVisibleStatuses] = useState<ProjectStatus[]>(['Planejamento', 'Em Execução', 'Suspenso', 'Concluído']);
   const [visibleCollaborators, setVisibleCollaborators] = useState<string[]>(users.map(u => u.id));
+  const [searchTerm, setSearchTerm] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const statuses: ProjectStatus[] = ['Planejamento', 'Em Execução', 'Suspenso', 'Concluído'];
@@ -499,8 +515,12 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
 
   const filteredProjects = projects.filter(p => 
     visibleStatuses.includes(p.status) && 
-    visibleCollaborators.includes(p.assignedTo)
+    visibleCollaborators.includes(p.assignedTo) &&
+    (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+     p.scope.responsible.toLowerCase().includes(searchTerm.toLowerCase()))
   );
+
+  const activeFiltersCount = (statuses.length - visibleStatuses.length) + (users.length - visibleCollaborators.length);
 
   const columns = groupBy === 'status' 
     ? statuses.filter(s => visibleStatuses.includes(s))
@@ -522,6 +542,17 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
         </div>
         
         <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[240px]">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+            <input 
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar projeto ou responsável..."
+              className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all shadow-sm"
+            />
+          </div>
+
           <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
             <button 
               onClick={() => setGroupBy('status')}
@@ -549,12 +580,17 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
             <button 
               onClick={() => setIsFilterOpen(!isFilterOpen)}
               className={cn(
-                "flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-sm transition-all border shadow-sm",
-                isFilterOpen ? "bg-slate-100 border-slate-300 text-slate-800" : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+                "flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-sm transition-all border shadow-sm relative",
+                isFilterOpen || activeFiltersCount > 0 ? "bg-indigo-50 border-indigo-200 text-indigo-600" : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
               )}
             >
               <Filter size={18} />
               <span>Filtros</span>
+              {activeFiltersCount > 0 && (
+                <span className="absolute -top-2 -right-2 w-5 h-5 bg-indigo-600 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-white font-black">
+                  {activeFiltersCount}
+                </span>
+              )}
               <ChevronDown size={16} className={cn("transition-transform", isFilterOpen && "rotate-180")} />
             </button>
 
@@ -567,7 +603,13 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
                   className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 p-5 space-y-6"
                 >
                   <div className="space-y-3">
-                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Filtrar Status</h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Filtrar Status</h4>
+                      <div className="flex gap-2">
+                        <button onClick={() => setVisibleStatuses(statuses)} className="text-[9px] font-bold text-indigo-600 hover:underline">Todos</button>
+                        <button onClick={() => setVisibleStatuses([])} className="text-[9px] font-bold text-slate-400 hover:underline">Nenhum</button>
+                      </div>
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {statuses.map(s => (
                         <button 
@@ -587,7 +629,13 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
                   </div>
 
                   <div className="space-y-3">
-                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Filtrar Colaboradores</h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Filtrar Colaboradores</h4>
+                      <div className="flex gap-2">
+                        <button onClick={() => setVisibleCollaborators(users.map(u => u.id))} className="text-[9px] font-bold text-indigo-600 hover:underline">Todos</button>
+                        <button onClick={() => setVisibleCollaborators([])} className="text-[9px] font-bold text-slate-400 hover:underline">Nenhum</button>
+                      </div>
+                    </div>
                     <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
                       {users.map(u => (
                         <button 
@@ -716,6 +764,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
 
 function ProjectCard({ project, users, onClick, onDelete }: { project: Project, users: User[], onClick: () => void, onDelete: () => void, key?: string }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const assignedUser = users.find(u => u.id === project.assignedTo);
 
@@ -723,6 +772,7 @@ function ProjectCard({ project, users, onClick, onDelete }: { project: Project, 
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
+        setShowConfirm(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -774,28 +824,50 @@ function ProjectCard({ project, users, onClick, onDelete }: { project: Project, 
             <MoreVertical size={16} />
           </button>
           
-          <AnimatePresence>
-            {isMenuOpen && (
-              <motion.div 
-                initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-xl border border-slate-100 z-10 overflow-hidden"
-              >
+          {isMenuOpen && (
+            <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-slate-200 z-50 overflow-hidden">
+              {!showConfirm ? (
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
-                    onDelete();
-                    setIsMenuOpen(false);
+                    console.log('🖱️ [ProjectCard] Clique em "Excluir Projeto"');
+                    setShowConfirm(true);
                   }}
                   className="w-full flex items-center gap-2 px-4 py-3 text-sm text-rose-600 hover:bg-rose-50 transition-colors"
                 >
                   <Trash2 size={14} />
                   <span>Excluir Projeto</span>
                 </button>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              ) : (
+                <div className="p-3 space-y-3 bg-rose-50">
+                  <p className="text-xs font-bold text-rose-600 text-center">Confirmar exclusão?</p>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        console.log('🔥 [ProjectCard] Confirmado! Chamando onDelete()');
+                        onDelete();
+                        setIsMenuOpen(false);
+                        setShowConfirm(false);
+                      }}
+                      className="flex-1 py-2 bg-rose-600 text-white text-xs font-bold rounded-lg hover:bg-rose-700 transition-colors"
+                    >
+                      Sim
+                    </button>
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowConfirm(false);
+                      }}
+                      className="flex-1 py-2 bg-white text-slate-600 text-xs font-bold rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
+                    >
+                      Não
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

@@ -83,47 +83,43 @@ export interface FiveWhys {
 export interface ActionPlanItem {
   id: string;
   what: string;
-  why: string;
-  where: string;
   who: string;
   when: string;
-  how: string;
-  cost: number;
+  status: 'Pendente' | 'Em andamento' | 'Concluído';
+  executionDate?: string;
+  observations?: string;
 }
+
+export type PDCAStatus = 'Não iniciado' | 'Em planejamento' | 'Em execução' | 'Em validação' | 'Concluído';
+export type PDCAPriority = 'Baixa' | 'Média' | 'Alta' | 'Crítica';
 
 export interface PDCACycle {
   id: string;
+  taskId: string; // Link to BPMN element
   title: string;
   createdAt: string;
+  status: PDCAStatus;
   plan: {
-    problemIdentification: string;
-    paretoData: {
-      items: ParetoItem[];
-      period: string;
-      area: string;
-    };
-    objective: string;
-    meta: string;
+    problemDescription: string;
+    impact: string;
+    priority: PDCAPriority;
+    goal: string;
     fiveWhys: FiveWhys;
     actionPlan: ActionPlanItem[];
   };
   do: {
-    training: string;
-    execution: string;
-    pilotTest: string;
-    actionStatus: string;
+    observations: string;
   };
   check: {
-    indicators: string;
-    resultComparison: string;
-    deviationEvaluation: string;
-    goalMet: boolean;
+    resultObtained: string;
+    worked: 'Sim' | 'Não' | 'Parcial';
+    evidence: string;
   };
   act: {
-    standardization: string;
-    documentation: string;
-    correctiveAction: string;
-    lessonsLearned: string;
+    finalAction: string;
+    adjustments: string;
+    finalStatus: 'Resolvido' | 'Em nova análise';
+    standardization?: string;
   };
 }
 

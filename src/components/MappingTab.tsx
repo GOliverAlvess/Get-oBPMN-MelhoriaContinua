@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import ReactFlow, { 
   addEdge, 
   Background, 
@@ -9,7 +9,11 @@ import ReactFlow, {
   useNodesState, 
   useEdgesState,
   Panel,
-  MarkerType
+  MarkerType,
+  ReactFlowProvider,
+  useReactFlow,
+  BackgroundVariant,
+  XYPosition
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { 
@@ -24,11 +28,22 @@ import {
   Palette,
   GitBranch,
   X,
-  Check
+  Check,
+  Undo2,
+  Redo2,
+  Download,
+  Maximize2,
+  Minimize2,
+  Search,
+  Layers,
+  MousePointer2,
+  Move
 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'motion/react';
+import dagre from 'dagre';
+import { toPng, toSvg } from 'html-to-image';
 
 import { Project, BPMNTaskData, BPMNShapeType, SavedColor } from '../types';
 import BPMNTaskNode from './BPMNTaskNode';
@@ -38,44 +53,75 @@ const nodeTypes = {
   bpmnTask: BPMNTaskNode,
 };
 
-const SHAPES: { type: BPMNShapeType; label: string; path: string }[] = [
-  { type: 'rectangle', label: 'Retângulo', path: 'M 5 5 L 95 5 L 95 95 L 5 95 Z' },
-  { type: 'rounded-rectangle', label: 'Retângulo Arredondado', path: 'M 20 5 L 80 5 A 15 15 0 0 1 95 20 L 95 80 A 15 15 0 0 1 80 95 L 20 95 A 15 15 0 0 1 5 80 L 5 20 A 15 15 0 0 1 20 5' },
-  { type: 'circle', label: 'Círculo', path: 'M 50 50 m -45, 0 a 45,45 0 1,0 90,0 a 45,45 0 1,0 -90,0' },
-  { type: 'diamond', label: 'Losango', path: 'M 50 5 L 95 50 L 50 95 L 5 50 Z' },
-  { type: 'hexagon', label: 'Hexágono', path: 'M 25 5 L 75 5 L 95 50 L 75 95 L 25 95 L 5 50 Z' },
-  { type: 'triangle', label: 'Triângulo', path: 'M 50 5 L 95 95 L 5 95 Z' },
-  { type: 'cylinder', label: 'Cilindro', path: 'M 5 20 A 45 15 0 0 1 95 20 L 95 80 A 45 15 0 0 1 5 80 Z' },
-  { type: 'cloud', label: 'Nuvem', path: 'M 25 40 A 15 15 0 0 1 50 30 A 20 20 0 0 1 85 45 A 15 15 0 0 1 75 75 A 15 15 0 0 1 25 75 A 15 15 0 0 1 15 55 A 15 15 0 0 1 25 40 Z' },
-  { type: 'document', label: 'Documento', path: 'M 10 5 L 70 5 L 90 25 L 90 95 L 10 95 Z M 70 5 L 70 25 L 90 25' },
-  { type: 'data-storage', label: 'Banco de Dados', path: 'M 5 15 A 45 10 0 0 1 95 15 L 95 85 A 45 10 0 0 1 5 85 Z' },
+const SHAPES: { type: BPMNShapeType; label: string; path: string; defaultWidth: number; defaultHeight: number; category: 'Básico' | 'BPMN' | 'Customizados' }[] = [
+  { type: 'startEvent', label: 'Início', path: 'M 50 50 m -40, 0 a 40,40 0 1,0 80,0 a 40,40 0 1,0 -80,0', defaultWidth: 60, defaultHeight: 60, category: 'BPMN' },
+  { type: 'task', label: 'Tarefa', path: 'M 10 20 L 90 20 L 90 80 L 10 80 Z', defaultWidth: 150, defaultHeight: 100, category: 'Básico' },
+  { type: 'gateway', label: 'Gateway', path: 'M 50 10 L 90 50 L 50 90 L 10 50 Z', defaultWidth: 80, defaultHeight: 80, category: 'BPMN' },
+  { type: 'subprocess', label: 'Subprocesso', path: 'M 10 20 L 90 20 L 90 80 L 10 80 Z M 45 70 L 55 70 M 50 65 L 50 75', defaultWidth: 200, defaultHeight: 150, category: 'BPMN' },
+  { type: 'endEvent', label: 'Fim', path: 'M 50 50 m -40, 0 a 40,40 0 1,0 80,0 a 40,40 0 1,0 -80,0', defaultWidth: 60, defaultHeight: 60, category: 'BPMN' },
+  { type: 'document', label: 'Documento', path: 'M 20 10 L 70 10 L 85 25 L 85 90 L 20 90 Z', defaultWidth: 100, defaultHeight: 120, category: 'Básico' },
+  { type: 'data-storage', label: 'Banco de Dados', path: 'M 10 20 A 40 10 0 0 1 90 20 L 90 80 A 40 10 0 0 1 10 80 Z', defaultWidth: 120, defaultHeight: 100, category: 'Customizados' },
 ];
 
-export default function MappingTab({ project, setProjects }: { project: Project, setProjects: (p: Project) => void }) {
+const getLayoutedElements = (nodes: Node[], edges: Edge[], direction = 'LR') => {
+  const dagreGraph = new dagre.graphlib.Graph();
+  dagreGraph.setDefaultEdgeLabel(() => ({}));
+  dagreGraph.setGraph({ rankdir: direction });
+
+  nodes.forEach((node) => {
+    dagreGraph.setNode(node.id, { width: node.width || 150, height: node.height || 100 });
+  });
+
+  edges.forEach((edge) => {
+    dagreGraph.setEdge(edge.source, edge.target);
+  });
+
+  dagre.layout(dagreGraph);
+
+  return nodes.map((node) => {
+    const nodeWithPosition = dagreGraph.node(node.id);
+    node.position = {
+      x: nodeWithPosition.x - (node.width || 150) / 2,
+      y: nodeWithPosition.y - (node.height || 100) / 2,
+    };
+    return node;
+  });
+};
+
+function FlowEditor({ project, setProjects }: { project: Project, setProjects: (p: Project) => void }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(project.mapping.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(project.mapping.edges);
+  const { fitView, zoomIn, zoomOut, setViewport, getViewport } = useReactFlow();
 
-  // Sync with project prop if it changes from outside (e.g. Firestore update)
+  const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>(project.mapping.orientation);
+  const [selectedNode, setSelectedNode] = useState<Node<BPMNTaskData> | null>(null);
+  const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [newColorName, setNewColorName] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [history, setHistory] = useState<{ nodes: Node[], edges: Edge[] }[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  const isSyncingRef = useRef(false);
+  const reactFlowWrapper = useRef<HTMLDivElement>(null);
+
+  // Sync from project prop to local state
   useEffect(() => {
-    // Only update if the content is actually different to avoid loops
+    if (isSyncingRef.current) return;
     const nodesChanged = JSON.stringify(nodes) !== JSON.stringify(project.mapping.nodes);
     const edgesChanged = JSON.stringify(edges) !== JSON.stringify(project.mapping.edges);
-    
     if (nodesChanged) setNodes(project.mapping.nodes);
     if (edgesChanged) setEdges(project.mapping.edges);
   }, [project.mapping.nodes, project.mapping.edges]);
-  const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>(project.mapping.orientation);
-  const [selectedNode, setSelectedNode] = useState<Node<BPMNTaskData> | null>(null);
-  const [isSelectingShape, setIsSelectingShape] = useState(false);
-  const [newColorName, setNewColorName] = useState('');
 
-  // Update local state when mapping changes (but don't save to Firestore yet)
+  // Sync from local state to project prop
   useEffect(() => {
     const nodesChanged = JSON.stringify(nodes) !== JSON.stringify(project.mapping.nodes);
     const edgesChanged = JSON.stringify(edges) !== JSON.stringify(project.mapping.edges);
     const orientationChanged = orientation !== project.mapping.orientation;
 
     if (nodesChanged || edgesChanged || orientationChanged) {
+      isSyncingRef.current = true;
       setProjects({ 
         ...project, 
         mapping: { 
@@ -86,384 +132,589 @@ export default function MappingTab({ project, setProjects }: { project: Project,
           lastEdited: new Date().toISOString() 
         } 
       });
+      
+      // History management
+      if (!isSyncingRef.current) {
+        const newState = { nodes, edges };
+        setHistory(prev => [...prev.slice(0, historyIndex + 1), newState].slice(-50));
+        setHistoryIndex(prev => prev + 1);
+      }
+
+      const timer = setTimeout(() => {
+        isSyncingRef.current = false;
+      }, 100);
+      return () => clearTimeout(timer);
     }
   }, [nodes, edges, orientation]);
 
-  const onConnect = useCallback((params: Connection) => setEdges((eds) => addEdge({
-    ...params,
-    type: 'smoothstep',
-    animated: true,
-    markerEnd: { type: MarkerType.ArrowClosed, color: '#64748b' },
-    style: { stroke: '#64748b', strokeWidth: 2 }
-  }, eds)), [setEdges]);
+  const onConnect = useCallback((params: Connection) => {
+    setEdges((eds) => addEdge({
+      ...params,
+      type: 'smoothstep',
+      animated: true,
+      markerEnd: { type: MarkerType.ArrowClosed, color: '#64748b' },
+      style: { stroke: '#64748b', strokeWidth: 2 }
+    }, eds));
+  }, [setEdges]);
 
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     setSelectedNode(node as Node<BPMNTaskData>);
+    setSelectedEdge(null);
+  }, []);
+
+  const onEdgeClick = useCallback((_: React.MouseEvent, edge: Edge) => {
+    setSelectedEdge(edge);
+    setSelectedNode(null);
   }, []);
 
   const onPaneClick = useCallback(() => {
     setSelectedNode(null);
+    setSelectedEdge(null);
   }, []);
 
-  const addNewTask = (shapeType: BPMNShapeType) => {
-    const newNode: Node<BPMNTaskData> = {
-      id: uuidv4(),
-      type: 'bpmnTask',
-      position: { x: 100, y: 100 },
-      data: { 
-        label: 'Nova Tarefa', 
-        responsibleRole: '', 
-        timeInMinutes: 0, 
-        isProblemStep: false,
-        backgroundColor: '#ffffff',
-        borderColor: '#e2e8f0',
-        shapeType
-      },
-    };
-    setNodes((nds) => nds.concat(newNode));
-    setIsSelectingShape(false);
-    setSelectedNode(newNode);
-  };
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
 
-  const updateNodeData = (id: string, newData: Partial<BPMNTaskData>) => {
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+
+      const type = event.dataTransfer.getData('application/reactflow');
+      const shapeType = event.dataTransfer.getData('shapeType') as BPMNShapeType;
+      const label = event.dataTransfer.getData('label');
+      const defaultWidth = parseInt(event.dataTransfer.getData('defaultWidth'));
+      const defaultHeight = parseInt(event.dataTransfer.getData('defaultHeight'));
+
+      if (typeof type === 'undefined' || !type) return;
+
+      const position = {
+        x: event.clientX - (reactFlowWrapper.current?.getBoundingClientRect().left || 0),
+        y: event.clientY - (reactFlowWrapper.current?.getBoundingClientRect().top || 0),
+      };
+
+      const newNode: Node<BPMNTaskData> = {
+        id: uuidv4(),
+        type,
+        position,
+        width: defaultWidth,
+        height: defaultHeight,
+        data: { 
+          label, 
+          description: '',
+          responsibleRole: '', 
+          timeInMinutes: 0, 
+          isProblemStep: false,
+          backgroundColor: '#ffffff',
+          borderColor: '#333333',
+          shapeType,
+          width: defaultWidth,
+          height: defaultHeight
+        },
+      };
+
+      setNodes((nds) => nds.concat(newNode));
+    },
+    [setNodes]
+  );
+
+  const updateNodeData = useCallback((id: string, newData: Partial<BPMNTaskData>) => {
     setNodes((nds) => nds.map((node) => {
       if (node.id === id) {
-        return { ...node, data: { ...node.data, ...newData } };
+        const updatedNode = { ...node, data: { ...node.data, ...newData } };
+        if (newData.width) updatedNode.width = newData.width;
+        if (newData.height) updatedNode.height = newData.height;
+        return updatedNode;
       }
       return node;
     }));
-    if (selectedNode?.id === id) {
-      setSelectedNode(prev => prev ? { ...prev, data: { ...prev.data, ...newData } } : null);
-    }
-  };
-
-  const saveCurrentColor = () => {
-    if (!selectedNode || !newColorName) return;
-    const newSavedColor: SavedColor = {
-      id: uuidv4(),
-      name: newColorName,
-      backgroundColor: selectedNode.data.backgroundColor,
-      borderColor: selectedNode.data.borderColor
-    };
-    setProjects({ 
-      ...project, 
-      savedColors: [...(project.savedColors || []), newSavedColor] 
+    
+    setSelectedNode(prev => {
+      if (prev?.id === id) {
+        const updated = { ...prev, data: { ...prev.data, ...newData } };
+        if (newData.width) updated.width = newData.width;
+        if (newData.height) updated.height = newData.height;
+        return updated;
+      }
+      return prev;
     });
-    setNewColorName('');
-  };
+  }, [setNodes]);
 
-  const deleteNode = (id: string) => {
-    setNodes((nds) => nds.filter((node) => node.id !== id));
-    setEdges((eds) => eds.filter((edge) => edge.source !== id && edge.target !== id));
-    setSelectedNode(null);
-  };
+  const onLayout = useCallback((direction: string) => {
+    const layoutedNodes = getLayoutedElements(nodes, edges, direction);
+    setNodes([...layoutedNodes]);
+  }, [nodes, edges, setNodes]);
+
+  const onUndo = useCallback(() => {
+    if (historyIndex > 0) {
+      const prevState = history[historyIndex - 1];
+      isSyncingRef.current = true;
+      setNodes(prevState.nodes);
+      setEdges(prevState.edges);
+      setHistoryIndex(prev => prev - 1);
+      setTimeout(() => isSyncingRef.current = false, 100);
+    }
+  }, [history, historyIndex, setNodes, setEdges]);
+
+  const onRedo = useCallback(() => {
+    if (historyIndex < history.length - 1) {
+      const nextState = history[historyIndex + 1];
+      isSyncingRef.current = true;
+      setNodes(nextState.nodes);
+      setEdges(nextState.edges);
+      setHistoryIndex(prev => prev + 1);
+      setTimeout(() => isSyncingRef.current = false, 100);
+    }
+  }, [history, historyIndex, setNodes, setEdges]);
+
+  const exportAsPng = useCallback(() => {
+    if (reactFlowWrapper.current === null) return;
+    toPng(reactFlowWrapper.current, {
+      cacheBust: true,
+      backgroundColor: '#f8fafc',
+    }).then((dataUrl) => {
+      const link = document.createElement('a');
+      link.download = `fluxo-${project.name}.png`;
+      link.href = dataUrl;
+      link.click();
+    });
+  }, [project.name]);
+
+  const exportAsSvg = useCallback(() => {
+    if (reactFlowWrapper.current === null) return;
+    toSvg(reactFlowWrapper.current, {
+      cacheBust: true,
+    }).then((dataUrl) => {
+      const link = document.createElement('a');
+      link.download = `fluxo-${project.name}.svg`;
+      link.href = dataUrl;
+      link.click();
+    });
+  }, [project.name]);
 
   const totalTime = useMemo(() => {
     return nodes.reduce((sum, node) => sum + (node.data.timeInMinutes || 0), 0);
   }, [nodes]);
 
+  const saveCurrentColor = useCallback(() => {
+    if (!selectedNode || !newColorName.trim()) return;
+    
+    const newColor: SavedColor = {
+      id: uuidv4(),
+      name: newColorName,
+      backgroundColor: selectedNode.data.backgroundColor,
+      borderColor: selectedNode.data.borderColor
+    };
+
+    const updatedProject = {
+      ...project,
+      mapping: {
+        ...project.mapping,
+        savedColors: [...(project.mapping.savedColors || []), newColor]
+      }
+    };
+    
+    setProjects(updatedProject);
+    setNewColorName('');
+  }, [selectedNode, newColorName, project, setProjects]);
+
+  const nodesWithCallbacks = useMemo(() => {
+    return nodes.map(node => ({
+      ...node,
+      data: {
+        ...node.data,
+        onResize: (width: number, height: number) => updateNodeData(node.id, { width, height })
+      }
+    }));
+  }, [nodes, updateNodeData]);
+
+  const filteredShapes = SHAPES.filter(s => s.label.toLowerCase().includes(searchTerm.toLowerCase()));
+
   return (
-    <div className="h-[700px] flex flex-col relative bg-slate-50">
-      {/* Toolbar */}
-      <div className="p-4 bg-white border-b border-slate-200 flex items-center justify-between z-10 shadow-sm">
-        <div className="flex items-center gap-6">
+    <div className="h-[800px] flex flex-col relative bg-slate-50 font-sans">
+      {/* Header Toolbar */}
+      <div className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 z-20 shadow-sm">
+        <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center text-indigo-600">
-              <GitBranch size={18} />
+            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+              <GitBranch size={16} />
             </div>
             <div>
-              <h3 className="font-bold text-slate-800 text-sm">Mapeamento de Processo</h3>
-              <p className="text-[10px] text-slate-400 font-medium uppercase tracking-wider">
-                Última edição: {format(new Date(project.mapping.lastEdited), 'HH:mm:ss')}
-              </p>
+              <h3 className="text-sm font-bold text-slate-800 leading-none">{project.name}</h3>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Mapeamento</p>
             </div>
           </div>
 
-          <div className="h-8 w-px bg-slate-200" />
+          <div className="h-6 w-px bg-slate-200" />
 
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
-              <Clock size={16} className="text-slate-500" />
-              <span className="text-sm font-bold text-slate-700">{totalTime} min</span>
-              <span className="text-[10px] text-slate-400 font-bold uppercase">Tempo Total</span>
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+            <button onClick={onUndo} disabled={historyIndex <= 0} className="p-1.5 hover:bg-white rounded text-slate-500 disabled:opacity-30 transition-all">
+              <Undo2 size={16} />
+            </button>
+            <button onClick={onRedo} disabled={historyIndex >= history.length - 1} className="p-1.5 hover:bg-white rounded text-slate-500 disabled:opacity-30 transition-all">
+              <Redo2 size={16} />
+            </button>
+          </div>
+
+          <div className="h-6 w-px bg-slate-200" />
+
+          <div className="flex items-center gap-4 px-4 border-l border-slate-200">
+            <div className="flex flex-col">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tempo Total</span>
+              <div className="flex items-center gap-1.5">
+                <Clock size={14} className="text-indigo-600" />
+                <span className="text-sm font-black text-slate-700">{totalTime} min</span>
+              </div>
             </div>
-
-            <div className="flex items-center gap-1 bg-white border border-slate-200 p-1 rounded-lg">
-              <button 
-                onClick={() => setOrientation('horizontal')}
-                className={cn(
-                  "px-3 py-1 rounded text-xs font-bold transition-all",
-                  orientation === 'horizontal' ? "bg-indigo-600 text-white" : "text-slate-500 hover:bg-slate-50"
-                )}
-              >
-                Horizontal
-              </button>
-              <button 
-                onClick={() => setOrientation('vertical')}
-                className={cn(
-                  "px-3 py-1 rounded text-xs font-bold transition-all",
-                  orientation === 'vertical' ? "bg-indigo-600 text-white" : "text-slate-500 hover:bg-slate-50"
-                )}
-              >
-                Vertical
-              </button>
+            <div className="h-8 w-px bg-slate-100" />
+            <div className="flex flex-col">
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Etapas</span>
+              <div className="flex items-center gap-1.5">
+                <Layers size={14} className="text-indigo-600" />
+                <span className="text-sm font-black text-slate-700">{nodes.length}</span>
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setIsSelectingShape(true)}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
-          >
-            <Plus size={18} />
-            Tarefa
-          </button>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+            <button 
+              onClick={() => onLayout('LR')}
+              className="p-1.5 hover:bg-white rounded text-slate-500 hover:text-indigo-600 transition-all flex items-center gap-1.5 px-2"
+              title="Layout Horizontal"
+            >
+              <Layout size={14} />
+              <span className="text-[10px] font-bold uppercase">H</span>
+            </button>
+            <button 
+              onClick={() => onLayout('TB')}
+              className="p-1.5 hover:bg-white rounded text-slate-500 hover:text-indigo-600 transition-all flex items-center gap-1.5 px-2"
+              title="Layout Vertical"
+            >
+              <Layout size={14} className="rotate-90" />
+              <span className="text-[10px] font-bold uppercase">V</span>
+            </button>
+          </div>
+
+          <div className="h-6 w-px bg-slate-200" />
+
+          <div className="relative group">
+            <button className="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all">
+              <Download size={14} />
+              Exportar
+            </button>
+            <div className="absolute right-0 top-full mt-1 w-40 bg-white border border-slate-200 rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
+              <button onClick={exportAsPng} className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 border-b border-slate-100">PNG Image</button>
+              <button onClick={exportAsSvg} className="w-full text-left px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50">SVG Vector</button>
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Legend Sidebar */}
-        <div className="w-64 bg-white border-r border-slate-200 p-4 overflow-y-auto hidden xl:block">
-          <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-            <HelpCircle size={14} />
-            Legenda BPMN
-          </h4>
-          <div className="space-y-6">
-            <LegendSection title="Atividades" items={[
-              { icon: <div className="w-6 h-4 border-2 border-slate-400 rounded" />, label: "Tarefa (Task)" },
-              { icon: <div className="w-6 h-4 border-2 border-slate-400 rounded flex items-center justify-center"><Plus size={8} /></div>, label: "Subprocesso" },
-            ]} />
-            <LegendSection title="Eventos" items={[
-              { icon: <div className="w-5 h-5 border-2 border-emerald-500 rounded-full" />, label: "Início (Start)" },
-              { icon: <div className="w-5 h-5 border-2 border-rose-500 rounded-full border-dashed" />, label: "Intermediário" },
-              { icon: <div className="w-5 h-5 border-4 border-rose-600 rounded-full" />, label: "Fim (End)" },
-            ]} />
-            <LegendSection title="Desvios" items={[
-              { icon: <div className="w-5 h-5 border-2 border-amber-500 rotate-45" />, label: "Exclusivo (XOR)" },
-              { icon: <div className="w-5 h-5 border-2 border-amber-500 rotate-45 flex items-center justify-center"><Plus size={8} className="rotate-[-45deg]" /></div>, label: "Paralelo (AND)" },
-            ]} />
+        {/* Left Toolbox */}
+        <div className="w-64 bg-white border-r border-slate-200 flex flex-col z-10">
+          <div className="p-4 border-b border-slate-100">
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input 
+                type="text" 
+                placeholder="Buscar elementos..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              />
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-6">
+            {['Básico', 'BPMN', 'Customizados'].map(category => {
+              const categoryShapes = filteredShapes.filter(s => s.category === category);
+              if (categoryShapes.length === 0) return null;
+              return (
+                <div key={category} className="space-y-3">
+                  <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                    <Layers size={12} />
+                    {category}
+                  </h5>
+                  <div className="grid grid-cols-2 gap-3">
+                    {categoryShapes.map(shape => (
+                      <div 
+                        key={shape.type}
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData('application/reactflow', 'bpmnTask');
+                          e.dataTransfer.setData('shapeType', shape.type);
+                          e.dataTransfer.setData('label', shape.label);
+                          e.dataTransfer.setData('defaultWidth', shape.defaultWidth.toString());
+                          e.dataTransfer.setData('defaultHeight', shape.defaultHeight.toString());
+                          e.dataTransfer.effectAllowed = 'move';
+                        }}
+                        className="flex flex-col items-center gap-2 p-3 rounded-xl border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/50 transition-all cursor-grab active:cursor-grabbing group"
+                      >
+                        <div className="w-10 h-10 flex items-center justify-center">
+                          <svg viewBox="0 0 100 100" className="w-full h-full">
+                            <path d={shape.path} fill="none" stroke="currentColor" strokeWidth="3" className="text-slate-400 group-hover:text-indigo-600 transition-colors" />
+                          </svg>
+                        </div>
+                        <span className="text-[10px] font-bold text-slate-500 group-hover:text-indigo-700 text-center">{shape.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
         {/* Canvas Area */}
-        <div className="flex-1 relative">
+        <div className="flex-1 relative" ref={reactFlowWrapper}>
           <ReactFlow
-            nodes={nodes}
+            nodes={nodesWithCallbacks}
             edges={edges}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
+            onEdgeClick={onEdgeClick}
             onPaneClick={onPaneClick}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
             nodeTypes={nodeTypes}
+            snapToGrid
+            snapGrid={[15, 15]}
             fitView
+            minZoom={0.25}
+            maxZoom={2}
           >
-            <Background color="#cbd5e1" gap={20} />
-            <Controls />
+            <Background variant={BackgroundVariant.Dots} gap={15} size={1} color="#e2e8f0" />
+            <Controls className="!bg-white !border-slate-200 !shadow-xl !rounded-xl overflow-hidden" />
           </ReactFlow>
         </div>
 
-        {/* Shape Selection Modal */}
+        {/* Right Properties Panel */}
         <AnimatePresence>
-          {isSelectingShape && (
+          {(selectedNode || selectedEdge) && (
             <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-8"
+              initial={{ x: 320 }}
+              animate={{ x: 0 }}
+              exit={{ x: 320 }}
+              className="w-80 bg-white border-l border-slate-200 flex flex-col z-20 shadow-2xl"
             >
-              <motion.div 
-                initial={{ scale: 0.9, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-full"
-              >
-                <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                  <h4 className="text-xl font-black text-slate-800 flex items-center gap-3">
-                    <Layout className="text-indigo-600" />
-                    Selecione a Forma da Etapa
-                  </h4>
+              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
+                  <Settings2 size={14} className="text-indigo-600" />
+                  {selectedNode ? 'Propriedades da Etapa' : 'Propriedades da Conexão'}
+                </h4>
+                <div className="flex items-center gap-1">
                   <button 
-                    onClick={() => setIsSelectingShape(false)}
-                    className="p-2 hover:bg-slate-200 rounded-full transition-colors"
+                    onClick={() => {
+                      if (selectedNode) {
+                        setNodes(nds => nds.filter(n => n.id !== selectedNode.id));
+                        setSelectedNode(null);
+                      } else if (selectedEdge) {
+                        setEdges(eds => eds.filter(e => e.id !== selectedEdge.id));
+                        setSelectedEdge(null);
+                      }
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
                   >
-                    <X size={24} className="text-slate-400" />
+                    <Trash2 size={16} />
+                  </button>
+                  <button onClick={() => { setSelectedNode(null); setSelectedEdge(null); }} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg">
+                    <X size={16} />
                   </button>
                 </div>
-                <div className="p-8 overflow-y-auto grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6">
-                  {SHAPES.map((shape) => (
-                    <button 
-                      key={shape.type}
-                      onClick={() => addNewTask(shape.type)}
-                      className="flex flex-col items-center gap-3 p-4 rounded-2xl hover:bg-indigo-50 border border-transparent hover:border-indigo-200 transition-all group"
-                    >
-                      <div className="w-16 h-16 flex items-center justify-center">
-                        <svg viewBox="0 0 100 100" className="w-full h-full">
-                          <path 
-                            d={shape.path} 
-                            fill="none" 
-                            stroke="currentColor" 
-                            strokeWidth="2" 
-                            className="text-slate-400 group-hover:text-indigo-600 transition-colors"
-                          />
-                        </svg>
-                      </div>
-                      <span className="text-xs font-bold text-slate-500 group-hover:text-indigo-700 text-center">
-                        {shape.label}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Configuration Panel */}
-        <AnimatePresence>
-          {selectedNode && (
-            <motion.div 
-              initial={{ x: 300 }}
-              animate={{ x: 0 }}
-              exit={{ x: 300 }}
-              className="w-80 bg-white border-l border-slate-200 p-6 shadow-2xl z-20 overflow-y-auto"
-            >
-              <div className="flex items-center justify-between mb-8">
-                <h4 className="font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
-                  <Settings2 size={18} className="text-indigo-600" />
-                  Configurar Etapa
-                </h4>
-                <button 
-                  onClick={() => deleteNode(selectedNode.id)}
-                  className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                >
-                  <Trash2 size={18} />
-                </button>
               </div>
 
-              <div className="space-y-6">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome da Etapa</label>
-                  <input 
-                    type="text" 
-                    value={selectedNode.data.label}
-                    onChange={(e) => updateNodeData(selectedNode.id, { label: e.target.value })}
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium text-slate-700"
-                  />
-                </div>
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                {selectedNode && (
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome da Etapa</label>
+                        <input 
+                          type="text" 
+                          value={selectedNode.data.label}
+                          onChange={(e) => updateNodeData(selectedNode.id, { label: e.target.value })}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700 text-sm"
+                        />
+                      </div>
 
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cargo Responsável</label>
-                  <input 
-                    type="text" 
-                    placeholder="Ex: Operador, Gerente..."
-                    value={selectedNode.data.responsibleRole}
-                    onChange={(e) => updateNodeData(selectedNode.id, { responsibleRole: e.target.value })}
-                    className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium text-slate-700"
-                  />
-                </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição</label>
+                        <textarea 
+                          value={selectedNode.data.description || ''}
+                          onChange={(e) => updateNodeData(selectedNode.id, { description: e.target.value })}
+                          rows={3}
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium text-slate-700 text-xs resize-none"
+                          placeholder="Descreva o que acontece nesta etapa..."
+                        />
+                      </div>
 
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tempo da Etapa (minutos)</label>
-                  <div className="relative">
-                    <input 
-                      type="number" 
-                      value={selectedNode.data.timeInMinutes}
-                      onChange={(e) => updateNodeData(selectedNode.id, { timeInMinutes: parseInt(e.target.value) || 0 })}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700 pl-10"
-                    />
-                    <Clock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-slate-100">
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <div className="relative">
-                      <input 
-                        type="checkbox" 
-                        className="sr-only" 
-                        checked={selectedNode.data.isProblemStep}
-                        onChange={(e) => updateNodeData(selectedNode.id, { isProblemStep: e.target.checked })}
-                      />
-                      <div className={cn(
-                        "w-12 h-6 rounded-full transition-all",
-                        selectedNode.data.isProblemStep ? "bg-rose-500" : "bg-slate-200"
-                      )} />
-                      <div className={cn(
-                        "absolute top-1 left-1 w-4 h-4 bg-white rounded-full transition-all",
-                        selectedNode.data.isProblemStep ? "translate-x-6" : "translate-x-0"
-                      )} />
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Cargo</label>
+                          <input 
+                            type="text" 
+                            value={selectedNode.data.responsibleRole}
+                            onChange={(e) => updateNodeData(selectedNode.id, { responsibleRole: e.target.value })}
+                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700 text-xs"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tempo (min)</label>
+                          <input 
+                            type="number" 
+                            value={selectedNode.data.timeInMinutes}
+                            onChange={(e) => updateNodeData(selectedNode.id, { timeInMinutes: parseInt(e.target.value) || 0 })}
+                            className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700 text-xs"
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex flex-col">
-                      <span className="text-sm font-bold text-slate-700">Etapa Problema</span>
-                      <span className="text-[10px] text-slate-400 font-medium">Marcar como gargalo ou falha</span>
-                    </div>
-                  </label>
-                </div>
 
-                <div className="space-y-4 pt-4 border-t border-slate-100">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                    <Palette size={14} />
-                    Personalizar Cores
-                  </label>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">Fundo</span>
-                      <input 
-                        type="color" 
-                        value={selectedNode.data.backgroundColor}
-                        onChange={(e) => updateNodeData(selectedNode.id, { backgroundColor: e.target.value })}
-                        className="w-full h-10 rounded-lg cursor-pointer bg-transparent"
-                      />
+                    <div className="pt-6 border-t border-slate-100 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex flex-col">
+                          <span className="text-xs font-bold text-slate-700">Etapa Problema</span>
+                          <span className="text-[10px] text-slate-400 font-medium">Marcar como gargalo</span>
+                        </div>
+                        <button 
+                          onClick={() => updateNodeData(selectedNode.id, { isProblemStep: !selectedNode.data.isProblemStep })}
+                          className={cn(
+                            "w-10 h-5 rounded-full p-1 transition-all",
+                            selectedNode.data.isProblemStep ? "bg-rose-500" : "bg-slate-200"
+                          )}
+                        >
+                          <div className={cn("w-3 h-3 bg-white rounded-full transition-all", selectedNode.data.isProblemStep ? "translate-x-5" : "translate-x-0")} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="space-y-1">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">Borda</span>
-                      <input 
-                        type="color" 
-                        value={selectedNode.data.borderColor}
-                        onChange={(e) => updateNodeData(selectedNode.id, { borderColor: e.target.value })}
-                        className="w-full h-10 rounded-lg cursor-pointer bg-transparent"
-                      />
-                    </div>
-                  </div>
 
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <input 
-                        type="text" 
-                        placeholder="Nome da cor..."
-                        value={newColorName}
-                        onChange={(e) => setNewColorName(e.target.value)}
-                        className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none"
-                      />
-                      <button 
-                        onClick={saveCurrentColor}
-                        disabled={!newColorName}
-                        className="p-2 bg-indigo-600 text-white rounded-lg disabled:opacity-50 hover:bg-indigo-700 transition-colors"
-                      >
-                        <Save size={16} />
-                      </button>
+                    <div className="pt-6 border-t border-slate-100 space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <Palette size={12} />
+                        Aparência
+                      </label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">Fundo</span>
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="color" 
+                              value={selectedNode.data.backgroundColor}
+                              onChange={(e) => updateNodeData(selectedNode.id, { backgroundColor: e.target.value })}
+                              className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0 p-0"
+                            />
+                            <span className="text-[10px] font-mono text-slate-400">{selectedNode.data.backgroundColor}</span>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">Borda</span>
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="color" 
+                              value={selectedNode.data.borderColor}
+                              onChange={(e) => updateNodeData(selectedNode.id, { borderColor: e.target.value })}
+                              className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0 p-0"
+                            />
+                            <span className="text-[10px] font-mono text-slate-400">{selectedNode.data.borderColor}</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
-                  {project.savedColors && project.savedColors.length > 0 && (
-                    <div className="space-y-2">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">Cores Salvas</span>
+                    <div className="pt-6 border-t border-slate-100 space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <Maximize2 size={12} />
+                        Dimensões
+                      </label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">Largura</span>
+                          <input 
+                            type="number" 
+                            value={selectedNode.data.width || 150}
+                            onChange={(e) => updateNodeData(selectedNode.id, { width: parseInt(e.target.value) || 50 })}
+                            className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">Altura</span>
+                          <input 
+                            type="number" 
+                            value={selectedNode.data.height || 100}
+                            onChange={(e) => updateNodeData(selectedNode.id, { height: parseInt(e.target.value) || 50 })}
+                            className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-6 border-t border-slate-100 space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <Palette size={12} />
+                        Cores Salvas
+                      </label>
                       <div className="grid grid-cols-4 gap-2">
-                        {project.savedColors.map((color) => (
-                          <button 
+                        {(project.mapping.savedColors || []).map((color) => (
+                          <button
                             key={color.id}
+                            onClick={() => updateNodeData(selectedNode.id, { 
+                              backgroundColor: color.backgroundColor,
+                              borderColor: color.borderColor
+                            })}
                             title={color.name}
-                            onClick={() => updateNodeData(selectedNode.id, { backgroundColor: color.backgroundColor, borderColor: color.borderColor })}
-                            className="h-8 rounded-lg border-2 transition-all hover:scale-110"
+                            className="w-full aspect-square rounded-lg border-2 transition-all hover:scale-110 shadow-sm"
                             style={{ backgroundColor: color.backgroundColor, borderColor: color.borderColor }}
                           />
                         ))}
                       </div>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text"
+                          placeholder="Nome da cor..."
+                          value={newColorName}
+                          onChange={(e) => setNewColorName(e.target.value)}
+                          className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                        />
+                        <button 
+                          onClick={saveCurrentColor}
+                          disabled={!newColorName.trim()}
+                          className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-[10px] font-black uppercase tracking-tight disabled:opacity-50 hover:bg-indigo-700 transition-colors"
+                        >
+                          Salvar
+                        </button>
+                      </div>
                     </div>
-                  )}
-                </div>
+                  </div>
+                )}
+
+                {selectedEdge && (
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Texto da Conexão</label>
+                        <input 
+                          type="text" 
+                          value={selectedEdge.label as string || ''}
+                          onChange={(e) => {
+                            const newLabel = e.target.value;
+                            setEdges(eds => eds.map(edge => 
+                              edge.id === selectedEdge.id ? { ...edge, label: newLabel } : edge
+                            ));
+                            setSelectedEdge(prev => prev ? { ...prev, label: newLabel } : null);
+                          }}
+                          placeholder="Ex: Sim, Não, Condição..."
+                          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700 text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </motion.div>
           )}
@@ -473,18 +724,10 @@ export default function MappingTab({ project, setProjects }: { project: Project,
   );
 }
 
-function LegendSection({ title, items }: { title: string, items: { icon: React.ReactNode, label: string }[] }) {
+export default function MappingTab(props: { project: Project, setProjects: (p: Project) => void }) {
   return (
-    <div className="space-y-3">
-      <h5 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{title}</h5>
-      <div className="space-y-2">
-        {items.map((item, idx) => (
-          <div key={idx} className="flex items-center gap-3 text-xs text-slate-600 font-medium">
-            <div className="w-8 flex justify-center">{item.icon}</div>
-            <span>{item.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
+    <ReactFlowProvider>
+      <FlowEditor {...props} />
+    </ReactFlowProvider>
   );
 }

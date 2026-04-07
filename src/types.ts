@@ -35,16 +35,15 @@ export interface ProjectScope {
 }
 
 export type BPMNShapeType = 
-  | 'rectangle' 
-  | 'rounded-rectangle' 
-  | 'circle' 
-  | 'diamond' 
-  | 'hexagon' 
-  | 'triangle' 
-  | 'cylinder' 
-  | 'cloud' 
+  | 'task' 
+  | 'startEvent' 
+  | 'endEvent' 
+  | 'gateway' 
+  | 'subprocess'
   | 'document' 
-  | 'data-storage';
+  | 'data-storage'
+  | 'pool'
+  | 'lane';
 
 export interface SavedColor {
   id: string;
@@ -55,12 +54,16 @@ export interface SavedColor {
 
 export interface BPMNTaskData {
   label: string;
+  description?: string;
   responsibleRole: string;
   timeInMinutes: number;
   isProblemStep: boolean;
   backgroundColor: string;
   borderColor: string;
   shapeType: BPMNShapeType;
+  width?: number;
+  height?: number;
+  onResize?: (width: number, height: number) => void;
 }
 
 export interface ParetoItem {
@@ -138,9 +141,9 @@ export interface Project {
     edges: any[];
     orientation: 'horizontal' | 'vertical';
     lastEdited: string;
+    savedColors: SavedColor[];
   };
   pdcaCycles: PDCACycle[];
-  savedColors: SavedColor[];
 }
 
 export interface User {

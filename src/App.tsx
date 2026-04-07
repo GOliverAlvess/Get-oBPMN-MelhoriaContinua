@@ -302,9 +302,14 @@ export default function App() {
           gainProjection: { value: 0, type: 'fixo', period: 'mensal' }
         }
       },
-      mapping: { nodes: [], edges: [], orientation: 'horizontal', lastEdited: new Date().toISOString() },
-      pdcaCycles: [],
-      savedColors: []
+      mapping: { 
+        nodes: [], 
+        edges: [], 
+        orientation: 'horizontal', 
+        lastEdited: new Date().toISOString(),
+        savedColors: []
+      },
+      pdcaCycles: []
     };
 
     try {

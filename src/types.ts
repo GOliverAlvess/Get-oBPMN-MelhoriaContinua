@@ -80,14 +80,38 @@ export interface FiveWhys {
   why5: string;
 }
 
+export interface RootCauseEntry {
+  id: string;
+  text: string;
+}
+
 export interface ActionPlanItem {
   id: string;
+  // PLAN (5W2H)
   what: string;
-  who: string;
+  why: string;
+  where: string;
   when: string;
+  who: string;
+  how: string;
+  howMuch: string;
+  
+  // DO
   status: 'Pendente' | 'Em andamento' | 'Concluído';
-  executionDate?: string;
+  startDate?: string;
+  endDate?: string;
   observations?: string;
+  
+  // CHECK
+  monitoringMode?: 'Dias' | 'Semanas' | 'Meses';
+  monitoringPeriod?: number;
+  worked?: 'Sim' | 'Não' | 'Parcial';
+  evidence?: string;
+  
+  // ACT
+  finalProblemStatus?: 'Resolvido' | 'Requer nova análise';
+  finalAction?: 'Padronizar processo' | 'Fazer nova análise';
+  standardizationModels?: ('POP' | 'ITO' | 'Painel de controle')[];
 }
 
 export type PDCAStatus = 'Não iniciado' | 'Em planejamento' | 'Em execução' | 'Em validação' | 'Concluído';
@@ -101,25 +125,16 @@ export interface PDCACycle {
   status: PDCAStatus;
   plan: {
     problemDescription: string;
-    impact: string;
-    priority: PDCAPriority;
-    goal: string;
-    fiveWhys: FiveWhys;
+    rootCauseAnalysis: {
+      type: '5whys' | 'list';
+      entries: RootCauseEntry[];
+    };
+    impact: {
+      description: string;
+      value: number;
+      goal: number; // %
+    };
     actionPlan: ActionPlanItem[];
-  };
-  do: {
-    observations: string;
-  };
-  check: {
-    resultObtained: string;
-    worked: 'Sim' | 'Não' | 'Parcial';
-    evidence: string;
-  };
-  act: {
-    finalAction: string;
-    adjustments: string;
-    finalStatus: 'Resolvido' | 'Em nova análise';
-    standardization?: string;
   };
 }
 

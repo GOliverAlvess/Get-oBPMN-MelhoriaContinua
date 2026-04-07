@@ -57,15 +57,23 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
       status: 'Em planejamento',
       plan: {
         problemDescription: taskLabel,
-        impact: '',
-        priority: 'Média',
-        goal: '',
-        fiveWhys: { why1: '', why2: '', why3: '', why4: '', why5: '' },
+        rootCauseAnalysis: {
+          type: '5whys',
+          entries: [
+            { id: uuidv4(), text: '' },
+            { id: uuidv4(), text: '' },
+            { id: uuidv4(), text: '' },
+            { id: uuidv4(), text: '' },
+            { id: uuidv4(), text: '' }
+          ]
+        },
+        impact: {
+          description: '',
+          value: 0,
+          goal: 0
+        },
         actionPlan: []
-      },
-      do: { observations: '' },
-      check: { resultObtained: '', worked: 'Sim', evidence: '' },
-      act: { finalAction: '', adjustments: '', finalStatus: 'Resolvido' }
+      }
     };
 
     setProjects({ ...project, pdcaCycles: [newCycle, ...project.pdcaCycles] });
@@ -88,7 +96,11 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
 
   const dashboardStats = useMemo(() => {
     const total = project.pdcaCycles.length;
-    const resolved = project.pdcaCycles.filter(c => c.act.finalStatus === 'Resolvido' && c.status === 'Concluído').length;
+    const resolved = project.pdcaCycles.filter(c => 
+      c.plan.actionPlan.every(a => a.finalProblemStatus === 'Resolvido') && 
+      c.status === 'Concluído' && 
+      c.plan.actionPlan.length > 0
+    ).length;
     const inProgress = project.pdcaCycles.filter(c => c.status !== 'Concluído').length;
     
     return { total, resolved, inProgress };
@@ -311,60 +323,125 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
                             className="w-full p-6 bg-white border border-slate-200 rounded-3xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all min-h-[120px] text-slate-700 font-medium shadow-sm"
                           />
                         </section>
-
+                        
                         {/* 2. Causa Raiz */}
                         <section className="space-y-6">
-                          <SectionHeader number="2" title="Análise de Causa Raiz (5 Porquês)" />
+                          <div className="flex items-center justify-between">
+                            <SectionHeader number="2" title="Análise de Causa Raiz" />
+                            <div className="flex bg-slate-100 p-1 rounded-xl">
+                              <button 
+                                onClick={() => updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, type: '5whys' } })}
+                                className={cn(
+                                  "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                                  activeCycle.plan.rootCauseAnalysis.type === '5whys' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400"
+                                )}
+                              >
+                                5 Porquês
+                              </button>
+                              <button 
+                                onClick={() => updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, type: 'list' } })}
+                                className={cn(
+                                  "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                                  activeCycle.plan.rootCauseAnalysis.type === 'list' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400"
+                                )}
+                              >
+                                Lista de Causas
+                              </button>
+                            </div>
+                          </div>
+                          
                           <div className="space-y-4">
-                            {[1, 2, 3, 4, 5].map(num => (
-                              <div key={num} className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-black shadow-sm">
-                                  {num}
+                            {activeCycle.plan.rootCauseAnalysis.entries.map((entry, idx) => (
+                              <div key={entry.id} className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-black shadow-sm shrink-0">
+                                  {activeCycle.plan.rootCauseAnalysis.type === '5whys' ? idx + 1 : <AlertCircle size={16} />}
                                 </div>
-                                <input 
-                                  type="text" 
-                                  placeholder={`Por quê ${num}?`}
-                                  value={(activeCycle.plan.fiveWhys as any)[`why${num}`]}
-                                  onChange={(e) => updatePlan({ fiveWhys: { ...activeCycle.plan.fiveWhys, [`why${num}`]: e.target.value } })}
-                                  className="flex-1 p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm"
-                                />
+                                <div className="flex-1 flex gap-2">
+                                  <input 
+                                    type="text" 
+                                    placeholder={activeCycle.plan.rootCauseAnalysis.type === '5whys' ? `Por quê ${idx + 1}?` : "Descreva a causa..."}
+                                    value={entry.text}
+                                    onChange={(e) => {
+                                      const newEntries = [...activeCycle.plan.rootCauseAnalysis.entries];
+                                      newEntries[idx].text = e.target.value;
+                                      updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, entries: newEntries } });
+                                    }}
+                                    className="flex-1 p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm"
+                                  />
+                                  {activeCycle.plan.rootCauseAnalysis.type === 'list' && (
+                                    <button 
+                                      onClick={() => {
+                                        const newEntries = activeCycle.plan.rootCauseAnalysis.entries.filter((_, i) => i !== idx);
+                                        updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, entries: newEntries } });
+                                      }}
+                                      className="p-4 text-slate-300 hover:text-rose-500 transition-colors"
+                                    >
+                                      <Trash2 size={18} />
+                                    </button>
+                                  )}
+                                </div>
                               </div>
                             ))}
+                            {activeCycle.plan.rootCauseAnalysis.type === 'list' && (
+                              <button 
+                                onClick={() => {
+                                  updatePlan({ 
+                                    rootCauseAnalysis: { 
+                                      ...activeCycle.plan.rootCauseAnalysis, 
+                                      entries: [...activeCycle.plan.rootCauseAnalysis.entries, { id: uuidv4(), text: '' }] 
+                                    } 
+                                  });
+                                }}
+                                className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 font-black text-xs hover:border-indigo-300 hover:text-indigo-600 transition-all flex items-center justify-center gap-2"
+                              >
+                                <Plus size={16} />
+                                Adicionar Causa
+                              </button>
+                            )}
                           </div>
                         </section>
 
-                        {/* 3. Plano de Ação */}
+                        {/* 4. Plano de Ação (5W2H) */}
                         <section className="space-y-6">
-                          <SectionHeader number="3" title="Plano de Ação" />
-                          <div className="space-y-4">
+                          <SectionHeader number="4" title="Plano de Ação (5W2H)" />
+                          <div className="space-y-6">
                             {activeCycle.plan.actionPlan.map((item, idx) => (
-                              <div key={item.id} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4 relative group">
+                              <div key={item.id} className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm space-y-6 relative group">
                                 <button 
                                   onClick={() => removeActionPlanItem(idx)}
-                                  className="absolute top-4 right-4 text-slate-300 hover:text-rose-500 transition-colors"
+                                  className="absolute top-6 right-6 text-slate-300 hover:text-rose-500 transition-colors"
                                 >
-                                  <Trash2 size={18} />
+                                  <Trash2 size={20} />
                                 </button>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                   <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">O que fazer?</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">What (O que será feito?)</label>
                                     <input 
                                       value={item.what} 
                                       onChange={(e) => updateActionPlan(idx, { what: e.target.value })}
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                     />
                                   </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Why (Por que será feito?)</label>
+                                    <input 
+                                      value={item.why} 
+                                      onChange={(e) => updateActionPlan(idx, { why: e.target.value })}
+                                      className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Where (Onde?)</label>
+                                    <input 
+                                      value={item.where} 
+                                      onChange={(e) => updateActionPlan(idx, { where: e.target.value })}
+                                      className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                                    />
+                                  </div>
                                   <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
-                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Responsável</label>
-                                      <input 
-                                        value={item.who} 
-                                        onChange={(e) => updateActionPlan(idx, { who: e.target.value })}
-                                        className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
-                                      />
-                                    </div>
-                                    <div className="space-y-1">
-                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Prazo</label>
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">When (Quando?)</label>
                                       <input 
                                         type="date"
                                         value={item.when} 
@@ -372,68 +449,92 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
                                         className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                       />
                                     </div>
+                                    <div className="space-y-1">
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Who (Responsável)</label>
+                                      <input 
+                                        value={item.who} 
+                                        onChange={(e) => updateActionPlan(idx, { who: e.target.value })}
+                                        className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">How (Como será feito?)</label>
+                                    <input 
+                                      value={item.how} 
+                                      onChange={(e) => updateActionPlan(idx, { how: e.target.value })}
+                                      className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                                    />
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">How much (Custo ou esforço)</label>
+                                    <input 
+                                      value={item.howMuch} 
+                                      onChange={(e) => updateActionPlan(idx, { howMuch: e.target.value })}
+                                      className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                                    />
                                   </div>
                                 </div>
                               </div>
                             ))}
                             <button 
                               onClick={addActionPlanItem}
-                              className="w-full py-6 border-2 border-dashed border-slate-200 rounded-3xl text-slate-400 font-black text-sm hover:border-indigo-300 hover:text-indigo-600 transition-all flex items-center justify-center gap-2"
+                              className="w-full py-8 border-2 border-dashed border-slate-200 rounded-[2rem] text-slate-400 font-black text-sm hover:border-indigo-300 hover:text-indigo-600 transition-all flex items-center justify-center gap-2"
                             >
-                              <Plus size={20} />
-                              Adicionar Nova Ação
+                              <Plus size={24} />
+                              Adicionar Nova Ação 5W2H
                             </button>
                           </div>
                         </section>
                       </div>
 
                       <div className="space-y-8">
-                        {/* Impacto & Prioridade */}
+                        {/* 3. Impacto do Problema */}
                         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8">
+                          <SectionHeader number="3" title="Impacto" />
+                          
                           <div className="space-y-4">
                             <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                               <Target size={14} className="text-indigo-500" />
-                              Impacto do Problema
+                              Descrição do Impacto
                             </label>
                             <textarea 
                               placeholder="Qual o prejuízo atual?"
-                              value={activeCycle.plan.impact}
-                              onChange={(e) => updatePlan({ impact: e.target.value })}
+                              value={activeCycle.plan.impact.description}
+                              onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, description: e.target.value } })}
                               className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 min-h-[100px]"
                             />
                           </div>
 
                           <div className="space-y-4">
-                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Prioridade</label>
-                            <div className="grid grid-cols-2 gap-2">
-                              {['Baixa', 'Média', 'Alta', 'Crítica'].map(p => (
-                                <button 
-                                  key={p}
-                                  onClick={() => updatePlan({ priority: p })}
-                                  className={cn(
-                                    "py-3 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
-                                    activeCycle.plan.priority === p 
-                                      ? "bg-slate-900 border-slate-900 text-white shadow-lg" 
-                                      : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
-                                  )}
-                                >
-                                  {p}
-                                </button>
-                              ))}
-                            </div>
+                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                              <RefreshCw size={14} className="text-amber-500" />
+                              Valor do Impacto Atual
+                            </label>
+                            <input 
+                              type="number"
+                              placeholder="Ex: 5000"
+                              value={activeCycle.plan.impact.value}
+                              onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, value: parseFloat(e.target.value) || 0 } })}
+                              className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                            />
                           </div>
 
                           <div className="space-y-4">
                             <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                               <TrendingUp size={14} className="text-emerald-500" />
-                              Meta de Melhoria
+                              Meta de Melhoria (%)
                             </label>
-                            <input 
-                              placeholder="Ex: Reduzir tempo em 20%"
-                              value={activeCycle.plan.goal}
-                              onChange={(e) => updatePlan({ goal: e.target.value })}
-                              className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
-                            />
+                            <div className="relative">
+                              <input 
+                                type="number"
+                                placeholder="Ex: 20"
+                                value={activeCycle.plan.impact.goal}
+                                onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, goal: parseFloat(e.target.value) || 0 } })}
+                                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 pr-12"
+                              />
+                              <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-400">%</span>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -442,11 +543,17 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
                 )}
 
                 {activePhase === 'DO' && (
-                  <motion.div key="do" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-5xl mx-auto space-y-8">
+                  <motion.div 
+                    key="do" 
+                    initial={{ opacity: 0 }} 
+                    animate={{ opacity: 1 }} 
+                    exit={{ opacity: 0 }}
+                    className="max-w-5xl mx-auto space-y-8"
+                  >
                     <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
                       <div className="p-8 border-b border-slate-100 bg-slate-50/50">
                         <h4 className="text-xl font-black text-slate-800 tracking-tight">Execução do Plano de Ação</h4>
-                        <p className="text-slate-500 text-sm mt-1">Acompanhe o status de cada ação planejada.</p>
+                        <p className="text-slate-500 text-sm mt-1">Acompanhe o status e datas de cada ação 5W2H.</p>
                       </div>
                       <div className="divide-y divide-slate-100">
                         {activeCycle.plan.actionPlan.length === 0 ? (
@@ -455,23 +562,16 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
                           </div>
                         ) : (
                           activeCycle.plan.actionPlan.map((item, idx) => (
-                            <div key={item.id} className="p-8 flex flex-col md:flex-row md:items-center gap-8 hover:bg-slate-50/50 transition-all">
-                              <div className="flex-1 space-y-2">
+                            <div key={item.id} className="p-8 space-y-6 hover:bg-slate-50/50 transition-all">
+                              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div className="flex items-center gap-3">
-                                  <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-xs">
+                                  <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-xs shrink-0">
                                     {idx + 1}
                                   </span>
-                                  <h5 className="font-bold text-slate-800 text-lg">{item.what}</h5>
+                                  <h5 className="font-bold text-slate-800 text-lg">{item.what || 'Ação sem descrição'}</h5>
                                 </div>
-                                <div className="flex items-center gap-4 text-xs text-slate-400 font-bold uppercase tracking-wider ml-11">
-                                  <span>Resp: {item.who}</span>
-                                  <span>Prazo: {item.when ? format(new Date(item.when), 'dd/MM/yyyy') : '-'}</span>
-                                </div>
-                              </div>
-                              
-                              <div className="flex flex-wrap items-center gap-4">
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Status</label>
+                                <div className="flex items-center gap-2">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</label>
                                   <select 
                                     value={item.status}
                                     onChange={(e) => updateActionPlan(idx, { status: e.target.value as any })}
@@ -486,13 +586,35 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
                                     <option value="Concluído">Concluído</option>
                                   </select>
                                 </div>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div className="space-y-1">
-                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Executado em</label>
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Data de Início</label>
                                   <input 
                                     type="date"
-                                    value={item.executionDate}
-                                    onChange={(e) => updateActionPlan(idx, { executionDate: e.target.value })}
-                                    className="bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
+                                    value={item.startDate}
+                                    onChange={(e) => updateActionPlan(idx, { startDate: e.target.value })}
+                                    className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Data de Conclusão</label>
+                                  <input 
+                                    type="date"
+                                    value={item.endDate}
+                                    onChange={(e) => updateActionPlan(idx, { endDate: e.target.value })}
+                                    className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Observação (Ação)</label>
+                                  <input 
+                                    type="text"
+                                    value={item.observations}
+                                    onChange={(e) => updateActionPlan(idx, { observations: e.target.value })}
+                                    placeholder="Notas da execução..."
+                                    className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
                                   />
                                 </div>
                               </div>
@@ -501,121 +623,183 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
                         )}
                       </div>
                     </div>
-
-                    <section className="space-y-4">
-                      <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                        <FileText size={14} />
-                        Observações da Execução
-                      </h4>
-                      <textarea 
-                        value={activeCycle.do.observations}
-                        onChange={(e) => updateCycle({ do: { observations: e.target.value } })}
-                        className="w-full p-6 bg-white border border-slate-200 rounded-3xl outline-none focus:ring-2 focus:ring-indigo-500 min-h-[150px] text-slate-700 font-medium shadow-sm"
-                        placeholder="Registre aqui detalhes importantes da execução..."
-                      />
-                    </section>
                   </motion.div>
                 )}
 
                 {activePhase === 'CHECK' && (
-                  <motion.div key="check" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-4xl mx-auto space-y-12">
-                    <section className="space-y-6">
-                      <SectionHeader number="1" title="Verificação de Resultados" />
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-4">
-                          <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Resultado Obtido</label>
-                          <textarea 
-                            value={activeCycle.check.resultObtained}
-                            onChange={(e) => updateCycle({ check: { ...activeCycle.check, resultObtained: e.target.value } })}
-                            className="w-full p-6 bg-white border border-slate-200 rounded-3xl outline-none focus:ring-2 focus:ring-indigo-500 min-h-[150px] text-slate-700 font-medium shadow-sm"
-                            placeholder="Descreva os indicadores após a execução..."
-                          />
-                        </div>
-                        <div className="space-y-8">
-                          <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-                            <h5 className="font-bold text-slate-800">Funcionou?</h5>
-                            <div className="flex gap-2">
-                              {['Sim', 'Não', 'Parcial'].map(v => (
-                                <button 
-                                  key={v}
-                                  onClick={() => updateCycle({ check: { ...activeCycle.check, worked: v as any } })}
-                                  className={cn(
-                                    "flex-1 py-4 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all",
-                                    activeCycle.check.worked === v 
-                                      ? (v === 'Sim' ? "bg-emerald-500 border-emerald-500 text-white shadow-lg" : 
-                                         v === 'Não' ? "bg-rose-500 border-rose-500 text-white shadow-lg" : 
-                                         "bg-amber-500 border-amber-500 text-white shadow-lg")
-                                      : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
-                                  )}
-                                >
-                                  {v}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="space-y-4">
-                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Evidências</label>
-                            <input 
-                              type="text"
-                              placeholder="Links ou referências de evidências"
-                              value={activeCycle.check.evidence}
-                              onChange={(e) => updateCycle({ check: { ...activeCycle.check, evidence: e.target.value } })}
-                              className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm"
-                            />
-                          </div>
-                        </div>
+                  <motion.div 
+                    key="check" 
+                    initial={{ opacity: 0 }} 
+                    animate={{ opacity: 1 }} 
+                    exit={{ opacity: 0 }}
+                    className="max-w-5xl mx-auto space-y-8"
+                  >
+                    <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="p-8 border-b border-slate-100 bg-slate-50/50">
+                        <h4 className="text-xl font-black text-slate-800 tracking-tight">Verificação de Resultados</h4>
+                        <p className="text-slate-500 text-sm mt-1">Acompanhamento e validação de cada ação.</p>
                       </div>
-                    </section>
+                      <div className="divide-y divide-slate-100">
+                        {activeCycle.plan.actionPlan.length === 0 ? (
+                          <div className="p-20 text-center text-slate-400 italic">
+                            Nenhuma ação planejada no PLAN.
+                          </div>
+                        ) : (
+                          activeCycle.plan.actionPlan.map((item, idx) => (
+                            <div key={item.id} className="p-8 space-y-6 hover:bg-slate-50/50 transition-all">
+                              <div className="flex items-center gap-3">
+                                <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-xs shrink-0">
+                                  {idx + 1}
+                                </span>
+                                <h5 className="font-bold text-slate-800 text-lg">{item.what || 'Ação sem descrição'}</h5>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Modo de Acompanhamento</label>
+                                  <select 
+                                    value={item.monitoringMode}
+                                    onChange={(e) => updateActionPlan(idx, { monitoringMode: e.target.value as any })}
+                                    className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
+                                  >
+                                    <option value="Dias">Dias</option>
+                                    <option value="Semanas">Semanas</option>
+                                    <option value="Meses">Meses</option>
+                                  </select>
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Período</label>
+                                  <input 
+                                    type="number"
+                                    value={item.monitoringPeriod}
+                                    onChange={(e) => updateActionPlan(idx, { monitoringPeriod: parseInt(e.target.value) || 0 })}
+                                    className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Funcionou?</label>
+                                  <select 
+                                    value={item.worked}
+                                    onChange={(e) => updateActionPlan(idx, { worked: e.target.value as any })}
+                                    className={cn(
+                                      "w-full px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest outline-none border-none",
+                                      item.worked === 'Sim' ? "bg-emerald-100 text-emerald-700" :
+                                      item.worked === 'Não' ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                                    )}
+                                  >
+                                    <option value="Sim">Sim</option>
+                                    <option value="Não">Não</option>
+                                    <option value="Parcial">Parcial</option>
+                                  </select>
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Evidências</label>
+                                  <input 
+                                    type="text"
+                                    value={item.evidence}
+                                    onChange={(e) => updateActionPlan(idx, { evidence: e.target.value })}
+                                    placeholder="Link ou descrição..."
+                                    className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
                   </motion.div>
                 )}
 
                 {activePhase === 'ACT' && (
-                  <motion.div key="act" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-4xl mx-auto space-y-12">
-                    <section className="space-y-8">
-                      <SectionHeader number="1" title="Ação de Melhoria Contínua" />
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div className="space-y-4">
-                          <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Ação Final / Padronização</label>
-                          <textarea 
-                            value={activeCycle.act.finalAction}
-                            onChange={(e) => updateCycle({ act: { ...activeCycle.act, finalAction: e.target.value } })}
-                            className="w-full p-6 bg-white border border-slate-200 rounded-3xl outline-none focus:ring-2 focus:ring-indigo-500 min-h-[150px] text-slate-700 font-medium shadow-sm"
-                            placeholder="Se funcionou, como padronizar? Se não, o que ajustar?"
-                          />
-                        </div>
-                        <div className="space-y-8">
-                          <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
-                            <h5 className="font-bold text-slate-800">Status Final do Problema</h5>
-                            <div className="flex gap-2">
-                              {['Resolvido', 'Em nova análise'].map(v => (
-                                <button 
-                                  key={v}
-                                  onClick={() => updateCycle({ act: { ...activeCycle.act, finalStatus: v as any } })}
-                                  className={cn(
-                                    "flex-1 py-4 rounded-2xl text-xs font-black uppercase tracking-widest border transition-all",
-                                    activeCycle.act.finalStatus === v 
-                                      ? "bg-slate-900 border-slate-900 text-white shadow-lg" 
-                                      : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
-                                  )}
-                                >
-                                  {v}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          <div className="space-y-4">
-                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Ajustes Necessários</label>
-                            <input 
-                              type="text"
-                              value={activeCycle.act.adjustments}
-                              onChange={(e) => updateCycle({ act: { ...activeCycle.act, adjustments: e.target.value } })}
-                              className="w-full p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm"
-                            />
-                          </div>
-                        </div>
+                  <motion.div 
+                    key="act" 
+                    initial={{ opacity: 0 }} 
+                    animate={{ opacity: 1 }} 
+                    exit={{ opacity: 0 }}
+                    className="max-w-5xl mx-auto space-y-8"
+                  >
+                    <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
+                      <div className="p-8 border-b border-slate-100 bg-slate-50/50">
+                        <h4 className="text-xl font-black text-slate-800 tracking-tight">Ação de Melhoria Contínua</h4>
+                        <p className="text-slate-500 text-sm mt-1">Padronização ou novos ajustes para cada ação.</p>
                       </div>
-                    </section>
+                      <div className="divide-y divide-slate-100">
+                        {activeCycle.plan.actionPlan.length === 0 ? (
+                          <div className="p-20 text-center text-slate-400 italic">
+                            Nenhuma ação planejada no PLAN.
+                          </div>
+                        ) : (
+                          activeCycle.plan.actionPlan.map((item, idx) => (
+                            <div key={item.id} className="p-8 space-y-6 hover:bg-slate-50/50 transition-all">
+                              <div className="flex items-center gap-3">
+                                <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-xs shrink-0">
+                                  {idx + 1}
+                                </span>
+                                <h5 className="font-bold text-slate-800 text-lg">{item.what || 'Ação sem descrição'}</h5>
+                              </div>
+
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                <div className="space-y-4">
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Status Final do Problema</label>
+                                    <select 
+                                      value={item.finalProblemStatus}
+                                      onChange={(e) => updateActionPlan(idx, { finalProblemStatus: e.target.value as any })}
+                                      className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
+                                    >
+                                      <option value="Resolvido">Resolvido</option>
+                                      <option value="Requer nova análise">Requer nova análise</option>
+                                    </select>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Ação Final</label>
+                                    <select 
+                                      value={item.finalAction}
+                                      onChange={(e) => updateActionPlan(idx, { finalAction: e.target.value as any })}
+                                      className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
+                                    >
+                                      <option value="Padronizar processo">Padronizar processo</option>
+                                      <option value="Fazer nova análise">Fazer nova análise</option>
+                                    </select>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                  {item.finalAction === 'Padronizar processo' && (
+                                    <div className="space-y-2">
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Modelo de Padronização</label>
+                                      <div className="flex flex-wrap gap-2">
+                                        {['POP', 'ITO', 'Painel de controle'].map(model => (
+                                          <button 
+                                            key={model}
+                                            onClick={() => {
+                                              const current = item.standardizationModels || [];
+                                              const next = current.includes(model as any)
+                                                ? current.filter(m => m !== model)
+                                                : [...current, model as any];
+                                              updateActionPlan(idx, { standardizationModels: next });
+                                            }}
+                                            className={cn(
+                                              "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
+                                              item.standardizationModels?.includes(model as any)
+                                                ? "bg-indigo-600 border-indigo-600 text-white shadow-md"
+                                                : "bg-white border-slate-200 text-slate-400 hover:border-indigo-300"
+                                            )}
+                                          >
+                                            {model}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -641,7 +825,23 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
 
   function addActionPlanItem() {
     if (!activeCycle) return;
-    const newItem: ActionPlanItem = { id: uuidv4(), what: '', who: '', when: '', status: 'Pendente' };
+    const newItem: ActionPlanItem = { 
+      id: uuidv4(), 
+      what: '', 
+      why: '',
+      where: '',
+      when: '', 
+      who: '',
+      how: '',
+      howMuch: '',
+      status: 'Pendente',
+      monitoringMode: 'Dias',
+      monitoringPeriod: 1,
+      worked: 'Sim',
+      finalProblemStatus: 'Resolvido',
+      finalAction: 'Padronizar processo',
+      standardizationModels: []
+    };
     updatePlan({ actionPlan: [...activeCycle.plan.actionPlan, newItem] });
   }
 

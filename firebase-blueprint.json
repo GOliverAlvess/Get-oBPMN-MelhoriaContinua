@@ -6,7 +6,9 @@
       "type": "object",
       "properties": {
         "id": { "type": "string" },
-        "name": { "type": "string" }
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "sector": { "type": "string" }
       },
       "required": ["id", "name"]
     },
@@ -20,6 +22,7 @@
         "createdAt": { "type": "string", "format": "date-time" },
         "progress": { "type": "number" },
         "status": { "type": "string", "enum": ["Planejamento", "Em Execução", "Concluído", "Suspenso"] },
+        "priority": { "type": "string", "enum": ["Baixa", "Média", "Alta"] },
         "assignedTo": { "type": "string", "description": "User ID" },
         "scope": { "type": "object" },
         "mapping": { "type": "object" },

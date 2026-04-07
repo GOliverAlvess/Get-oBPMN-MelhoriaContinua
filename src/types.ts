@@ -1,4 +1,5 @@
 export type ProjectStatus = 'Planejamento' | 'Em Execução' | 'Suspenso' | 'Concluído';
+export type ProjectPriority = 'Baixa' | 'Média' | 'Alta';
 
 export interface InvolvedSector {
   id: string;
@@ -129,7 +130,8 @@ export interface Project {
   createdAt: string;
   progress: number;
   status: ProjectStatus;
-  assignedTo: string; // User ID or Name
+  priority?: ProjectPriority;
+  assignedTo: string; // User ID
   scope: ProjectScope;
   mapping: {
     nodes: any[];
@@ -144,5 +146,7 @@ export interface Project {
 export interface User {
   id: string;
   name: string;
+  email?: string;
+  sector?: string;
   avatar?: string;
 }

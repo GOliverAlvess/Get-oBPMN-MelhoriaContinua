@@ -17,7 +17,11 @@ import {
   Settings,
   LogOut,
   ArrowRight,
-  Save
+  Save,
+  Trash2,
+  Edit,
+  Filter,
+  ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -45,8 +49,10 @@ import {
   getDoc
 } from './firebase';
 import type { FirebaseUser } from './firebase';
-import { Project, ProjectStatus, User } from './types';
+import { Project, ProjectStatus, ProjectPriority, User } from './types';
 import { cn } from './lib/utils';
+import MappingTab from './components/MappingTab';
+import PDCAEditor from './components/PDCAEditor';
 
 // Error Boundary Component
 interface ErrorBoundaryProps {
@@ -119,6 +125,8 @@ export default function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'scope' | 'mapping' | 'pdca'>('scope');
+  const [activeView, setActiveView] = useState<'kanban' | 'settings'>('kanban');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Auth State Listener
   useEffect(() => {
@@ -158,6 +166,7 @@ export default function App() {
       setDoc(userDocRef, {
         id: user.uid,
         name: user.displayName || 'Usuário sem nome',
+        email: user.email || '',
       }, { merge: true }).catch(error => handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`));
     }
   }, [user]);
@@ -239,25 +248,40 @@ export default function App() {
     }
   };
 
-  const handleCreateProject = async () => {
+  const handleDeleteProject = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir este projeto?')) return;
+    try {
+      await deleteDoc(doc(db, 'projects', id));
+      setProjects(prev => prev.filter(p => p.id !== id));
+      alert('Projeto excluído com sucesso!');
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      handleFirestoreError(error, OperationType.DELETE, `projects/${id}`);
+    }
+  };
+
+  const handleCreateProject = async (data: { name: string, priority: ProjectPriority, assignedTo: string }) => {
     if (!user) return;
     const newId = uuidv4();
+    const assignedUser = users.find(u => u.id === data.assignedTo);
+    
     const newProject: Project = {
       id: newId,
-      name: 'Novo Projeto',
+      name: data.name,
       createdAt: new Date().toISOString(),
       progress: 0,
       status: 'Planejamento',
-      assignedTo: user.uid,
+      priority: data.priority,
+      assignedTo: data.assignedTo,
       scope: {
-        title: 'Novo Projeto',
-        responsible: user.displayName || 'Admin',
+        title: data.name,
+        responsible: assignedUser?.name || 'Admin',
         problemDescription: '',
         measurableObjective: '',
         involvedSectors: [],
         toolsUsed: [],
-        startDate: new Date().toISOString(),
-        forecastCompletion: new Date().toISOString(),
+        startDate: new Date().toISOString().split('T')[0],
+        forecastCompletion: new Date().toISOString().split('T')[0],
         financial: {
           currentImpact: { value: 0, type: 'continuo', period: 'mensal' },
           gainProjection: { value: 0, type: 'fixo', period: 'mensal' }
@@ -270,6 +294,7 @@ export default function App() {
 
     try {
       await setDoc(doc(db, 'projects', newId), newProject);
+      setIsCreateModalOpen(false);
       setSelectedProjectId(newId);
       setActiveTab('scope');
     } catch (error) {
@@ -339,20 +364,25 @@ export default function App() {
 
           <nav className="flex-1 p-4 space-y-2">
             <button 
-              onClick={handleBackToKanban}
+              onClick={() => {
+                setActiveView('kanban');
+                setSelectedProjectId(null);
+              }}
               className={cn(
                 "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
-                !selectedProjectId ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-500 hover:bg-slate-50"
+                activeView === 'kanban' ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-500 hover:bg-slate-50"
               )}
             >
               <LayoutDashboard size={20} />
               <span>Projetos (Kanban)</span>
             </button>
-            <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 transition-all duration-200">
-              <Users size={20} />
-              <span>Equipe</span>
-            </button>
-            <button className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-500 hover:bg-slate-50 transition-all duration-200">
+            <button 
+              onClick={() => setActiveView('settings')}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
+                activeView === 'settings' ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-500 hover:bg-slate-50"
+              )}
+            >
               <Settings size={20} />
               <span>Configurações</span>
             </button>
@@ -382,13 +412,16 @@ export default function App() {
           "lg:ml-64 p-4 lg:p-8"
         )}>
           <AnimatePresence mode="wait">
-            {!selectedProjectId ? (
+            {activeView === 'settings' ? (
+              <SettingsView key="settings" users={users} />
+            ) : !selectedProjectId ? (
               <KanbanView 
                 key="kanban"
                 projects={projects} 
                 users={users} 
                 onProjectClick={handleProjectClick} 
-                onCreateProject={handleCreateProject}
+                onCreateProject={() => setIsCreateModalOpen(true)}
+                onDeleteProject={handleDeleteProject}
               />
             ) : selectedProject ? (
               <ProjectDetailView 
@@ -416,6 +449,13 @@ export default function App() {
             )}
           </AnimatePresence>
         </main>
+
+        <CreateProjectModal 
+          isOpen={isCreateModalOpen} 
+          onClose={() => setIsCreateModalOpen(false)} 
+          onCreate={handleCreateProject}
+          users={users}
+        />
       </div>
     </ErrorBoundary>
   );
@@ -423,13 +463,49 @@ export default function App() {
 
 // --- KANBAN VIEW ---
 
-function KanbanView({ projects, users, onProjectClick, onCreateProject }: { 
+function KanbanView({ projects, users, onProjectClick, onCreateProject, onDeleteProject }: { 
   projects: Project[], 
   users: User[], 
   onProjectClick: (id: string) => void,
   onCreateProject: () => void,
+  onDeleteProject: (id: string) => void,
   key?: string
 }) {
+  const [groupBy, setGroupBy] = useState<'status' | 'collaborator'>('status');
+  const [visibleStatuses, setVisibleStatuses] = useState<ProjectStatus[]>(['Planejamento', 'Em Execução', 'Suspenso', 'Concluído']);
+  const [visibleCollaborators, setVisibleCollaborators] = useState<string[]>(users.map(u => u.id));
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  const statuses: ProjectStatus[] = ['Planejamento', 'Em Execução', 'Suspenso', 'Concluído'];
+
+  // Update visible collaborators when users list changes
+  useEffect(() => {
+    if (visibleCollaborators.length === 0 && users.length > 0) {
+      setVisibleCollaborators(users.map(u => u.id));
+    }
+  }, [users]);
+
+  const toggleStatus = (status: ProjectStatus) => {
+    setVisibleStatuses(prev => 
+      prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
+    );
+  };
+
+  const toggleCollaborator = (userId: string) => {
+    setVisibleCollaborators(prev => 
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const filteredProjects = projects.filter(p => 
+    visibleStatuses.includes(p.status) && 
+    visibleCollaborators.includes(p.assignedTo)
+  );
+
+  const columns = groupBy === 'status' 
+    ? statuses.filter(s => visibleStatuses.includes(s))
+    : users.filter(u => visibleCollaborators.includes(u.id));
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -437,63 +513,222 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject }: {
       exit={{ opacity: 0, y: -20 }}
       className="space-y-8"
     >
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h2 className="text-3xl font-bold text-slate-900">Gestão de Projetos</h2>
-          <p className="text-slate-500 mt-1">Visualize e gerencie o fluxo de melhoria contínua.</p>
+          <p className="text-slate-500 mt-1">
+            Visualizando por {groupBy === 'status' ? 'status' : 'colaborador'}.
+          </p>
         </div>
-        <button 
-          onClick={onCreateProject}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
-        >
-          <Plus size={20} />
-          <span>Novo Projeto</span>
-        </button>
+        
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+            <button 
+              onClick={() => setGroupBy('status')}
+              className={cn(
+                "px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2",
+                groupBy === 'status' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              <Target size={16} />
+              Status
+            </button>
+            <button 
+              onClick={() => setGroupBy('collaborator')}
+              className={cn(
+                "px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2",
+                groupBy === 'collaborator' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              <Users size={16} />
+              Colaborador
+            </button>
+          </div>
+
+          <div className="relative">
+            <button 
+              onClick={() => setIsFilterOpen(!isFilterOpen)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-sm transition-all border shadow-sm",
+                isFilterOpen ? "bg-slate-100 border-slate-300 text-slate-800" : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+              )}
+            >
+              <Filter size={18} />
+              <span>Filtros</span>
+              <ChevronDown size={16} className={cn("transition-transform", isFilterOpen && "rotate-180")} />
+            </button>
+
+            <AnimatePresence>
+              {isFilterOpen && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                  className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 p-5 space-y-6"
+                >
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Filtrar Status</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {statuses.map(s => (
+                        <button 
+                          key={s}
+                          onClick={() => toggleStatus(s)}
+                          className={cn(
+                            "px-3 py-1.5 rounded-lg text-[10px] font-bold border transition-all",
+                            visibleStatuses.includes(s) 
+                              ? "bg-indigo-50 border-indigo-200 text-indigo-600" 
+                              : "bg-white border-slate-200 text-slate-400 hover:border-slate-300"
+                          )}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Filtrar Colaboradores</h4>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                      {users.map(u => (
+                        <button 
+                          key={u.id}
+                          onClick={() => toggleCollaborator(u.id)}
+                          className={cn(
+                            "w-full flex items-center gap-3 p-2 rounded-xl border transition-all text-left",
+                            visibleCollaborators.includes(u.id)
+                              ? "bg-indigo-50 border-indigo-200"
+                              : "bg-white border-slate-100 hover:border-slate-200"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold uppercase",
+                            visibleCollaborators.includes(u.id) ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-400"
+                          )}>
+                            {u.name.split(' ').map(n => n[0]).join('')}
+                          </div>
+                          <span className={cn(
+                            "text-xs font-bold truncate",
+                            visibleCollaborators.includes(u.id) ? "text-indigo-600" : "text-slate-500"
+                          )}>{u.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100 flex justify-between">
+                    <button 
+                      onClick={() => {
+                        setVisibleStatuses(statuses);
+                        setVisibleCollaborators(users.map(u => u.id));
+                      }}
+                      className="text-[10px] font-bold text-indigo-600 hover:underline"
+                    >
+                      Limpar Filtros
+                    </button>
+                    <button 
+                      onClick={() => setIsFilterOpen(false)}
+                      className="text-[10px] font-bold text-slate-400 hover:text-slate-600"
+                    >
+                      Fechar
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          <button 
+            onClick={onCreateProject}
+            className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200"
+          >
+            <Plus size={20} />
+            <span>Novo Projeto</span>
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {users.map(user => (
-          <div key={user.id} className="flex flex-col gap-4">
-            <div className="flex items-center justify-between px-2">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs uppercase">
-                  {user.name.split(' ').map(n => n[0]).join('')}
-                </div>
-                <h3 className="font-bold text-slate-700">{user.name}</h3>
-                <span className="bg-slate-200 text-slate-600 text-xs px-2 py-0.5 rounded-full font-medium">
-                  {projects.filter(p => p.assignedTo === user.id).length}
-                </span>
-              </div>
-              <button className="text-slate-400 hover:text-slate-600">
-                <MoreVertical size={18} />
-              </button>
-            </div>
+      <div className="flex flex-col lg:flex-row gap-6 overflow-x-auto pb-4 min-h-[600px] custom-scrollbar">
+        {columns.map(col => {
+          const colId = typeof col === 'string' ? col : col.id;
+          const colTitle = typeof col === 'string' ? col : col.name;
+          const colProjects = filteredProjects.filter(p => 
+            groupBy === 'status' ? p.status === colId : p.assignedTo === colId
+          );
 
-            <div className="bg-slate-100/50 p-3 rounded-2xl min-h-[500px] space-y-4 border border-slate-200/50">
-              {projects.filter(p => p.assignedTo === user.id).map(project => (
-                <ProjectCard 
-                  key={project.id} 
-                  project={project} 
-                  onClick={() => onProjectClick(project.id)} 
-                />
-              ))}
-              
-              <button 
-                onClick={onCreateProject}
-                className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:border-indigo-300 hover:text-indigo-400 transition-all flex items-center justify-center gap-2 group"
-              >
-                <Plus size={18} className="group-hover:scale-110 transition-transform" />
-                <span className="text-sm font-medium">Adicionar Projeto</span>
-              </button>
+          return (
+            <div key={colId} className="flex flex-col gap-4 min-w-[320px] flex-1">
+              <div className="flex items-center justify-between px-2">
+                <div className="flex items-center gap-3">
+                  {groupBy === 'status' ? (
+                    <div className={cn(
+                      "w-3 h-3 rounded-full",
+                      colId === 'Planejamento' ? "bg-amber-400" :
+                      colId === 'Em Execução' ? "bg-blue-400" :
+                      colId === 'Suspenso' ? "bg-rose-400" : "bg-emerald-400"
+                    )} />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs uppercase">
+                      {(col as User).name.split(' ').map(n => n[0]).join('')}
+                    </div>
+                  )}
+                  <h3 className="font-bold text-slate-700">{colTitle}</h3>
+                  <span className="bg-slate-200 text-slate-600 text-xs px-2 py-0.5 rounded-full font-medium">
+                    {colProjects.length}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-slate-100/50 p-3 rounded-2xl flex-1 space-y-4 border border-slate-200/50">
+                {colProjects.map(project => (
+                  <ProjectCard 
+                    key={project.id} 
+                    project={project} 
+                    users={users}
+                    onClick={() => onProjectClick(project.id)} 
+                    onDelete={() => onDeleteProject(project.id)}
+                  />
+                ))}
+                
+                {colProjects.length === 0 && (
+                  <div className="py-10 flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-200 rounded-xl">
+                    <Target size={24} className="mb-2 opacity-20" />
+                    <p className="text-[10px] font-bold uppercase tracking-widest">Vazio</p>
+                  </div>
+                )}
+
+                {(groupBy === 'status' && colId === 'Planejamento') && (
+                  <button 
+                    onClick={onCreateProject}
+                    className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:border-indigo-300 hover:text-indigo-400 transition-all flex items-center justify-center gap-2 group"
+                  >
+                    <Plus size={18} className="group-hover:scale-110 transition-transform" />
+                    <span className="text-sm font-medium">Adicionar Projeto</span>
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </motion.div>
   );
 }
 
-function ProjectCard({ project, onClick }: { project: Project, onClick: () => void, key?: string }) {
+function ProjectCard({ project, users, onClick, onDelete }: { project: Project, users: User[], onClick: () => void, onDelete: () => void, key?: string }) {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const assignedUser = users.find(u => u.id === project.assignedTo);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   const statusColors = {
     'Planejamento': 'bg-amber-100 text-amber-700 border-amber-200',
     'Em Execução': 'bg-blue-100 text-blue-700 border-blue-200',
@@ -501,22 +736,67 @@ function ProjectCard({ project, onClick }: { project: Project, onClick: () => vo
     'Concluído': 'bg-emerald-100 text-emerald-700 border-emerald-200',
   };
 
+  const priorityColors = {
+    'Baixa': 'bg-slate-100 text-slate-600',
+    'Média': 'bg-indigo-100 text-indigo-600',
+    'Alta': 'bg-rose-100 text-rose-600',
+  };
+
   return (
     <motion.div 
       whileHover={{ y: -4, shadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)' }}
+      className="bg-white p-5 rounded-xl border border-slate-200 cursor-pointer transition-all relative group"
       onClick={onClick}
-      className="bg-white p-5 rounded-xl border border-slate-200 cursor-pointer transition-all"
     >
       <div className="flex justify-between items-start mb-4">
-        <span className={cn(
-          "text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-md border",
-          statusColors[project.status]
-        )}>
-          {project.status}
-        </span>
-        <button className="text-slate-300 hover:text-slate-500">
-          <MoreVertical size={16} />
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <span className={cn(
+            "text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-md border",
+            statusColors[project.status]
+          )}>
+            {project.status}
+          </span>
+          <span className={cn(
+            "text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-md",
+            priorityColors[project.priority || 'Baixa']
+          )}>
+            {project.priority || 'Baixa'}
+          </span>
+        </div>
+        <div className="relative" ref={menuRef}>
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsMenuOpen(!isMenuOpen);
+            }}
+            className="text-slate-300 hover:text-slate-500 p-1 rounded-lg hover:bg-slate-50 transition-colors"
+          >
+            <MoreVertical size={16} />
+          </button>
+          
+          <AnimatePresence>
+            {isMenuOpen && (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                className="absolute right-0 mt-2 w-40 bg-white rounded-xl shadow-xl border border-slate-100 z-10 overflow-hidden"
+              >
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete();
+                    setIsMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-4 py-3 text-sm text-rose-600 hover:bg-rose-50 transition-colors"
+                >
+                  <Trash2 size={14} />
+                  <span>Excluir Projeto</span>
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       <h4 className="font-bold text-slate-800 leading-tight mb-4 group-hover:text-indigo-600 transition-colors">
@@ -524,15 +804,36 @@ function ProjectCard({ project, onClick }: { project: Project, onClick: () => vo
       </h4>
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between text-xs text-slate-500">
+        <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-500">
           <div className="flex items-center gap-1.5">
-            <Calendar size={14} />
-            <span>{isValidDate(project.createdAt) ? format(new Date(project.createdAt), 'dd MMM yyyy', { locale: ptBR }) : 'Data Inválida'}</span>
+            <Calendar size={12} className="text-indigo-500" />
+            <div className="flex flex-col">
+              <span className="text-[8px] uppercase font-bold text-slate-400">Início</span>
+              <span>{isValidDate(project.scope.startDate) ? format(new Date(project.scope.startDate), 'dd/MM/yyyy') : 'N/A'}</span>
+            </div>
           </div>
+          <div className="flex items-center gap-1.5">
+            <CheckCircle2 size={12} className="text-emerald-500" />
+            <div className="flex flex-col">
+              <span className="text-[8px] uppercase font-bold text-slate-400">Previsão</span>
+              <span>{isValidDate(project.scope.forecastCompletion) ? format(new Date(project.scope.forecastCompletion), 'dd/MM/yyyy') : 'N/A'}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between text-xs text-slate-500">
           <div className="flex items-center gap-1.5">
             <Clock size={14} />
             <span>{project.progress}%</span>
           </div>
+          {assignedUser && (
+            <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+              <div className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[8px] font-bold uppercase">
+                {assignedUser.name.split(' ').map(n => n[0]).join('')}
+              </div>
+              <span className="text-[9px] font-medium truncate max-w-[60px]">{assignedUser.name.split(' ')[0]}</span>
+            </div>
+          )}
         </div>
 
         <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
@@ -606,6 +907,21 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
                 <Clock size={14} />
                 Iniciado em {isValidDate(project.createdAt) ? format(new Date(project.createdAt), 'dd/MM/yyyy') : 'Data Inválida'}
               </span>
+              <span className="w-1 h-1 bg-slate-300 rounded-full" />
+              <select 
+                value={project.priority || 'Média'}
+                onChange={(e) => setProjects({ ...project, priority: e.target.value as ProjectPriority })}
+                className={cn(
+                  "text-[10px] uppercase font-bold px-2 py-0.5 rounded-md border outline-none transition-all",
+                  project.priority === 'Alta' ? "bg-rose-50 text-rose-600 border-rose-100" :
+                  project.priority === 'Média' ? "bg-indigo-50 text-indigo-600 border-indigo-100" :
+                  "bg-slate-50 text-slate-600 border-slate-100"
+                )}
+              >
+                <option value="Baixa">Baixa</option>
+                <option value="Média">Média</option>
+                <option value="Alta">Alta</option>
+              </select>
             </div>
           </div>
         </div>
@@ -932,10 +1248,319 @@ function FormField({ label, value, type = 'text', readOnly = false, onChange }: 
   );
 }
 
-import MappingTab from './components/MappingTab';
-import PDCAEditor from './components/PDCAEditor';
+// --- MODALS ---
 
-// --- PDCA TAB ---
+function CreateProjectModal({ isOpen, onClose, onCreate, users }: { 
+  isOpen: boolean, 
+  onClose: () => void, 
+  onCreate: (data: { name: string, priority: ProjectPriority, assignedTo: string }) => void,
+  users: User[]
+}) {
+  const [name, setName] = useState('');
+  const [priority, setPriority] = useState<ProjectPriority>('Média');
+  const [assignedTo, setAssignedTo] = useState('');
+
+  useEffect(() => {
+    if (isOpen && users.length > 0 && !assignedTo) {
+      setAssignedTo(users[0].id);
+    }
+  }, [isOpen, users, assignedTo]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden"
+      >
+        <div className="p-8 space-y-6">
+          <div className="flex justify-between items-center">
+            <h3 className="text-2xl font-bold text-slate-900">Novo Projeto</h3>
+            <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-400">
+              <Plus size={24} className="rotate-45" />
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-700 ml-1">Título do Projeto</label>
+              <input 
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Ex: Melhoria no Processo de Vendas"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-700 ml-1">Prioridade</label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['Baixa', 'Média', 'Alta'] as ProjectPriority[]).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setPriority(p)}
+                    className={cn(
+                      "py-2 rounded-xl text-xs font-bold border transition-all",
+                      priority === p 
+                        ? "bg-indigo-600 border-indigo-600 text-white shadow-md shadow-indigo-100" 
+                        : "bg-white border-slate-200 text-slate-500 hover:border-indigo-200"
+                    )}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-700 ml-1">Designar para</label>
+              <select 
+                value={assignedTo}
+                onChange={(e) => setAssignedTo(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+              >
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <button 
+            disabled={!name.trim()}
+            onClick={() => onCreate({ name, priority, assignedTo })}
+            className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Criar Projeto
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
+// --- SETTINGS VIEW ---
+
+function SettingsView({ users }: { users: User[], key?: string }) {
+  const [activeSubTab, setActiveSubTab] = useState<'perfil' | 'cadastros'>('cadastros');
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="space-y-8 max-w-5xl mx-auto"
+    >
+      <div>
+        <h2 className="text-3xl font-bold text-slate-900">Configurações</h2>
+        <p className="text-slate-500 mt-1">Gerencie as preferências do sistema e cadastros.</p>
+      </div>
+
+      <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit">
+        <button 
+          onClick={() => setActiveSubTab('cadastros')}
+          className={cn(
+            "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2",
+            activeSubTab === 'cadastros' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
+          )}
+        >
+          <Users size={18} />
+          <span>Cadastros</span>
+        </button>
+        <button 
+          onClick={() => setActiveSubTab('perfil')}
+          className={cn(
+            "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2",
+            activeSubTab === 'perfil' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
+          )}
+        >
+          <FileText size={18} />
+          <span>Meu Perfil</span>
+        </button>
+      </div>
+
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[500px]">
+        {activeSubTab === 'cadastros' && <UserRegistrationTab users={users} />}
+        {activeSubTab === 'perfil' && (
+          <div className="p-12 text-center space-y-4">
+            <div className="w-20 h-20 bg-slate-100 rounded-full mx-auto flex items-center justify-center text-slate-400">
+              <Users size={40} />
+            </div>
+            <p className="text-slate-500">Configurações de perfil em desenvolvimento.</p>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function UserRegistrationTab({ users }: { users: User[] }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [sector, setSector] = useState('');
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (editingUser) {
+      setName(editingUser.name);
+      setEmail(editingUser.email || '');
+      setSector(editingUser.sector || '');
+    } else {
+      setName('');
+      setEmail('');
+      setSector('');
+    }
+  }, [editingUser]);
+
+  const handleSaveUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !email || !sector) return;
+    
+    setIsSubmitting(true);
+    try {
+      const userId = editingUser ? editingUser.id : uuidv4();
+      const userData: User = {
+        id: userId,
+        name,
+        email,
+        sector
+      };
+
+      await setDoc(doc(db, 'users', userId), userData, { merge: true });
+      
+      setName('');
+      setEmail('');
+      setSector('');
+      setEditingUser(null);
+      alert(editingUser ? 'Usuário atualizado com sucesso!' : 'Usuário cadastrado com sucesso!');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'users');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleDeleteUser = async (id: string) => {
+    if (!window.confirm('Tem certeza que deseja excluir este usuário?')) return;
+    try {
+      await deleteDoc(doc(db, 'users', id));
+      alert('Usuário excluído com sucesso!');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `users/${id}`);
+    }
+  };
+
+  return (
+    <div className="p-8 lg:p-12 space-y-12">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+        <div className="space-y-8">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900">
+              {editingUser ? 'Editar Usuário' : 'Cadastrar Novo Usuário'}
+            </h3>
+            <p className="text-slate-500 text-sm mt-1">
+              {editingUser ? 'Atualize as informações do colaborador.' : 'Adicione colaboradores que terão acesso ao sistema.'}
+            </p>
+          </div>
+
+          <form onSubmit={handleSaveUser} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-700 ml-1">Nome do Colaborador</label>
+              <input 
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Nome completo"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-700 ml-1">E-mail</label>
+              <input 
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="email@empresa.com"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-700 ml-1">Setor</label>
+              <input 
+                value={sector}
+                onChange={(e) => setSector(e.target.value)}
+                placeholder="Ex: Qualidade, Produção, RH"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button 
+                type="submit"
+                disabled={isSubmitting || !name || !email || !sector}
+                className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50"
+              >
+                {isSubmitting ? 'Salvando...' : editingUser ? 'Salvar Alterações' : 'Cadastrar Usuário'}
+              </button>
+              {editingUser && (
+                <button 
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="px-6 bg-slate-100 text-slate-600 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all"
+                >
+                  Cancelar
+                </button>
+              )}
+            </div>
+          </form>
+        </div>
+
+        <div className="space-y-8">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900">Usuários Cadastrados</h3>
+            <p className="text-slate-500 text-sm mt-1">Lista de colaboradores com acesso.</p>
+          </div>
+
+          <div className="space-y-3">
+            {users.length === 0 ? (
+              <p className="text-slate-400 text-sm italic">Nenhum usuário cadastrado.</p>
+            ) : (
+              users.map(u => (
+                <div key={u.id} className="flex items-center gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50/50 group">
+                  <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">
+                    {u.name.split(' ').map(n => n[0]).join('')}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-800 truncate">{u.name}</p>
+                    <p className="text-[10px] text-slate-500 truncate uppercase tracking-wider font-medium">{u.sector || 'Setor não informado'}</p>
+                  </div>
+                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => setEditingUser(u)}
+                      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                      title="Editar"
+                    >
+                      <Edit size={16} />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteUser(u.id)}
+                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                      title="Excluir"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function PDCATab({ project, setProjects }: { project: Project, setProjects: (p: Project) => void }) {
   const [isEditorOpen, setIsEditorOpen] = useState(false);

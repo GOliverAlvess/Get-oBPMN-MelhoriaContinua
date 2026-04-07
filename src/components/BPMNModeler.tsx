@@ -72,16 +72,30 @@ export default function BPMNModeler({ project, onUpdateProject }: BPMNModelerPro
 
     modelerRef.current = modeler;
 
+    let isMounted = true;
     const xml = project.mapping.xml || INITIAL_XML;
-    modeler.importXML(xml).then(() => {
-      isLoadedRef.current = true;
-      const canvas = modeler.get('canvas') as any;
-      if (canvas) {
-        canvas.zoom('fit-viewport');
-      }
-    }).catch(err => {
-      console.error('Error importing XML', err);
-    });
+    
+    // Small delay to ensure container is fully ready in the DOM
+    setTimeout(() => {
+      if (!isMounted || !modeler) return;
+
+      modeler.importXML(xml).then(() => {
+        if (!isMounted) return;
+        isLoadedRef.current = true;
+        const canvas = modeler.get('canvas') as any;
+        if (canvas) {
+          try {
+            canvas.zoom('fit-viewport');
+          } catch (e) {
+            console.warn('Could not zoom to fit-viewport', e);
+          }
+        }
+      }).catch(err => {
+        if (isMounted) {
+          console.error('Error importing XML', err);
+        }
+      });
+    }, 100);
 
     // Event Listeners
     modeler.on('selection.changed', (e: any) => {
@@ -130,6 +144,7 @@ export default function BPMNModeler({ project, onUpdateProject }: BPMNModelerPro
     });
 
     return () => {
+      isMounted = false;
       modeler.destroy();
     };
   }, []);

@@ -137,6 +137,8 @@ export interface Project {
   assignedTo: string; // User ID
   scope: ProjectScope;
   mapping: {
+    xml?: string;
+    customData?: Record<string, Partial<BPMNTaskData>>;
     nodes: any[];
     edges: any[];
     orientation: 'horizontal' | 'vertical';

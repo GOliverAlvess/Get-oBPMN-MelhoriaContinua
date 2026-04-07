@@ -305,6 +305,8 @@ export default function App() {
       mapping: { 
         nodes: [], 
         edges: [], 
+        xml: '',
+        customData: {},
         orientation: 'horizontal', 
         lastEdited: new Date().toISOString(),
         savedColors: []

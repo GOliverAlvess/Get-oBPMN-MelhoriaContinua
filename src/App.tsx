@@ -53,6 +53,8 @@ import { Project, ProjectStatus, ProjectPriority, User } from './types';
 import { cn } from './lib/utils';
 import MappingTab from './components/MappingTab';
 import PDCAEditor from './components/PDCAEditor';
+import DashboardView from './components/DashboardView';
+import { calculateProjectProgress } from './lib/projectUtils';
 
 // Error Boundary Component
 interface ErrorBoundaryProps {
@@ -125,7 +127,7 @@ export default function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'scope' | 'mapping' | 'pdca'>('scope');
-  const [activeView, setActiveView] = useState<'kanban' | 'settings'>('kanban');
+  const [activeView, setActiveView] = useState<'kanban' | 'settings' | 'dashboard'>('dashboard');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Auth State Listener
@@ -395,6 +397,19 @@ export default function App() {
           <nav className="flex-1 p-4 space-y-2">
             <button 
               onClick={() => {
+                setActiveView('dashboard');
+                setSelectedProjectId(null);
+              }}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
+                activeView === 'dashboard' ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              <LayoutDashboard size={20} />
+              <span>Dashboard</span>
+            </button>
+            <button 
+              onClick={() => {
                 setActiveView('kanban');
                 setSelectedProjectId(null);
               }}
@@ -403,8 +418,8 @@ export default function App() {
                 activeView === 'kanban' ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-500 hover:bg-slate-50"
               )}
             >
-              <LayoutDashboard size={20} />
-              <span>Projetos (Kanban)</span>
+              <GitBranch size={20} />
+              <span>Projetos</span>
             </button>
             <button 
               onClick={() => setActiveView('settings')}
@@ -444,6 +459,8 @@ export default function App() {
           <AnimatePresence mode="wait">
             {activeView === 'settings' ? (
               <SettingsView key="settings" users={users} />
+            ) : activeView === 'dashboard' ? (
+              <DashboardView key="dashboard" projects={projects} users={users} onProjectClick={handleProjectClick} />
             ) : !selectedProjectId ? (
               <KanbanView 
                 key="kanban"
@@ -528,7 +545,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
     );
   };
 
-  const filteredProjects = projects.filter(p => 
+  const filteredProjects = projects.map(p => ({ ...p, progress: calculateProjectProgress(p) })).filter(p => 
     visibleStatuses.includes(p.status) && 
     visibleCollaborators.includes(p.assignedTo) &&
     (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
@@ -550,7 +567,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
     >
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900">Gestão de Projetos</h2>
+          <h2 className="text-3xl font-bold text-slate-900">Projetos</h2>
           <p className="text-slate-500 mt-1">
             Visualizando por {groupBy === 'status' ? 'status' : 'colaborador'}.
           </p>
@@ -1013,7 +1030,20 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-6">
+          <div className="hidden md:flex flex-col items-end gap-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Progresso</span>
+              <span className="text-lg font-black text-indigo-600">{calculateProjectProgress(project)}%</span>
+            </div>
+            <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
+              <motion.div 
+                initial={{ width: 0 }}
+                animate={{ width: `${calculateProjectProgress(project)}%` }}
+                className="h-full bg-indigo-600 rounded-full"
+              />
+            </div>
+          </div>
           <button 
             onClick={() => onSave(project)}
             disabled={isSaving}

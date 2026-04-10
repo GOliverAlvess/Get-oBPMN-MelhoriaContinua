@@ -110,6 +110,7 @@ export interface ActionPlanItem {
   where: string;
   when: string;
   who: string;
+  sector?: string; // New field
   how: string;
   howMuch: string;
   
@@ -126,9 +127,10 @@ export interface ActionPlanItem {
   monitoringTool?: string; // New field
   worked?: 'Sim' | 'Não' | 'Parcial';
   evidence?: string;
+  gainImpact?: number; // New field
   
   // ACT
-  finalProblemStatus?: 'Resolvido' | 'Requer nova análise';
+  finalProblemStatus?: 'Resolvido' | 'Não resolvido';
   finalAction?: 'Padronizar processo' | 'Fazer nova análise';
   standardizationModels?: ('POP' | 'ITO' | 'Painel de controle')[];
 }

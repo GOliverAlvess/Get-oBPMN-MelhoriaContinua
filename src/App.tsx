@@ -210,6 +210,14 @@ export default function App() {
   const syncProjectToFirestore = async (projectToSync: Project) => {
     // Update local state immediately for UI responsiveness
     setProjects(prev => prev.map(p => p.id === projectToSync.id ? projectToSync : p));
+    
+    // Persist to Firestore
+    try {
+      const projectRef = doc(db, 'projects', projectToSync.id);
+      await setDoc(projectRef, projectToSync);
+    } catch (error) {
+      console.error("Auto-save failed:", error);
+    }
   };
 
   const handleManualSave = async (projectToSave: Project) => {

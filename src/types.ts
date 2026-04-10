@@ -85,6 +85,23 @@ export interface RootCauseEntry {
   text: string;
 }
 
+export interface IshikawaCategory {
+  id: string;
+  name: 'Método' | 'Máquina' | 'Mão de obra' | 'Material' | 'Meio ambiente' | 'Medida';
+  description: string;
+  entries: RootCauseEntry[];
+}
+
+export interface ExecutionLog {
+  id: string;
+  timestamp: string;
+  status: 'Pendente' | 'Em andamento' | 'Concluído';
+  responsible: string;
+  sector?: string;
+  observation: string;
+  type: 'update' | 'completion' | 'start';
+}
+
 export interface ActionPlanItem {
   id: string;
   // PLAN (5W2H)
@@ -101,10 +118,12 @@ export interface ActionPlanItem {
   startDate?: string;
   endDate?: string;
   observations?: string;
+  executionLogs: ExecutionLog[];
   
   // CHECK
   monitoringMode?: 'Dias' | 'Semanas' | 'Meses';
   monitoringPeriod?: number;
+  monitoringTool?: string; // New field
   worked?: 'Sim' | 'Não' | 'Parcial';
   evidence?: string;
   
@@ -126,8 +145,11 @@ export interface PDCACycle {
   plan: {
     problemDescription: string;
     rootCauseAnalysis: {
-      type: '5whys' | 'list';
+      type: '5whys' | 'list' | 'ishikawa';
       entries: RootCauseEntry[];
+      ishikawa?: IshikawaCategory[];
+      priorityCauses?: string[];
+      identifiedRootCause?: string;
     };
     impact: {
       description: string;

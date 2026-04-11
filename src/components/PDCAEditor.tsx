@@ -66,11 +66,19 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
       }));
   }, [project.mapping.customData]);
 
+  const relatedCycles = useMemo(() => {
+    if (!activeCycle) return [];
+    return project.pdcaCycles
+      .filter(c => c.taskId === activeCycle.taskId)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [project.pdcaCycles, activeCycle?.taskId]);
+
   const createNewCycle = (taskId: string, taskLabel: string) => {
+    const cycleCount = project.pdcaCycles.filter(c => c.taskId === taskId).length;
     const newCycle: PDCACycle = {
       id: uuidv4(),
       taskId,
-      title: `Ciclo PDCA - ${taskLabel}`,
+      title: cycleCount > 0 ? `Ciclo PDCA ${cycleCount + 1} - ${taskLabel}` : `Ciclo PDCA - ${taskLabel}`,
       createdAt: new Date().toISOString(),
       status: 'Em planejamento',
       plan: {
@@ -113,9 +121,10 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
   };
 
   const exportToCSV = () => {
-    if (!activeCycle) return;
+    if (relatedCycles.length === 0) return;
     
     const headers = [
+      'Ciclo',
       'ID do Processo',
       'Nome do Problema',
       'Descricao do Problema',
@@ -142,32 +151,35 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
 
     const csvRows = [headers.join(',')];
 
-    activeCycle.plan.actionPlan.forEach((item) => {
-      const row = [
-        activeCycle.id,
-        `"${activeCycle.title.replace(/"/g, '""')}"`,
-        `"${activeCycle.plan.problemDescription.replace(/"/g, '""')}"`,
-        `"${(activeCycle.plan.rootCauseAnalysis.identifiedRootCause || '').replace(/"/g, '""')}"`,
-        `"${activeCycle.plan.impact.description.replace(/"/g, '""')}"`,
-        activeCycle.plan.impact.value,
-        activeCycle.plan.impact.goal,
-        `"${item.what.replace(/"/g, '""')}"`,
-        `"${item.who.replace(/"/g, '""')}"`,
-        `"${(item.sector || '').replace(/"/g, '""')}"`,
-        item.status,
-        item.startDate ? format(new Date(item.startDate), 'dd/MM/yyyy') : 'N/A',
-        item.endDate ? format(new Date(item.endDate), 'dd/MM/yyyy') : 'N/A',
-        item.monitoringMode,
-        item.monitoringPeriod,
-        `"${(item.monitoringTool || '').replace(/"/g, '""')}"`,
-        item.worked,
-        `"${(item.evidence || '').replace(/"/g, '""')}"`,
-        item.gainImpact || 0,
-        item.finalProblemStatus,
-        item.finalAction,
-        `"${(item.standardizationModels || []).join('; ')}"`
-      ];
-      csvRows.push(row.join(','));
+    relatedCycles.forEach((cycle, cycleIdx) => {
+      cycle.plan.actionPlan.forEach((item) => {
+        const row = [
+          cycleIdx + 1,
+          cycle.id,
+          `"${cycle.title.replace(/"/g, '""')}"`,
+          `"${cycle.plan.problemDescription.replace(/"/g, '""')}"`,
+          `"${(cycle.plan.rootCauseAnalysis.identifiedRootCause || '').replace(/"/g, '""')}"`,
+          `"${cycle.plan.impact.description.replace(/"/g, '""')}"`,
+          cycle.plan.impact.value,
+          cycle.plan.impact.goal,
+          `"${item.what.replace(/"/g, '""')}"`,
+          `"${item.who.replace(/"/g, '""')}"`,
+          `"${(item.sector || '').replace(/"/g, '""')}"`,
+          item.status,
+          item.startDate ? format(new Date(item.startDate), 'dd/MM/yyyy') : 'N/A',
+          item.endDate ? format(new Date(item.endDate), 'dd/MM/yyyy') : 'N/A',
+          item.monitoringMode,
+          item.monitoringPeriod,
+          `"${(item.monitoringTool || '').replace(/"/g, '""')}"`,
+          item.worked,
+          `"${(item.evidence || '').replace(/"/g, '""')}"`,
+          item.gainImpact || 0,
+          item.finalProblemStatus,
+          item.finalAction,
+          `"${(item.standardizationModels || []).join('; ')}"`
+        ];
+        csvRows.push(row.join(','));
+      });
     });
 
     const csvString = csvRows.join('\n');
@@ -175,7 +187,7 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `pdca_bi_export_${activeCycle.id}.csv`);
+    link.setAttribute('download', `pdca_historico_export_${activeCycle?.taskId}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1212,6 +1224,20 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
                                       </div>
                                     </div>
                                   )}
+
+                                  {item.finalProblemStatus === 'Não resolvido' && item.finalAction === 'Fazer nova análise' && (
+                                    <div className="pt-4">
+                                      <button 
+                                        onClick={() => {
+                                          createNewCycle(activeCycle.taskId, activeCycle.plan.problemDescription);
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                                      >
+                                        <RefreshCw size={16} />
+                                        Refazer PDCA
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                             </div>
@@ -1253,125 +1279,141 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
                                   </div>
                     </div>
 
-                    <div className="space-y-8 pb-12 print-container">
-                      {/* PLAN */}
-                      <ReportSection title="PLAN (Planejar)" color="indigo">
-                        <ReportField label="Descrição do Problema" value={activeCycle.plan.problemDescription} />
-                        <ReportField label="Causa Raiz Identificada" value={activeCycle.plan.rootCauseAnalysis.identifiedRootCause || 'Não informada'} />
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <ReportField label="Impacto: Descrição" value={activeCycle.plan.impact.description} />
-                          <ReportField label="Impacto: Valor Atual" value={`R$ ${activeCycle.plan.impact.value}`} />
-                          <ReportField label="Impacto: Meta (%)" value={`${activeCycle.plan.impact.goal}%`} />
-                        </div>
-                        <ReportField label="Método Utilizado" value={activeCycle.plan.rootCauseAnalysis.type.toUpperCase()} />
-                        
-                        <div className="mt-6 pt-6 border-t border-slate-100">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Plano de Ação (5W2H)</p>
-                          <div className="space-y-4">
-                            {activeCycle.plan.actionPlan.map((item, idx) => (
-                              <div key={item.id} className="grid grid-cols-2 md:grid-cols-6 gap-4 text-[10px] p-3 bg-slate-50 rounded-xl">
-                                <div><p className="font-black text-slate-400 uppercase">O que</p><p className="font-bold text-slate-700">{item.what}</p></div>
-                                <div><p className="font-black text-slate-400 uppercase">Por que</p><p className="font-bold text-slate-700">{item.why}</p></div>
-                                <div><p className="font-black text-slate-400 uppercase">Onde</p><p className="font-bold text-slate-700">{item.where}</p></div>
-                                <div><p className="font-black text-slate-400 uppercase">Quando</p><p className="font-bold text-slate-700">{item.when}</p></div>
-                                <div><p className="font-black text-slate-400 uppercase">Quem</p><p className="font-bold text-slate-700">{item.who}</p></div>
-                                <div><p className="font-black text-slate-400 uppercase">Como</p><p className="font-bold text-slate-700">{item.how}</p></div>
-                              </div>
-                            ))}
+                    <div className="space-y-12 pb-12 print-container">
+                      {relatedCycles.map((cycle, cycleIdx) => (
+                        <div key={cycle.id} className="space-y-8 border-b-4 border-slate-100 pb-12 last:border-0 last:pb-0">
+                          <div className="flex items-center gap-4 bg-slate-900 p-6 rounded-[2rem] text-white shadow-xl">
+                            <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center font-black text-2xl shadow-lg shadow-indigo-900/20">
+                              {cycleIdx + 1}
+                            </div>
+                            <div>
+                              <h5 className="text-xl font-black tracking-tight uppercase">Ciclo {cycleIdx + 1}</h5>
+                              <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest">
+                                {cycleIdx === 0 ? 'Primeira Tentativa' : 'Reanálise de Melhoria'} • Iniciado em {format(new Date(cycle.createdAt), 'dd/MM/yyyy')}
+                              </p>
+                            </div>
                           </div>
-                        </div>
-                      </ReportSection>
 
-                      {/* DO */}
-                      <ReportSection title="DO (Executar)" color="amber">
-                        <div className="space-y-4">
-                          {activeCycle.plan.actionPlan.map((item, idx) => (
-                            <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-                              <div className="flex justify-between items-start">
-                                <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
-                                <StatusBadge status={item.status as any} />
-                              </div>
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[10px]">
-                                <div>
-                                  <p className="font-black text-slate-400 uppercase">Responsável</p>
-                                  <p className="font-bold text-slate-600">{item.who}</p>
-                                </div>
-                                <div>
-                                  <p className="font-black text-slate-400 uppercase">Setor</p>
-                                  <p className="font-bold text-slate-600">{item.sector || 'N/A'}</p>
-                                </div>
-                                <div>
-                                  <p className="font-black text-slate-400 uppercase">Início</p>
-                                  <p className="font-bold text-slate-600">{item.startDate ? format(new Date(item.startDate), 'dd/MM/yyyy') : 'N/A'}</p>
-                                </div>
-                                <div>
-                                  <p className="font-black text-slate-400 uppercase">Conclusão</p>
-                                  <p className="font-bold text-slate-600">{item.endDate ? format(new Date(item.endDate), 'dd/MM/yyyy') : 'N/A'}</p>
-                                </div>
-                              </div>
-                              {item.executionLogs.length > 0 && (
-                                <div className="pt-2 border-t border-slate-200">
-                                  <p className="font-black text-slate-400 uppercase text-[8px] mb-1">Última Atualização</p>
-                                  <p className="text-[10px] text-slate-500 italic">"{item.executionLogs[item.executionLogs.length - 1].observation}"</p>
-                                </div>
-                              )}
+                          {/* PLAN */}
+                          <ReportSection title="PLAN (Planejar)" color="indigo">
+                            <ReportField label="Descrição do Problema" value={cycle.plan.problemDescription} />
+                            <ReportField label="Causa Raiz Identificada" value={cycle.plan.rootCauseAnalysis.identifiedRootCause || 'Não informada'} />
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <ReportField label="Impacto: Descrição" value={cycle.plan.impact.description} />
+                              <ReportField label="Impacto: Valor Atual" value={`R$ ${cycle.plan.impact.value}`} />
+                              <ReportField label="Impacto: Meta (%)" value={`${cycle.plan.impact.goal}%`} />
                             </div>
-                          ))}
-                        </div>
-                      </ReportSection>
-
-                      {/* CHECK */}
-                      <ReportSection title="CHECK (Verificar)" color="emerald">
-                        <div className="space-y-4">
-                          {activeCycle.plan.actionPlan.map((item, idx) => (
-                            <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-                              <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
-                              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-[10px]">
-                                <div>
-                                  <p className="font-black text-slate-400 uppercase">Acompanhamento</p>
-                                  <p className="font-bold text-slate-600">{item.monitoringPeriod} {item.monitoringMode} via {item.monitoringTool}</p>
-                                </div>
-                                <div>
-                                  <p className="font-black text-slate-400 uppercase">Funcionou?</p>
-                                  <p className={cn("font-bold", item.worked === 'Sim' ? "text-emerald-600" : "text-rose-600")}>{item.worked}</p>
-                                </div>
-                                <div>
-                                  <p className="font-black text-slate-400 uppercase">Impacto de Ganho</p>
-                                  <p className="font-bold text-emerald-600">R$ {item.gainImpact || 0}</p>
-                                </div>
-                              </div>
-                              <ReportField label="Evidências" value={item.evidence || 'N/A'} />
-                            </div>
-                          ))}
-                        </div>
-                      </ReportSection>
-
-                      {/* ACT */}
-                      <ReportSection title="ACT (Agir)" color="rose">
-                        <div className="space-y-4">
-                          {activeCycle.plan.actionPlan.map((item, idx) => (
-                            <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-                              <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
-                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[10px]">
-                                <div>
-                                  <p className="font-black text-slate-400 uppercase">Status Final</p>
-                                  <p className={cn("font-bold", item.finalProblemStatus === 'Resolvido' ? "text-emerald-600" : "text-rose-600")}>{item.finalProblemStatus}</p>
-                                </div>
-                                <div>
-                                  <p className="font-black text-slate-400 uppercase">Ação Final</p>
-                                  <p className="font-bold text-slate-600">{item.finalAction}</p>
-                                </div>
-                                {item.finalAction === 'Padronizar processo' && (
-                                  <div>
-                                    <p className="font-black text-slate-400 uppercase">Padronização</p>
-                                    <p className="font-bold text-indigo-600">{(item.standardizationModels || []).join(', ')}</p>
+                            <ReportField label="Método Utilizado" value={cycle.plan.rootCauseAnalysis.type.toUpperCase()} />
+                            
+                            <div className="mt-6 pt-6 border-t border-slate-100">
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Plano de Ação (5W2H)</p>
+                              <div className="space-y-4">
+                                {cycle.plan.actionPlan.map((item) => (
+                                  <div key={item.id} className="grid grid-cols-2 md:grid-cols-6 gap-4 text-[10px] p-3 bg-slate-50 rounded-xl">
+                                    <div><p className="font-black text-slate-400 uppercase">O que</p><p className="font-bold text-slate-700">{item.what}</p></div>
+                                    <div><p className="font-black text-slate-400 uppercase">Por que</p><p className="font-bold text-slate-700">{item.why}</p></div>
+                                    <div><p className="font-black text-slate-400 uppercase">Onde</p><p className="font-bold text-slate-700">{item.where}</p></div>
+                                    <div><p className="font-black text-slate-400 uppercase">Quando</p><p className="font-bold text-slate-700">{item.when}</p></div>
+                                    <div><p className="font-black text-slate-400 uppercase">Quem</p><p className="font-bold text-slate-700">{item.who}</p></div>
+                                    <div><p className="font-black text-slate-400 uppercase">Como</p><p className="font-bold text-slate-700">{item.how}</p></div>
                                   </div>
-                                )}
+                                ))}
                               </div>
                             </div>
-                          ))}
+                          </ReportSection>
+
+                          {/* DO */}
+                          <ReportSection title="DO (Executar)" color="amber">
+                            <div className="space-y-4">
+                              {cycle.plan.actionPlan.map((item, idx) => (
+                                <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                                  <div className="flex justify-between items-start">
+                                    <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
+                                    <StatusBadge status={item.status as any} />
+                                  </div>
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[10px]">
+                                    <div>
+                                      <p className="font-black text-slate-400 uppercase">Responsável</p>
+                                      <p className="font-bold text-slate-600">{item.who}</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-black text-slate-400 uppercase">Setor</p>
+                                      <p className="font-bold text-slate-600">{item.sector || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-black text-slate-400 uppercase">Início</p>
+                                      <p className="font-bold text-slate-600">{item.startDate ? format(new Date(item.startDate), 'dd/MM/yyyy') : 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-black text-slate-400 uppercase">Conclusão</p>
+                                      <p className="font-bold text-slate-600">{item.endDate ? format(new Date(item.endDate), 'dd/MM/yyyy') : 'N/A'}</p>
+                                    </div>
+                                  </div>
+                                  {item.executionLogs.length > 0 && (
+                                    <div className="pt-2 border-t border-slate-200">
+                                      <p className="font-black text-slate-400 uppercase text-[8px] mb-1">Última Atualização</p>
+                                      <p className="text-[10px] text-slate-500 italic">"{item.executionLogs[item.executionLogs.length - 1].observation}"</p>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </ReportSection>
+
+                          {/* CHECK */}
+                          <ReportSection title="CHECK (Verificar)" color="emerald">
+                            <div className="space-y-4">
+                              {cycle.plan.actionPlan.map((item, idx) => (
+                                <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                                  <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
+                                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-[10px]">
+                                    <div>
+                                      <p className="font-black text-slate-400 uppercase">Acompanhamento</p>
+                                      <p className="font-bold text-slate-600">{item.monitoringPeriod} {item.monitoringMode} via {item.monitoringTool}</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-black text-slate-400 uppercase">Funcionou?</p>
+                                      <p className={cn("font-bold", item.worked === 'Sim' ? "text-emerald-600" : "text-rose-600")}>{item.worked}</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-black text-slate-400 uppercase">Impacto de Ganho</p>
+                                      <p className="font-bold text-emerald-600">R$ {item.gainImpact || 0}</p>
+                                    </div>
+                                  </div>
+                                  <ReportField label="Evidências" value={item.evidence || 'N/A'} />
+                                </div>
+                              ))}
+                            </div>
+                          </ReportSection>
+
+                          {/* ACT */}
+                          <ReportSection title="ACT (Agir)" color="rose">
+                            <div className="space-y-4">
+                              {cycle.plan.actionPlan.map((item, idx) => (
+                                <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                                  <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[10px]">
+                                    <div>
+                                      <p className="font-black text-slate-400 uppercase">Status Final</p>
+                                      <p className={cn("font-bold", item.finalProblemStatus === 'Resolvido' ? "text-emerald-600" : "text-rose-600")}>{item.finalProblemStatus}</p>
+                                    </div>
+                                    <div>
+                                      <p className="font-black text-slate-400 uppercase">Ação Final</p>
+                                      <p className="font-bold text-slate-600">{item.finalAction}</p>
+                                    </div>
+                                    {item.finalAction === 'Padronizar processo' && (
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">Padronização</p>
+                                        <p className="font-bold text-indigo-600">{(item.standardizationModels || []).join(', ')}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </ReportSection>
                         </div>
-                      </ReportSection>
+                      ))}
                     </div>
                   </motion.div>
                 )}

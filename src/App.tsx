@@ -129,6 +129,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'scope' | 'mapping' | 'pdca'>('scope');
   const [activeView, setActiveView] = useState<'kanban' | 'settings' | 'dashboard'>('dashboard');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [globalConfig, setGlobalConfig] = useState<{ sectors: string[], tools: string[] }>({ sectors: [], tools: [] });
 
   // Auth State Listener
   useEffect(() => {
@@ -155,9 +156,17 @@ export default function App() {
       setProjects(projectsData);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'projects'));
 
+    // Listen for Global Config
+    const configUnsubscribe = onSnapshot(doc(db, 'config', 'global'), (snapshot) => {
+      if (snapshot.exists()) {
+        setGlobalConfig(snapshot.data() as any);
+      }
+    }, (error) => handleFirestoreError(error, OperationType.GET, 'config/global'));
+
     return () => {
       usersUnsubscribe();
       projectsUnsubscribe();
+      configUnsubscribe();
     };
   }, [user]);
 
@@ -458,7 +467,7 @@ export default function App() {
         )}>
           <AnimatePresence mode="wait">
             {activeView === 'settings' ? (
-              <SettingsView key="settings" users={users} />
+              <SettingsView key="settings" users={users} globalConfig={globalConfig} />
             ) : activeView === 'dashboard' ? (
               <DashboardView key="dashboard" projects={projects} users={users} onProjectClick={handleProjectClick} />
             ) : !selectedProjectId ? (
@@ -481,6 +490,7 @@ export default function App() {
                 onSave={handleManualSave}
                 isSaving={isSaving}
                 users={users}
+                globalConfig={globalConfig}
               />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
@@ -957,7 +967,7 @@ function ProjectCard({ project, users, onClick, onDelete }: { project: Project, 
 
 // --- PROJECT DETAIL VIEW ---
 
-function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjects, onSave, isSaving, users }: { 
+function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjects, onSave, isSaving, users, globalConfig }: { 
   project: Project, 
   activeTab: string, 
   setActiveTab: (tab: any) => void,
@@ -966,6 +976,7 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
   onSave: (p: Project) => void,
   isSaving: boolean,
   users: User[],
+  globalConfig: { sectors: string[], tools: string[] },
   key?: string
 }) {
   return (
@@ -1077,7 +1088,7 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm min-h-[600px] overflow-hidden">
-        {activeTab === 'scope' && <ScopeTab project={project} setProjects={setProjects} users={users} />}
+        {activeTab === 'scope' && <ScopeTab project={project} setProjects={setProjects} users={users} globalConfig={globalConfig} />}
         {activeTab === 'mapping' && <MappingTab project={project} setProjects={setProjects} />}
         {activeTab === 'pdca' && <PDCATab project={project} setProjects={setProjects} />}
       </div>
@@ -1104,7 +1115,7 @@ function TabButton({ active, onClick, icon, label }: { active: boolean, onClick:
 
 // --- SCOPE TAB ---
 
-function ScopeTab({ project, setProjects, users }: { project: Project, setProjects: (p: Project) => void, users: User[] }) {
+function ScopeTab({ project, setProjects, users, globalConfig }: { project: Project, setProjects: (p: Project) => void, users: User[], globalConfig: { sectors: string[], tools: string[] } }) {
   const updateScope = (field: string, value: any) => {
     const updatedProject = { ...project, scope: { ...project.scope, [field]: value } };
     if (field === 'title') {
@@ -1215,6 +1226,7 @@ function ScopeTab({ project, setProjects, users }: { project: Project, setProjec
                     <input 
                       type="number"
                       value={project.scope.financial.currentImpact.value}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => updateFinancial('currentImpact', 'value', parseFloat(e.target.value) || 0)}
                       className="text-3xl font-black text-slate-900 bg-transparent border-b border-slate-200 outline-none w-full"
                     />
@@ -1241,16 +1253,17 @@ function ScopeTab({ project, setProjects, users }: { project: Project, setProjec
               </div>
               <div className="h-px bg-slate-200" />
               <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Projeção de Ganho</p>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Projeção de Ganho (%)</p>
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-emerald-500 font-bold">R$</span>
                     <input 
                       type="number"
                       value={project.scope.financial.gainProjection.value}
+                      onFocus={(e) => e.target.select()}
                       onChange={(e) => updateFinancial('gainProjection', 'value', parseFloat(e.target.value) || 0)}
                       className="text-3xl font-black text-emerald-600 bg-transparent border-b border-emerald-100 outline-none w-full"
                     />
+                    <span className="text-emerald-500 font-bold text-2xl">%</span>
                   </div>
                   <div className="flex gap-2">
                     <select 
@@ -1283,7 +1296,7 @@ function ScopeTab({ project, setProjects, users }: { project: Project, setProjec
             <div className="space-y-4">
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Setores Envolvidos</label>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 mb-3">
                   {project.scope.involvedSectors.map(s => (
                     <span key={s.id} className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-medium border border-indigo-100 flex items-center gap-2">
                       {s.name}
@@ -1295,20 +1308,26 @@ function ScopeTab({ project, setProjects, users }: { project: Project, setProjec
                       </button>
                     </span>
                   ))}
-                  <button 
-                    onClick={() => {
-                      const name = prompt('Nome do setor:');
-                      if (name) updateScope('involvedSectors', [...project.scope.involvedSectors, { id: uuidv4(), name }]);
-                    }}
-                    className="bg-slate-100 text-slate-400 px-3 py-1 rounded-full text-sm font-bold border border-slate-200 border-dashed hover:border-indigo-300 hover:text-indigo-500"
-                  >
-                    + Adicionar
-                  </button>
                 </div>
+                <select 
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                  onChange={(e) => {
+                    const name = e.target.value;
+                    if (name && !project.scope.involvedSectors.find(s => s.name === name)) {
+                      updateScope('involvedSectors', [...project.scope.involvedSectors, { id: uuidv4(), name }]);
+                    }
+                    e.target.value = '';
+                  }}
+                >
+                  <option value="">+ Adicionar Setor</option>
+                  {globalConfig.sectors.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Ferramentas Utilizadas</label>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-2 mb-3">
                   {project.scope.toolsUsed.map(t => (
                     <span key={t.id} className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-sm font-medium border border-slate-200 flex items-center gap-2">
                       {t.name}
@@ -1320,16 +1339,22 @@ function ScopeTab({ project, setProjects, users }: { project: Project, setProjec
                       </button>
                     </span>
                   ))}
-                  <button 
-                    onClick={() => {
-                      const name = prompt('Nome da ferramenta:');
-                      if (name) updateScope('toolsUsed', [...project.scope.toolsUsed, { id: uuidv4(), name }]);
-                    }}
-                    className="bg-slate-100 text-slate-400 px-3 py-1 rounded-full text-sm font-bold border border-slate-200 border-dashed hover:border-indigo-300 hover:text-indigo-500"
-                  >
-                    + Adicionar
-                  </button>
                 </div>
+                <select 
+                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                  onChange={(e) => {
+                    const name = e.target.value;
+                    if (name && !project.scope.toolsUsed.find(t => t.name === name)) {
+                      updateScope('toolsUsed', [...project.scope.toolsUsed, { id: uuidv4(), name }]);
+                    }
+                    e.target.value = '';
+                  }}
+                >
+                  <option value="">+ Adicionar Ferramenta</option>
+                  {globalConfig.tools.map(t => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </section>
@@ -1461,8 +1486,8 @@ function CreateProjectModal({ isOpen, onClose, onCreate, users }: {
 
 // --- SETTINGS VIEW ---
 
-function SettingsView({ users }: { users: User[], key?: string }) {
-  const [activeSubTab, setActiveSubTab] = useState<'perfil' | 'cadastros'>('cadastros');
+function SettingsView({ users, globalConfig }: { users: User[], globalConfig: { sectors: string[], tools: string[] }, key?: string }) {
+  const [activeSubTab, setActiveSubTab] = useState<'perfil' | 'cadastros' | 'setores-ferramentas'>('cadastros');
 
   return (
     <motion.div 
@@ -1488,6 +1513,16 @@ function SettingsView({ users }: { users: User[], key?: string }) {
           <span>Cadastros</span>
         </button>
         <button 
+          onClick={() => setActiveSubTab('setores-ferramentas')}
+          className={cn(
+            "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2",
+            activeSubTab === 'setores-ferramentas' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
+          )}
+        >
+          <Settings size={18} />
+          <span>Setores e Ferramentas</span>
+        </button>
+        <button 
           onClick={() => setActiveSubTab('perfil')}
           className={cn(
             "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2",
@@ -1501,6 +1536,7 @@ function SettingsView({ users }: { users: User[], key?: string }) {
 
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[500px]">
         {activeSubTab === 'cadastros' && <UserRegistrationTab users={users} />}
+        {activeSubTab === 'setores-ferramentas' && <GlobalConfigTab config={globalConfig} />}
         {activeSubTab === 'perfil' && (
           <div className="p-12 text-center space-y-4">
             <div className="w-20 h-20 bg-slate-100 rounded-full mx-auto flex items-center justify-center text-slate-400">
@@ -1511,6 +1547,103 @@ function SettingsView({ users }: { users: User[], key?: string }) {
         )}
       </div>
     </motion.div>
+  );
+}
+
+function GlobalConfigTab({ config }: { config: { sectors: string[], tools: string[] } }) {
+  const [newSector, setNewSector] = useState('');
+  const [newTool, setNewTool] = useState('');
+
+  const updateConfig = async (updates: any) => {
+    try {
+      await setDoc(doc(db, 'config', 'global'), { ...config, ...updates }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'config/global');
+    }
+  };
+
+  return (
+    <div className="p-8 lg:p-12 space-y-12">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+        <div className="space-y-8">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900">Setores</h3>
+            <p className="text-slate-500 text-sm mt-1">Gerencie os setores disponíveis para seleção.</p>
+          </div>
+          <div className="flex gap-2">
+            <input 
+              value={newSector}
+              onChange={(e) => setNewSector(e.target.value)}
+              placeholder="Novo setor..."
+              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button 
+              onClick={() => {
+                if (newSector && !config.sectors.includes(newSector)) {
+                  updateConfig({ sectors: [...config.sectors, newSector] });
+                  setNewSector('');
+                }
+              }}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all"
+            >
+              Adicionar
+            </button>
+          </div>
+          <div className="space-y-2">
+            {config.sectors.map(s => (
+              <div key={s} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-sm font-medium text-slate-700">{s}</span>
+                <button 
+                  onClick={() => updateConfig({ sectors: config.sectors.filter(item => item !== s) })}
+                  className="text-slate-400 hover:text-rose-500 p-1"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-8">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900">Ferramentas</h3>
+            <p className="text-slate-500 text-sm mt-1">Gerencie as ferramentas disponíveis para seleção.</p>
+          </div>
+          <div className="flex gap-2">
+            <input 
+              value={newTool}
+              onChange={(e) => setNewTool(e.target.value)}
+              placeholder="Nova ferramenta..."
+              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button 
+              onClick={() => {
+                if (newTool && !config.tools.includes(newTool)) {
+                  updateConfig({ tools: [...config.tools, newTool] });
+                  setNewTool('');
+                }
+              }}
+              className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all"
+            >
+              Adicionar
+            </button>
+          </div>
+          <div className="space-y-2">
+            {config.tools.map(t => (
+              <div key={t} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-sm font-medium text-slate-700">{t}</span>
+                <button 
+                  onClick={() => updateConfig({ tools: config.tools.filter(item => item !== t) })}
+                  className="text-slate-400 hover:text-rose-500 p-1"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 

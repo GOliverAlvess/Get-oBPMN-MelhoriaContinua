@@ -26,6 +26,12 @@ service cloud.firestore {
     //   - pdcaCycles: list (optional)
     //   - savedColors: list (optional)
     //
+    // Collection: config
+    // Document ID: {configId}
+    // Fields:
+    //   - sectors: list (optional, strings)
+    //   - tools: list (optional, strings)
+    //
     // ===============================================================
 
     // ===============================================================
@@ -90,6 +96,11 @@ service cloud.firestore {
              data.mapping is map;
     }
 
+    function isValidConfig(data) {
+      return (!('sectors' in data) || data.sectors is list) &&
+             (!('tools' in data) || data.tools is list);
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -105,6 +116,11 @@ service cloud.firestore {
       allow create: if isAuthenticated() && isValidProject(request.resource.data);
       allow update: if isAuthenticated() && isValidProject(request.resource.data);
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.assignedTo == request.auth.uid);
+    }
+
+    match /config/{configId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() && isValidConfig(request.resource.data);
     }
 
     match /{path=**} {

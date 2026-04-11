@@ -30,6 +30,15 @@
         "savedColors": { "type": "array" }
       },
       "required": ["id", "name", "createdAt", "progress", "status", "assignedTo", "scope", "mapping"]
+    },
+    "GlobalConfig": {
+      "title": "GlobalConfig",
+      "description": "Global system configurations like sectors and tools",
+      "type": "object",
+      "properties": {
+        "sectors": { "type": "array", "items": { "type": "string" } },
+        "tools": { "type": "array", "items": { "type": "string" } }
+      }
     }
   },
   "firestore": {
@@ -40,6 +49,10 @@
     "/projects/{projectId}": {
       "schema": "Project",
       "description": "Main project documents"
+    },
+    "/config/{configId}": {
+      "schema": "GlobalConfig",
+      "description": "Global configuration settings"
     }
   }
 }

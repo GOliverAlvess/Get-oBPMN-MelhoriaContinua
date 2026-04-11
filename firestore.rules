@@ -89,7 +89,7 @@ service cloud.firestore {
              data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
              isValidDateString(data.createdAt) &&
              data.progress is number && data.progress >= 0 && data.progress <= 100 &&
-             data.status in ['Planejamento', 'Em Execução', 'Concluído', 'Suspenso'] &&
+             data.status in ['Planejamento', 'Em andamento', 'Em melhoria', 'Concluído'] &&
              (!('priority' in data) || data.priority in ['Baixa', 'Média', 'Alta']) &&
              data.assignedTo is string &&
              data.scope is map &&

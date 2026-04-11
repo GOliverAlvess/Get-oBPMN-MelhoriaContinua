@@ -1,4 +1,4 @@
-export type ProjectStatus = 'Planejamento' | 'Em Execução' | 'Suspenso' | 'Concluído';
+export type ProjectStatus = 'Planejamento' | 'Em andamento' | 'Em melhoria' | 'Concluído';
 export type ProjectPriority = 'Baixa' | 'Média' | 'Alta';
 
 export interface InvolvedSector {

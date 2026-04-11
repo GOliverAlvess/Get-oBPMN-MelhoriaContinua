@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { 
   RefreshCw, 
   AlertCircle, 
@@ -19,6 +19,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
+import html2pdf from 'html2pdf.js';
 
 import { Project, PDCACycle, ParetoItem, ActionPlanItem, PDCAStatus, PDCAPriority } from '../types';
 import ParetoDiagram from './ParetoDiagram';
@@ -34,6 +35,7 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
   const [showProblemsModal, setShowProblemsModal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(true);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
 
   const activeCycle = project.pdcaCycles.find(c => c.id === activeCycleId);
 
@@ -193,8 +195,70 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
     document.body.removeChild(link);
   };
 
-  const exportToPDF = () => {
-    window.print();
+  const normalizeColors = (element: HTMLElement) => {
+    const all = element.querySelectorAll("*");
+    all.forEach(el => {
+      const htmlEl = el as HTMLElement;
+      const style = window.getComputedStyle(htmlEl);
+      
+      // Check for oklab or oklch in color, backgroundColor or borderColor
+      // These are not supported by html2canvas/jsPDF
+      if (style.color.includes("oklab") || style.color.includes("oklch")) {
+        htmlEl.style.color = "#1e293b"; // slate-800 fallback
+      }
+      
+      const bg = style.backgroundColor;
+      if (bg.includes("oklab") || bg.includes("oklch")) {
+        htmlEl.style.backgroundColor = "#ffffff"; // white fallback
+      }
+
+      const bc = style.borderColor;
+      if (bc.includes("oklab") || bc.includes("oklch")) {
+        htmlEl.style.borderColor = "#e2e8f0"; // slate-200 fallback
+      }
+    });
+  };
+
+  const exportToPDF = async () => {
+    if (isExportingPDF) return;
+    
+    const element = document.getElementById('pdca-report-content');
+    if (!element) {
+      console.error('Elemento do relatório não encontrado');
+      return;
+    }
+
+    try {
+      setIsExportingPDF(true);
+      
+      // Normalizar cores para evitar erro de oklab/oklch no html2canvas
+      normalizeColors(element);
+      
+      // Pequeno delay para garantir que o DOM está estável
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const opt = {
+        margin: 10,
+        filename: `relatorio_pdca_${activeCycle?.taskId || 'export'}.pdf`,
+        image: { type: 'jpeg' as const, quality: 0.98 },
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true, 
+          logging: false,
+          letterRendering: true,
+          allowTaint: false
+        },
+        jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] as any }
+      };
+
+      await html2pdf().set(opt).from(element).save();
+    } catch (error) {
+      console.error('Erro ao gerar PDF:', error);
+      alert('Ocorreu um erro ao gerar o PDF. Por favor, tente novamente.');
+    } finally {
+      setIsExportingPDF(false);
+    }
   };
 
   const updatePlan = (newPlan: any) => {
@@ -1271,15 +1335,30 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
                                     </button>
                                     <button 
                                       onClick={exportToPDF}
-                                      className="flex items-center gap-2 bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                                      disabled={isExportingPDF}
+                                      className={cn(
+                                        "flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all shadow-lg",
+                                        isExportingPDF 
+                                          ? "bg-slate-400 text-white cursor-not-allowed" 
+                                          : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100"
+                                      )}
                                     >
-                                      <FileText size={20} />
-                                      Exportar PDF
+                                      {isExportingPDF ? (
+                                        <>
+                                          <RefreshCw size={20} className="animate-spin" />
+                                          Gerando...
+                                        </>
+                                      ) : (
+                                        <>
+                                          <FileText size={20} />
+                                          Exportar PDF
+                                        </>
+                                      )}
                                     </button>
                                   </div>
                     </div>
 
-                    <div className="space-y-12 pb-12 print-container">
+                    <div id="pdca-report-content" className="space-y-12 pb-12 print-container bg-white p-8 rounded-[2.5rem]">
                       {relatedCycles.map((cycle, cycleIdx) => (
                         <div key={cycle.id} className="space-y-8 border-b-4 border-slate-100 pb-12 last:border-0 last:pb-0">
                           <div className="flex items-center gap-4 bg-slate-900 p-6 rounded-[2rem] text-white shadow-xl">

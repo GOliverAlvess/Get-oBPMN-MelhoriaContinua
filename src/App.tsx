@@ -54,7 +54,7 @@ import { cn } from './lib/utils';
 import MappingTab from './components/MappingTab';
 import PDCAEditor from './components/PDCAEditor';
 import DashboardView from './components/DashboardView';
-import { calculateProjectProgress } from './lib/projectUtils';
+import { calculateProjectProgress, calculateProjectStatus } from './lib/projectUtils';
 
 // Error Boundary Component
 interface ErrorBoundaryProps {
@@ -219,13 +219,19 @@ export default function App() {
 
   // Improved update function for child components
   const syncProjectToFirestore = async (projectToSync: Project) => {
+    // Recalculate status automatically
+    const updatedProject = {
+      ...projectToSync,
+      status: calculateProjectStatus(projectToSync)
+    };
+
     // Update local state immediately for UI responsiveness
-    setProjects(prev => prev.map(p => p.id === projectToSync.id ? projectToSync : p));
+    setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
     
     // Persist to Firestore
     try {
-      const projectRef = doc(db, 'projects', projectToSync.id);
-      await setDoc(projectRef, projectToSync);
+      const projectRef = doc(db, 'projects', updatedProject.id);
+      await setDoc(projectRef, updatedProject);
     } catch (error) {
       console.error("Auto-save failed:", error);
     }
@@ -238,8 +244,10 @@ export default function App() {
       const projectRef = doc(db, 'projects', projectToSave.id);
       
       // Ensure date is valid ISO string for security rules
+      // Recalculate status automatically
       const finalProject = {
         ...projectToSave,
+        status: calculateProjectStatus(projectToSave),
         createdAt: isValidDate(projectToSave.createdAt) 
           ? projectToSave.createdAt 
           : new Date().toISOString(),
@@ -529,12 +537,12 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
   key?: string
 }) {
   const [groupBy, setGroupBy] = useState<'status' | 'collaborator'>('status');
-  const [visibleStatuses, setVisibleStatuses] = useState<ProjectStatus[]>(['Planejamento', 'Em Execução', 'Suspenso', 'Concluído']);
+  const [visibleStatuses, setVisibleStatuses] = useState<ProjectStatus[]>(['Planejamento', 'Em andamento', 'Em melhoria', 'Concluído']);
   const [visibleCollaborators, setVisibleCollaborators] = useState<string[]>(users.map(u => u.id));
   const [searchTerm, setSearchTerm] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  const statuses: ProjectStatus[] = ['Planejamento', 'Em Execução', 'Suspenso', 'Concluído'];
+  const statuses: ProjectStatus[] = ['Planejamento', 'Em andamento', 'Em melhoria', 'Concluído'];
 
   // Update visible collaborators when users list changes
   useEffect(() => {
@@ -753,8 +761,8 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
                     <div className={cn(
                       "w-3 h-3 rounded-full",
                       colId === 'Planejamento' ? "bg-amber-400" :
-                      colId === 'Em Execução' ? "bg-blue-400" :
-                      colId === 'Suspenso' ? "bg-rose-400" : "bg-emerald-400"
+                      colId === 'Em andamento' ? "bg-blue-400" :
+                      colId === 'Em melhoria' ? "bg-indigo-400" : "bg-emerald-400"
                     )} />
                   ) : (
                     <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs uppercase">
@@ -823,8 +831,8 @@ function ProjectCard({ project, users, onClick, onDelete }: { project: Project, 
 
   const statusColors = {
     'Planejamento': 'bg-amber-100 text-amber-700 border-amber-200',
-    'Em Execução': 'bg-blue-100 text-blue-700 border-blue-200',
-    'Suspenso': 'bg-rose-100 text-rose-700 border-rose-200',
+    'Em andamento': 'bg-blue-100 text-blue-700 border-blue-200',
+    'Em melhoria': 'bg-indigo-100 text-indigo-700 border-indigo-200',
     'Concluído': 'bg-emerald-100 text-emerald-700 border-emerald-200',
   };
 

@@ -21,7 +21,7 @@
         "name": { "type": "string" },
         "createdAt": { "type": "string", "format": "date-time" },
         "progress": { "type": "number" },
-        "status": { "type": "string", "enum": ["Planejamento", "Em Execução", "Concluído", "Suspenso"] },
+        "status": { "type": "string", "enum": ["Planejamento", "Em andamento", "Em melhoria", "Concluído"] },
         "priority": { "type": "string", "enum": ["Baixa", "Média", "Alta"] },
         "assignedTo": { "type": "string", "description": "User ID" },
         "scope": { "type": "object" },

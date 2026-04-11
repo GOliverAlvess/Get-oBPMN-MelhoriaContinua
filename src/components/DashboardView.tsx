@@ -40,9 +40,9 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
   const stats = useMemo(() => {
     const total = projects.length;
     const completed = projects.filter(p => p.status === 'Concluído').length;
-    const inProgress = projects.filter(p => p.status === 'Em Execução').length;
+    const inImprovement = projects.filter(p => p.status === 'Em melhoria').length;
+    const inProgress = projects.filter(p => p.status === 'Em andamento').length;
     const planning = projects.filter(p => p.status === 'Planejamento').length;
-    const suspended = projects.filter(p => p.status === 'Suspenso').length;
 
     // "Parados" - No activity in last 7 days
     const sevenDaysAgo = subDays(new Date(), 7);
@@ -53,7 +53,7 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
 
     // Process Status Data for Pie Chart
     const processStatusData = [
-      { name: 'Em andamento', value: inProgress + planning, color: '#6366f1' },
+      { name: 'Em andamento', value: inProgress + inImprovement + planning, color: '#6366f1' },
       { name: 'Parados', value: stopped, color: '#f43f5e' },
       { name: 'Concluídos', value: completed, color: '#10b981' },
     ];
@@ -112,7 +112,7 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
     return {
       total,
       completed,
-      inProgress: inProgress + planning,
+      inProgress: inProgress + inImprovement + planning,
       stopped,
       processStatusData,
       collaboratorRanking,

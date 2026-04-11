@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { 
   BarChart, 
   Bar, 
@@ -17,15 +17,20 @@ import {
   Users, 
   CheckCircle2, 
   Clock, 
-  AlertCircle, 
   DollarSign,
   ArrowUpRight,
-  Activity
+  Activity,
+  Filter,
+  ChevronDown,
+  X,
+  Target,
+  Briefcase,
+  Search
 } from 'lucide-react';
-import { motion } from 'motion/react';
-import { format, subDays, isAfter } from 'date-fns';
+import { motion, AnimatePresence } from 'motion/react';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Project, User } from '../types';
+import { Project, User, ProjectStatus } from '../types';
 import { cn } from '../lib/utils';
 import { calculateProjectProgress } from '../lib/projectUtils';
 
@@ -37,55 +42,83 @@ interface DashboardViewProps {
 }
 
 export default function DashboardView({ projects, users, onProjectClick }: DashboardViewProps) {
-  const stats = useMemo(() => {
-    const total = projects.length;
-    const completed = projects.filter(p => p.status === 'Concluído').length;
-    const inImprovement = projects.filter(p => p.status === 'Em melhoria').length;
-    const inProgress = projects.filter(p => p.status === 'Em andamento').length;
-    const planning = projects.filter(p => p.status === 'Planejamento').length;
+  const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<ProjectStatus[]>([]);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
 
-    // "Parados" - No activity in last 7 days
-    const sevenDaysAgo = subDays(new Date(), 7);
-    const stopped = projects.filter(p => {
-      const lastEdited = p.mapping.lastEdited ? new Date(p.mapping.lastEdited) : new Date(p.createdAt);
-      return !isAfter(lastEdited, sevenDaysAgo) && p.status !== 'Concluído';
-    }).length;
+  const filteredProjects = useMemo(() => {
+    return projects.filter(p => {
+      const matchCollab = selectedCollaborators.length === 0 || selectedCollaborators.includes(p.assignedTo);
+      const matchStatus = selectedStatuses.length === 0 || selectedStatuses.includes(p.status);
+      const matchProject = selectedProjectIds.length === 0 || selectedProjectIds.includes(p.id);
+      return matchCollab && matchStatus && matchProject;
+    });
+  }, [projects, selectedCollaborators, selectedStatuses, selectedProjectIds]);
+
+  const stats = useMemo(() => {
+    const total = filteredProjects.length;
+    const completed = filteredProjects.filter(p => p.status === 'Concluído').length;
+    const inImprovement = filteredProjects.filter(p => p.status === 'Em melhoria').length;
+    const inProgress = filteredProjects.filter(p => p.status === 'Em andamento').length;
+    const planning = filteredProjects.filter(p => p.status === 'Planejamento').length;
 
     // Process Status Data for Pie Chart
     const processStatusData = [
-      { name: 'Em andamento', value: inProgress + inImprovement + planning, color: '#6366f1' },
-      { name: 'Parados', value: stopped, color: '#f43f5e' },
+      { name: 'Planejamento', value: planning, color: '#fbbf24' },
+      { name: 'Em andamento', value: inProgress, color: '#60a5fa' },
+      { name: 'Em melhoria', value: inImprovement, color: '#818cf8' },
       { name: 'Concluídos', value: completed, color: '#10b981' },
-    ];
+    ].filter(d => d.value > 0);
 
     // Collaborators Ranking
-    const collaboratorCounts = projects.reduce((acc, p) => {
+    const collaboratorCounts = filteredProjects.reduce((acc, p) => {
       acc[p.assignedTo] = (acc[p.assignedTo] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
 
-    const collaboratorRanking = users.map(u => ({
-      name: u.name,
-      count: collaboratorCounts[u.id] || 0
-    })).sort((a, b) => b.count - a.count).slice(0, 5);
+    const collaboratorRanking = users
+      .filter(u => filteredProjects.some(p => p.assignedTo === u.id))
+      .map(u => ({
+        name: u.name,
+        count: collaboratorCounts[u.id] || 0
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
 
     // Gain Impact
-    const projectGains = projects.map(p => {
+    const projectGains = filteredProjects.map(p => {
       const totalGain = p.pdcaCycles.reduce((sum, cycle) => {
-        const cycleGain = cycle.plan.actionPlan.reduce((s, action) => s + (action.gainImpact || 0), 0);
+        // Apenas PDCAs finalizados
+        if (cycle.status !== 'Concluído') return sum;
+        
+        const cycleGain = cycle.plan.actionPlan.reduce((s, action) => {
+          if (action.finalProblemStatus === 'Resolvido') {
+            return s + (action.gainImpact || 0);
+          }
+          return s;
+        }, 0);
         return sum + cycleGain;
       }, 0);
       return { name: p.name, gain: totalGain };
-    }).sort((a, b) => b.gain - a.gain).slice(0, 5);
+    }).filter(g => g.gain > 0).sort((a, b) => b.gain - a.gain).slice(0, 5);
 
-    const totalGainValue = projects.reduce((sum, p) => {
+    const totalGainValue = filteredProjects.reduce((sum, p) => {
       return sum + p.pdcaCycles.reduce((s, cycle) => {
-        return s + cycle.plan.actionPlan.reduce((acc, action) => acc + (action.gainImpact || 0), 0);
+        // Considerar apenas PDCAs finalizados
+        if (cycle.status !== 'Concluído') return s;
+        
+        return s + cycle.plan.actionPlan.reduce((acc, action) => {
+          // Considerar apenas ações resolvidas
+          if (action.finalProblemStatus === 'Resolvido') {
+            return acc + (action.gainImpact || 0);
+          }
+          return acc;
+        }, 0);
       }, 0);
     }, 0);
 
     // Project Progress
-    const projectProgressList = projects.map(p => ({
+    const projectProgressList = filteredProjects.map(p => ({
       id: p.id,
       name: p.name,
       progress: calculateProjectProgress(p)
@@ -97,7 +130,7 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
 
     // Recent Activity
     const activities: { type: string, title: string, date: string, projectName: string }[] = [];
-    projects.forEach(p => {
+    filteredProjects.forEach(p => {
       p.pdcaCycles.forEach(c => {
         activities.push({
           type: c.status === 'Concluído' ? 'PDCA Concluído' : 'PDCA Iniciado',
@@ -112,8 +145,9 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
     return {
       total,
       completed,
-      inProgress: inProgress + inImprovement + planning,
-      stopped,
+      planning,
+      inImprovement,
+      inProgress,
       processStatusData,
       collaboratorRanking,
       projectGains,
@@ -122,14 +156,22 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
       avgProgress,
       recentActivities
     };
-  }, [projects, users]);
+  }, [filteredProjects, users]);
+
+  const toggleFilter = (list: any[], item: any, setter: (val: any[]) => void) => {
+    if (list.includes(item)) {
+      setter(list.filter(i => i !== item));
+    } else {
+      setter([...list, item]);
+    }
+  };
 
   return (
     <div className="space-y-8 pb-12">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-3xl font-black text-slate-900 tracking-tight">Dashboard Executivo</h2>
-          <p className="text-slate-500 mt-1">Visão geral e analítica de todos os projetos.</p>
+          <p className="text-slate-500 mt-1">Visão estratégica e financeira dos projetos.</p>
         </div>
         <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2">
           <Clock size={16} className="text-slate-400" />
@@ -139,38 +181,116 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
         </div>
       </div>
 
-      {/* 1. Visão Geral */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Filtros Dropdown */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+        <div className="flex items-center gap-2 text-slate-400 mb-4">
+          <Filter size={16} />
+          <span className="text-xs font-black uppercase tracking-widest">Filtros Estratégicos</span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Colaboradores Dropdown */}
+          <FilterDropdown
+            label="Colaboradores"
+            placeholder="Selecionar colaboradores"
+            options={users.map(u => ({ id: u.id, label: u.name }))}
+            selected={selectedCollaborators}
+            onToggle={(id) => toggleFilter(selectedCollaborators, id, setSelectedCollaborators)}
+            onClear={() => setSelectedCollaborators([])}
+            icon={<Users size={16} />}
+          />
+
+          {/* Status Dropdown */}
+          <FilterDropdown
+            label="Status"
+            placeholder="Selecionar status"
+            options={['Planejamento', 'Em andamento', 'Em melhoria', 'Concluído'].map(s => ({ id: s, label: s }))}
+            selected={selectedStatuses}
+            onToggle={(id) => toggleFilter(selectedStatuses, id as ProjectStatus, setSelectedStatuses)}
+            onClear={() => setSelectedStatuses([])}
+            icon={<Target size={16} />}
+          />
+
+          {/* Projetos Dropdown */}
+          <FilterDropdown
+            label="Projetos"
+            placeholder="Selecionar projetos"
+            options={projects.map(p => ({ id: p.id, label: p.name }))}
+            selected={selectedProjectIds}
+            onToggle={(id) => toggleFilter(selectedProjectIds, id, setSelectedProjectIds)}
+            onClear={() => setSelectedProjectIds([])}
+            icon={<Briefcase size={16} />}
+            showSearch
+          />
+        </div>
+      </div>
+
+      {/* 1. Visão Geral e Impacto Financeiro */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
         <StatCard 
-          title="Total de Projetos" 
-          value={stats.total} 
-          icon={<GitBranch size={24} />} 
-          color="bg-indigo-600" 
+          title="Ganho Geral" 
+          value={stats.totalGainValue} 
+          isCurrency
+          icon={<DollarSign size={18} />} 
+          color="bg-emerald-600"
         />
         <StatCard 
-          title="Em Andamento" 
-          value={stats.inProgress} 
-          icon={<Activity size={24} />} 
-          color="bg-blue-500" 
+          title="Total Projetos" 
+          value={stats.total} 
+          icon={<Briefcase size={18} />} 
+          color="bg-indigo-600" 
         />
         <StatCard 
           title="Concluídos" 
           value={stats.completed} 
-          icon={<CheckCircle2 size={24} />} 
+          icon={<CheckCircle2 size={18} />} 
           color="bg-emerald-500" 
         />
         <StatCard 
-          title="Parados" 
-          value={stats.stopped} 
-          icon={<AlertCircle size={24} />} 
-          color="bg-rose-500" 
+          title="Em Planejamento" 
+          value={stats.planning} 
+          icon={<Clock size={18} />} 
+          color="bg-amber-500" 
+        />
+        <StatCard 
+          title="Em Melhoria" 
+          value={stats.inImprovement} 
+          icon={<TrendingUp size={18} />} 
+          color="bg-indigo-400" 
         />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* 2. Status dos Processos */}
+        {/* 2. Impacto de Ganho por Projeto */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
-          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Status dos Processos</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Ganhos por Projeto</h3>
+            <TrendingUp size={20} className="text-emerald-500" />
+          </div>
+          <div className="h-[300px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={stats.projectGains} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                <XAxis type="number" hide />
+                <YAxis 
+                  dataKey="name" 
+                  type="category" 
+                  width={100} 
+                  tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }}
+                />
+                <Tooltip 
+                  cursor={{ fill: '#f8fafc' }}
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  formatter={(value: number) => [`R$ ${value.toLocaleString()}`, 'Ganho']}
+                />
+                <Bar dataKey="gain" fill="#10b981" radius={[0, 8, 8, 0]} barSize={20} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* 3. Status dos Processos */}
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
+          <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Distribuição de Status</h3>
           <div className="h-[300px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -196,7 +316,7 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
           </div>
         </div>
 
-        {/* 3. Colaboradores */}
+        {/* 4. Colaboradores */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
           <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Ranking Colaboradores</h3>
           <div className="space-y-4">
@@ -217,36 +337,6 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
             {stats.collaboratorRanking.length === 0 && (
               <p className="text-slate-400 text-sm italic text-center py-10">Nenhum colaborador com projetos.</p>
             )}
-          </div>
-        </div>
-
-        {/* 4. Impacto de Ganho */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Impacto de Ganho</h3>
-            <div className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-xs font-black">
-              R$ {stats.totalGainValue.toLocaleString()} Total
-            </div>
-          </div>
-          <div className="h-[300px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={stats.projectGains} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                <XAxis type="number" hide />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  width={100} 
-                  tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }}
-                />
-                <Tooltip 
-                  cursor={{ fill: '#f8fafc' }}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                  formatter={(value: number) => [`R$ ${value.toLocaleString()}`, 'Ganho']}
-                />
-                <Bar dataKey="gain" fill="#10b981" radius={[0, 8, 8, 0]} barSize={20} />
-              </BarChart>
-            </ResponsiveContainer>
           </div>
         </div>
       </div>
@@ -328,41 +418,199 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
   );
 }
 
-function StatCard({ title, value, icon, color }: { title: string, value: number, icon: React.ReactNode, color: string }) {
+function FilterDropdown({ 
+  label, 
+  placeholder, 
+  options, 
+  selected, 
+  onToggle, 
+  onClear, 
+  icon,
+  showSearch = false
+}: { 
+  label: string, 
+  placeholder: string, 
+  options: { id: string, label: string }[], 
+  selected: string[], 
+  onToggle: (id: string) => void, 
+  onClear: () => void,
+  icon: React.ReactNode,
+  showSearch?: boolean
+}) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const filteredOptions = options.filter(opt => 
+    opt.label.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
-    <motion.div 
-      whileHover={{ y: -5 }}
-      className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm flex items-center gap-5"
-    >
-      <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg", color)}>
-        {icon}
+    <div className="space-y-1.5 relative" ref={dropdownRef}>
+      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</label>
+      <div 
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "flex items-center justify-between px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl cursor-pointer hover:border-indigo-300 transition-all",
+          isOpen && "border-indigo-500 ring-2 ring-indigo-50"
+        )}
+      >
+        <div className="flex items-center gap-2 truncate">
+          <span className="text-slate-400">{icon}</span>
+          <span className={cn(
+            "text-sm font-medium truncate",
+            selected.length > 0 ? "text-slate-900" : "text-slate-400"
+          )}>
+            {selected.length > 0 
+              ? `${selected.length} selecionado${selected.length > 1 ? 's' : ''}` 
+              : placeholder}
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          {selected.length > 0 && (
+            <button 
+              onClick={(e) => { e.stopPropagation(); onClear(); }}
+              className="p-1 text-slate-400 hover:text-rose-500 transition-colors"
+            >
+              <X size={14} />
+            </button>
+          )}
+          <ChevronDown size={16} className={cn("text-slate-400 transition-transform", isOpen && "rotate-180")} />
+        </div>
       </div>
-      <div>
-        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{title}</p>
-        <h4 className="text-3xl font-black text-slate-900 tracking-tight">{value}</h4>
-      </div>
-    </motion.div>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="absolute z-50 top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden"
+          >
+            {showSearch && (
+              <div className="p-3 border-b border-slate-100">
+                <div className="relative">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    type="text"
+                    placeholder="Buscar..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-indigo-500 transition-all"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                </div>
+              </div>
+            )}
+            <div className="max-h-60 overflow-y-auto custom-scrollbar p-2">
+              {filteredOptions.map(opt => (
+                <div 
+                  key={opt.id}
+                  onClick={() => onToggle(opt.id)}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors",
+                    selected.includes(opt.id) 
+                      ? "bg-indigo-50 text-indigo-700" 
+                      : "hover:bg-slate-50 text-slate-600"
+                  )}
+                >
+                  <div className={cn(
+                    "w-4 h-4 rounded border flex items-center justify-center transition-all",
+                    selected.includes(opt.id)
+                      ? "bg-indigo-600 border-indigo-600"
+                      : "border-slate-300 bg-white"
+                  )}>
+                    {selected.includes(opt.id) && <CheckCircle2 size={10} className="text-white" />}
+                  </div>
+                  <span className="text-sm font-medium">{opt.label}</span>
+                </div>
+              ))}
+              {filteredOptions.length === 0 && (
+                <p className="text-center py-4 text-xs text-slate-400 italic">Nenhum resultado encontrado</p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
-function GitBranch(props: any) {
+function formatCompactNumber(number: number) {
+  if (number < 1000) return number.toString();
+  if (number >= 1000 && number < 1000000) return (number / 1000).toFixed(number % 1000 === 0 ? 0 : 1) + 'K';
+  if (number >= 1000000) return (number / 1000000).toFixed(number % 1000000 === 0 ? 0 : 1) + 'M';
+  return number.toString();
+}
+
+function StatCard({ 
+  title, 
+  value, 
+  icon, 
+  color, 
+  highlight,
+  isCurrency = false
+}: { 
+  title: string, 
+  value: string | number, 
+  icon: React.ReactNode, 
+  color: string,
+  highlight?: boolean,
+  isCurrency?: boolean
+}) {
+  const displayValue = typeof value === 'number' ? formatCompactNumber(value) : value;
+  const finalValue = isCurrency ? `R$ ${displayValue}` : displayValue;
+
   return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+    <motion.div 
+      whileHover={{ y: -3 }}
+      className={cn(
+        "p-4 rounded-[1.5rem] border shadow-sm flex items-center justify-between gap-3 transition-all min-h-[80px]",
+        highlight 
+          ? "bg-slate-900 border-slate-800 text-white" 
+          : "bg-white border-slate-200 text-slate-900"
+      )}
     >
-      <line x1="6" x2="6" y1="3" y2="15" />
-      <circle cx="18" cy="6" r="3" />
-      <circle cx="6" cy="18" r="3" />
-      <path d="M18 9a9 9 0 0 1-9 9" />
-    </svg>
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className={cn(
+          "w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md shrink-0", 
+          color
+        )}>
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className={cn(
+            "text-[9px] font-black uppercase tracking-widest text-slate-400 truncate"
+          )}>{title}</p>
+          <h4 
+            className="font-black tracking-tight truncate"
+            style={{ 
+              fontSize: 'clamp(14px, 1.5vw, 20px)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}
+            title={value.toString()}
+          >
+            {finalValue}
+          </h4>
+        </div>
+      </div>
+      {highlight && (
+        <div className="shrink-0">
+          <ArrowUpRight size={18} className="text-emerald-400 opacity-50" />
+        </div>
+      )}
+    </motion.div>
   );
 }

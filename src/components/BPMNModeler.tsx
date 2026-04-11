@@ -26,8 +26,9 @@ import { Project, BPMNTaskData, SavedColor } from '../types';
 import { cn } from '../lib/utils';
 
 interface BPMNModelerProps {
-  project: Project;
-  onUpdateProject: (project: Project) => void;
+  mapping: any;
+  onUpdateMapping: (mapping: any) => void;
+  projectName: string;
 }
 
 const INITIAL_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -44,11 +45,11 @@ const INITIAL_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
-export default function BPMNModeler({ project, onUpdateProject }: BPMNModelerProps) {
+export default function BPMNModeler({ mapping, onUpdateMapping, projectName }: BPMNModelerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const modelerRef = useRef<Modeler | null>(null);
   const [selectedElement, setSelectedElement] = useState<any>(null);
-  const [customData, setCustomData] = useState<Record<string, Partial<BPMNTaskData>>>(project.mapping.customData || {});
+  const [customData, setCustomData] = useState<Record<string, Partial<BPMNTaskData>>>(mapping.customData || {});
   const customDataRef = useRef(customData);
   const [newColorName, setNewColorName] = useState('');
   const isSyncingRef = useRef(false);
@@ -73,7 +74,7 @@ export default function BPMNModeler({ project, onUpdateProject }: BPMNModelerPro
     modelerRef.current = modeler;
 
     let isMounted = true;
-    const xml = project.mapping.xml || INITIAL_XML;
+    const xml = mapping.xml || INITIAL_XML;
     
     // Small delay to ensure container is fully ready in the DOM
     setTimeout(() => {
@@ -154,14 +155,11 @@ export default function BPMNModeler({ project, onUpdateProject }: BPMNModelerPro
     try {
       const { xml } = await modelerRef.current.saveXML({ format: true });
       isSyncingRef.current = true;
-      onUpdateProject({
-        ...project,
-        mapping: {
-          ...project.mapping,
-          xml,
-          customData: customDataRef.current,
-          lastEdited: new Date().toISOString()
-        }
+      onUpdateMapping({
+        ...mapping,
+        xml,
+        customData: customDataRef.current,
+        lastEdited: new Date().toISOString()
       });
       setTimeout(() => {
         isSyncingRef.current = false;
@@ -169,7 +167,7 @@ export default function BPMNModeler({ project, onUpdateProject }: BPMNModelerPro
     } catch (err) {
       console.error('Error saving XML', err);
     }
-  }, [project, onUpdateProject]);
+  }, [mapping, onUpdateMapping]);
 
   const updateElementData = (elementId: string, data: Partial<BPMNTaskData>) => {
     const newCustomData = {
@@ -205,7 +203,7 @@ export default function BPMNModeler({ project, onUpdateProject }: BPMNModelerPro
 
   // Sync custom data to project
   useEffect(() => {
-    if (JSON.stringify(customData) !== JSON.stringify(project.mapping.customData)) {
+    if (JSON.stringify(customData) !== JSON.stringify(mapping.customData)) {
       saveChanges();
     }
   }, [customData]);
@@ -257,7 +255,7 @@ export default function BPMNModeler({ project, onUpdateProject }: BPMNModelerPro
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `processo-${project.name}.svg`;
+      link.download = `processo-${projectName}.svg`;
       link.click();
     } catch (err) {
       console.error('Error exporting SVG', err);
@@ -276,12 +274,9 @@ export default function BPMNModeler({ project, onUpdateProject }: BPMNModelerPro
       borderColor: data.borderColor || '#333333'
     };
 
-    onUpdateProject({
-      ...project,
-      mapping: {
-        ...project.mapping,
-        savedColors: [...(project.mapping.savedColors || []), newColor]
-      }
+    onUpdateMapping({
+      ...mapping,
+      savedColors: [...(mapping.savedColors || []), newColor]
     });
     setNewColorName('');
   };
@@ -309,7 +304,7 @@ export default function BPMNModeler({ project, onUpdateProject }: BPMNModelerPro
               <GitBranch size={16} />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-800 leading-none">{project.name}</h3>
+              <h3 className="text-sm font-bold text-slate-800 leading-none">{projectName}</h3>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">BPMN Modeler</p>
             </div>
           </div>
@@ -465,7 +460,7 @@ export default function BPMNModeler({ project, onUpdateProject }: BPMNModelerPro
                     Cores Salvas
                   </label>
                   <div className="grid grid-cols-4 gap-2">
-                    {(project.mapping.savedColors || []).map((color) => (
+                    {(mapping.savedColors || []).map((color) => (
                       <button
                         key={color.id}
                         onClick={() => updateElementData(selectedElement.id, { 

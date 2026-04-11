@@ -21,14 +21,22 @@ import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import html2pdf from 'html2pdf.js';
 
-import { Project, PDCACycle, ParetoItem, ActionPlanItem, PDCAStatus, PDCAPriority } from '../types';
+import { Project, Subtask, PDCACycle, ParetoItem, ActionPlanItem, PDCAStatus, PDCAPriority } from '../types';
 import ParetoDiagram from './ParetoDiagram';
 import { cn } from '../lib/utils';
 
-export default function PDCAEditor({ project, setProjects, onBack }: { 
+export default function PDCAEditor({ 
+  project, 
+  subtask, 
+  onUpdateSubtask, 
+  onBack, 
+  defaultTaskId 
+}: { 
   project: Project, 
-  setProjects: (p: Project) => void,
-  onBack: () => void
+  subtask: Subtask,
+  onUpdateSubtask: (s: Subtask) => void,
+  onBack: () => void,
+  defaultTaskId?: string
 }) {
   const [activeCycleId, setActiveCycleId] = useState<string | null>(null);
   const [activePhase, setActivePhase] = useState<'PLAN' | 'DO' | 'CHECK' | 'ACT' | 'REPORT'>('PLAN');
@@ -37,7 +45,15 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
 
-  const activeCycle = project.pdcaCycles.find(c => c.id === activeCycleId);
+  // Filter cycles if defaultTaskId is provided
+  const cycles = useMemo(() => {
+    if (defaultTaskId) {
+      return subtask.pdcaCycles.filter(c => c.taskId === defaultTaskId);
+    }
+    return subtask.pdcaCycles;
+  }, [subtask.pdcaCycles, defaultTaskId]);
+
+  const activeCycle = subtask.pdcaCycles.find(c => c.id === activeCycleId);
 
   const ishikawaDefaultCategories = useMemo(() => [
     { id: uuidv4(), name: 'Método' as const, description: 'Procedimentos, fluxos e formas de trabalho.', entries: [] },
@@ -57,7 +73,7 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
 
   // Problems from Mapping
   const problemsFromMapping = useMemo(() => {
-    const customData = project.mapping.customData || {};
+    const customData = subtask.mapping.customData || {};
     return Object.entries(customData)
       .filter(([_, data]) => data.isProblemStep)
       .map(([id, data]) => ({
@@ -66,17 +82,17 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
         time: data.timeInMinutes || 0,
         role: data.responsibleRole || ''
       }));
-  }, [project.mapping.customData]);
+  }, [subtask.mapping.customData]);
 
   const relatedCycles = useMemo(() => {
     if (!activeCycle) return [];
-    return project.pdcaCycles
+    return subtask.pdcaCycles
       .filter(c => c.taskId === activeCycle.taskId)
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-  }, [project.pdcaCycles, activeCycle?.taskId]);
+  }, [subtask.pdcaCycles, activeCycle?.taskId]);
 
   const createNewCycle = (taskId: string, taskLabel: string) => {
-    const cycleCount = project.pdcaCycles.filter(c => c.taskId === taskId).length;
+    const cycleCount = subtask.pdcaCycles.filter(c => c.taskId === taskId).length;
     const newCycle: PDCACycle = {
       id: uuidv4(),
       taskId,
@@ -104,7 +120,7 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
       }
     };
 
-    setProjects({ ...project, pdcaCycles: [newCycle, ...project.pdcaCycles] });
+    onUpdateSubtask({ ...subtask, pdcaCycles: [newCycle, ...subtask.pdcaCycles] });
     setActiveCycleId(newCycle.id);
     setActivePhase('PLAN');
     setShowDashboard(false);
@@ -113,8 +129,8 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
 
   const updateCycle = (newData: Partial<PDCACycle>) => {
     if (!activeCycleId) return;
-    const newCycles = project.pdcaCycles.map(c => c.id === activeCycleId ? { ...c, ...newData } : c);
-    setProjects({ ...project, pdcaCycles: newCycles });
+    const newCycles = subtask.pdcaCycles.map(c => c.id === activeCycleId ? { ...c, ...newData } : c);
+    onUpdateSubtask({ ...subtask, pdcaCycles: newCycles });
   };
 
   const handleSave = () => {
@@ -267,16 +283,16 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
   };
 
   const dashboardStats = useMemo(() => {
-    const total = project.pdcaCycles.length;
-    const resolved = project.pdcaCycles.filter(c => 
+    const total = cycles.length;
+    const resolved = cycles.filter(c => 
       c.plan.actionPlan.every(a => a.finalProblemStatus === 'Resolvido') && 
       c.status === 'Concluído' && 
       c.plan.actionPlan.length > 0
     ).length;
-    const inProgress = project.pdcaCycles.filter(c => c.status !== 'Concluído').length;
+    const inProgress = cycles.filter(c => c.status !== 'Concluído').length;
     
     return { total, resolved, inProgress };
-  }, [project.pdcaCycles]);
+  }, [cycles]);
 
   if (showDashboard) {
     return (
@@ -316,7 +332,7 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
           {/* Cycles List */}
           <div className="space-y-4">
             <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">Ciclos Ativos</h4>
-            {project.pdcaCycles.length === 0 ? (
+            {cycles.length === 0 ? (
               <div className="py-20 bg-white border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-slate-400">
                 <Target size={48} className="mb-4 opacity-20" />
                 <p className="font-bold">Nenhum ciclo PDCA iniciado</p>
@@ -324,7 +340,7 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {project.pdcaCycles.map(cycle => (
+                {cycles.map(cycle => (
                   <div 
                     key={cycle.id}
                     onClick={() => {
@@ -384,7 +400,7 @@ export default function PDCAEditor({ project, setProjects, onBack }: {
                     </div>
                   ) : (
                     problemsFromMapping.map(p => {
-                      const isCompleted = project.pdcaCycles.some(c => c.taskId === p.id && c.status === 'Concluído');
+                      const isCompleted = subtask.pdcaCycles.some(c => c.taskId === p.id && c.status === 'Concluído');
                       return (
                         <div 
                           key={p.id}

@@ -1,62 +1,61 @@
 import { Project, ProjectStatus } from '../types';
 
 export const calculateProjectStatus = (project: Project): ProjectStatus => {
-  const problemTasks = Object.values(project.mapping.customData || {}).filter(data => data.isProblemStep);
-  const totalProblems = problemTasks.length;
-  
-  // 4. Concluído: Todos os problemas (tasks com “Etapa Problema”) tiverem: PDCA com status final = Resolvido
-  if (totalProblems > 0) {
-    const resolvedProblems = project.pdcaCycles.filter(cycle => {
-      const isConcluded = cycle.status === 'Concluído';
-      const allActionsResolved = cycle.plan.actionPlan.length > 0 && 
-                                cycle.plan.actionPlan.every(action => action.finalProblemStatus === 'Resolvido');
-      return isConcluded && allActionsResolved;
-    }).length;
-
-    if (resolvedProblems === totalProblems) {
-      return 'Concluído';
-    }
+  const subtasks = project.subtasks || [];
+  if (subtasks.length === 0) {
+    const isScopeFilled = 
+      project.scope.problemDescription.trim() !== '' && 
+      project.scope.measurableObjective.trim() !== '' &&
+      project.scope.responsible.trim() !== '';
+    return isScopeFilled ? 'Em andamento' : 'Planejamento';
   }
 
-  // 3. Em melhoria: Existe pelo menos 1 PDCA iniciado E ainda NÃO finalizado
-  if (project.pdcaCycles.length > 0) {
-    return 'Em melhoria';
-  }
+  const allCompleted = subtasks.every(s => s.status === 'Concluído');
+  if (allCompleted) return 'Concluído';
 
-  // 2. Em andamento: Escopo preenchido OR Mapeamento iniciado
-  const isScopeFilled = 
-    project.scope.problemDescription.trim() !== '' && 
-    project.scope.measurableObjective.trim() !== '' &&
-    project.scope.responsible.trim() !== '';
-  
-  const isMappingStarted = project.mapping.nodes && project.mapping.nodes.length > 0;
+  const anyInProgress = subtasks.some(s => s.status === 'Em andamento' || s.pdcaCycles.length > 0);
+  if (anyInProgress) return 'Em melhoria';
 
-  if (isScopeFilled || isMappingStarted) {
-    return 'Em andamento';
-  }
-
-  // 1. Planejamento (Default)
-  return 'Planejamento';
+  return 'Em andamento';
 };
 
 export const calculateProjectProgress = (project: Project) => {
-  const problemTasks = Object.values(project.mapping.customData || {}).filter(data => data.isProblemStep);
-  const totalProblems = problemTasks.length;
-  
-  if (totalProblems === 0) {
-    // Fallback: Check if mapping is done or scope is filled
+  const subtasks = project.subtasks || [];
+  if (subtasks.length === 0) {
     let progress = 0;
-    if (project.scope.problemDescription) progress += 10;
-    if (project.mapping.nodes && project.mapping.nodes.length > 0) progress += 20;
+    if (project.scope.problemDescription) progress += 5;
+    if (project.scope.measurableObjective) progress += 5;
     return Math.min(progress, 100);
   }
 
-  const resolvedProblems = project.pdcaCycles.filter(cycle => {
-    const isConcluded = cycle.status === 'Concluído';
-    const allActionsResolved = cycle.plan.actionPlan.length > 0 && 
-                              cycle.plan.actionPlan.every(action => action.finalProblemStatus === 'Resolvido');
-    return isConcluded && allActionsResolved;
+  const completedSubtasks = subtasks.filter(subtask => {
+    // A subtask is completed if its status is 'Concluído'
+    // We also verify if all its internal PDCA cycles are resolved
+    const problemTasks = Object.entries(subtask.mapping.customData || {})
+      .filter(([_, data]) => data.isProblemStep);
+    
+    if (problemTasks.length === 0) {
+      return subtask.status === 'Concluído';
+    }
+
+    const cyclesByTask = subtask.pdcaCycles.reduce((acc, cycle) => {
+      if (!acc[cycle.taskId]) acc[cycle.taskId] = [];
+      acc[cycle.taskId].push(cycle);
+      return acc;
+    }, {} as Record<string, any[]>);
+
+    const allProblemsResolved = problemTasks.every(([taskId, _]) => {
+      const taskCycles = cyclesByTask[taskId] || [];
+      return taskCycles.length > 0 && taskCycles.every(cycle => {
+        const isConcluded = cycle.status === 'Concluído';
+        const allActionsResolved = cycle.plan.actionPlan.length > 0 && 
+                                  cycle.plan.actionPlan.every(action => action.finalProblemStatus === 'Resolvido');
+        return isConcluded && allActionsResolved;
+      });
+    });
+
+    return allProblemsResolved && subtask.status === 'Concluído';
   }).length;
 
-  return Math.round((resolvedProblems / totalProblems) * 100);
+  return Math.min(Math.round((completedSubtasks / subtasks.length) * 100), 100);
 };

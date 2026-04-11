@@ -21,7 +21,9 @@ import {
   Trash2,
   Edit,
   Filter,
-  ChevronDown
+  ChevronDown,
+  X,
+  Activity
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -49,7 +51,7 @@ import {
   getDoc
 } from './firebase';
 import type { FirebaseUser } from './firebase';
-import { Project, ProjectStatus, ProjectPriority, User } from './types';
+import { Project, ProjectStatus, ProjectPriority, User, Subtask } from './types';
 import { cn } from './lib/utils';
 import MappingTab from './components/MappingTab';
 import PDCAEditor from './components/PDCAEditor';
@@ -329,16 +331,7 @@ export default function App() {
           gainProjection: { value: 0, type: 'fixo', period: 'mensal' }
         }
       },
-      mapping: { 
-        nodes: [], 
-        edges: [], 
-        xml: '',
-        customData: {},
-        orientation: 'horizontal', 
-        lastEdited: new Date().toISOString(),
-        savedColors: []
-      },
-      pdcaCycles: []
+      subtasks: []
     };
 
     try {
@@ -987,6 +980,89 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
   globalConfig: { sectors: string[], tools: string[] },
   key?: string
 }) {
+  const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
+
+  const selectedSubtask = project.subtasks?.find(s => s.id === selectedSubtaskId);
+
+  const handleUpdateSubtask = (updatedSubtask: Subtask) => {
+    const updatedSubtasks = (project.subtasks || []).map(s => s.id === updatedSubtask.id ? updatedSubtask : s);
+    setProjects({ ...project, subtasks: updatedSubtasks });
+  };
+
+  // If a subtask is selected, we show the "Execution" view (Mapping + PDCA)
+  if (selectedSubtaskId && selectedSubtask) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="flex flex-col h-full bg-slate-50"
+      >
+        {/* Subtask Header */}
+        <div className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setSelectedSubtaskId(null)}
+              className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 flex items-center gap-2 font-bold text-sm"
+            >
+              <ChevronRight size={20} className="rotate-180" />
+              Voltar ao Escopo
+            </button>
+            <div className="h-6 w-px bg-slate-200" />
+            <div>
+              <h3 className="text-lg font-bold text-slate-900">
+                Execução: {selectedSubtask.title}
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">Projeto: {project.scope.title}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+              <TabButton 
+                active={activeTab === 'mapping'} 
+                onClick={() => setActiveTab('mapping')} 
+                icon={<GitBranch size={16} />} 
+                label="Mapeamento" 
+              />
+              <TabButton 
+                active={activeTab === 'pdca'} 
+                onClick={() => setActiveTab('pdca')} 
+                icon={<RefreshCw size={16} />} 
+                label="PDCA" 
+              />
+            </div>
+            <button 
+              onClick={() => onSave(project)}
+              disabled={isSaving}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-xl font-bold text-sm hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 disabled:opacity-50"
+            >
+              <Save size={18} />
+              {isSaving ? 'Salvando...' : 'Salvar'}
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-hidden">
+          {activeTab === 'mapping' && (
+            <MappingTab 
+              project={project} 
+              subtask={selectedSubtask} 
+              onUpdateSubtask={handleUpdateSubtask} 
+            />
+          )}
+          {activeTab === 'pdca' && (
+            <PDCATab 
+              project={project} 
+              subtask={selectedSubtask}
+              onUpdateSubtask={handleUpdateSubtask}
+              selectedTaskId={selectedSubtaskId} 
+            />
+          )}
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div 
       initial={{ opacity: 0, x: 20 }}
@@ -1071,34 +1147,22 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
             <Save size={18} />
             {isSaving ? 'Salvando...' : 'Salvar Alterações'}
           </button>
-          
-          <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
-            <TabButton 
-              active={activeTab === 'scope'} 
-              onClick={() => setActiveTab('scope')} 
-              icon={<FileText size={18} />} 
-              label="Escopo" 
-            />
-            <TabButton 
-              active={activeTab === 'mapping'} 
-              onClick={() => setActiveTab('mapping')} 
-              icon={<GitBranch size={18} />} 
-              label="Mapeamento" 
-            />
-            <TabButton 
-              active={activeTab === 'pdca'} 
-              onClick={() => setActiveTab('pdca')} 
-              icon={<RefreshCw size={18} />} 
-              label="PDCA" 
-            />
-          </div>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm min-h-[600px] overflow-hidden">
-        {activeTab === 'scope' && <ScopeTab project={project} setProjects={setProjects} users={users} globalConfig={globalConfig} />}
-        {activeTab === 'mapping' && <MappingTab project={project} setProjects={setProjects} />}
-        {activeTab === 'pdca' && <PDCATab project={project} setProjects={setProjects} />}
+        {activeTab === 'scope' && (
+          <ScopeTab 
+            project={project} 
+            setProjects={setProjects} 
+            users={users} 
+            globalConfig={globalConfig} 
+            onSelectSubtask={(taskId) => {
+              setSelectedSubtaskId(taskId);
+              setActiveTab('mapping');
+            }}
+          />
+        )}
       </div>
     </motion.div>
   );
@@ -1109,10 +1173,10 @@ function TabButton({ active, onClick, icon, label }: { active: boolean, onClick:
     <button 
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 px-6 py-2.5 rounded-lg transition-all font-medium text-sm",
+        "flex items-center gap-2 px-4 py-2 rounded-lg transition-all font-bold text-xs uppercase tracking-wider",
         active 
-          ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" 
-          : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+          ? "bg-white text-indigo-600 shadow-sm" 
+          : "text-slate-500 hover:bg-white/50 hover:text-slate-700"
       )}
     >
       {icon}
@@ -1123,7 +1187,19 @@ function TabButton({ active, onClick, icon, label }: { active: boolean, onClick:
 
 // --- SCOPE TAB ---
 
-function ScopeTab({ project, setProjects, users, globalConfig }: { project: Project, setProjects: (p: Project) => void, users: User[], globalConfig: { sectors: string[], tools: string[] } }) {
+function ScopeTab({ 
+  project, 
+  setProjects, 
+  users, 
+  globalConfig,
+  onSelectSubtask
+}: { 
+  project: Project, 
+  setProjects: (p: Project) => void, 
+  users: User[], 
+  globalConfig: { sectors: string[], tools: string[] },
+  onSelectSubtask: (taskId: string) => void
+}) {
   const updateScope = (field: string, value: any) => {
     const updatedProject = { ...project, scope: { ...project.scope, [field]: value } };
     if (field === 'title') {
@@ -1156,27 +1232,57 @@ function ScopeTab({ project, setProjects, users, globalConfig }: { project: Proj
     });
   };
 
+  const addSubtask = () => {
+    const newSubtask: Subtask = {
+      id: uuidv4(),
+      title: 'Novo Processo',
+      priority: 'Média',
+      status: 'Em andamento',
+      mapping: {
+        nodes: [],
+        edges: [],
+        orientation: 'horizontal',
+        lastEdited: new Date().toISOString(),
+        savedColors: []
+      },
+      pdcaCycles: []
+    };
+    setProjects({ ...project, subtasks: [...(project.subtasks || []), newSubtask] });
+  };
+
+  const updateSubtask = (id: string, field: keyof Subtask, value: any) => {
+    const updatedSubtasks = (project.subtasks || []).map(s => 
+      s.id === id ? { ...s, [field]: value } : s
+    );
+    setProjects({ ...project, subtasks: updatedSubtasks });
+  };
+
+  const deleteSubtask = (id: string) => {
+    const updatedSubtasks = (project.subtasks || []).filter(s => s.id !== id);
+    setProjects({ ...project, subtasks: updatedSubtasks });
+  };
+
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-10">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-        <div className="space-y-8">
-          <section>
-            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+    <div className="p-8 max-w-6xl mx-auto space-y-12">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+        <div className="space-y-10">
+          <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
               <FileText className="text-indigo-500" size={20} />
               Informações Gerais
             </h3>
-            <div className="space-y-4">
+            <div className="space-y-5">
               <FormField 
                 label="Título do Projeto" 
                 value={project.scope.title} 
                 onChange={(v) => updateScope('title', v)}
               />
               <div className="space-y-1.5">
-                <label className="text-sm font-semibold text-slate-700 ml-1">Responsável (Atribuído a)</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Responsável</label>
                 <select 
                   value={project.assignedTo}
                   onChange={(e) => handleReassign(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium"
                 >
                   {users.map(u => (
                     <option key={u.id} value={u.id}>{u.name}</option>
@@ -1197,12 +1303,12 @@ function ScopeTab({ project, setProjects, users, globalConfig }: { project: Proj
             </div>
           </section>
 
-          <section>
-            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
               <Calendar className="text-indigo-500" size={20} />
               Cronograma
             </h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-6">
               <FormField 
                 label="Data Início" 
                 value={project.scope.startDate} 
@@ -1219,31 +1325,31 @@ function ScopeTab({ project, setProjects, users, globalConfig }: { project: Proj
           </section>
         </div>
 
-        <div className="space-y-8">
-          <section>
-            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+        <div className="space-y-10">
+          <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
               <Target className="text-indigo-500" size={20} />
               Impacto Financeiro
             </h3>
-            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-6">
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-8">
               <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Impacto Atual</p>
-                <div className="flex flex-col gap-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Impacto Atual</p>
+                <div className="flex flex-col gap-4">
                   <div className="flex items-center gap-2">
-                    <span className="text-slate-500 font-bold">R$</span>
+                    <span className="text-slate-400 font-black text-xl">R$</span>
                     <input 
                       type="number"
                       value={project.scope.financial.currentImpact.value}
                       onFocus={(e) => e.target.select()}
                       onChange={(e) => updateFinancial('currentImpact', 'value', parseFloat(e.target.value) || 0)}
-                      className="text-3xl font-black text-slate-900 bg-transparent border-b border-slate-200 outline-none w-full"
+                      className="text-4xl font-black text-slate-900 bg-transparent border-b-2 border-slate-200 outline-none w-full focus:border-indigo-500 transition-all"
                     />
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-3">
                     <select 
                       value={project.scope.financial.currentImpact.period}
                       onChange={(e) => updateFinancial('currentImpact', 'period', e.target.value)}
-                      className="text-xs bg-white border border-slate-200 p-1 rounded font-bold uppercase"
+                      className="text-[10px] bg-white border border-slate-200 px-3 py-1.5 rounded-lg font-black uppercase tracking-wider"
                     >
                       <option value="mensal">Mensal</option>
                       <option value="anual">Anual</option>
@@ -1251,7 +1357,7 @@ function ScopeTab({ project, setProjects, users, globalConfig }: { project: Proj
                     <select 
                       value={project.scope.financial.currentImpact.type}
                       onChange={(e) => updateFinancial('currentImpact', 'type', e.target.value)}
-                      className="text-xs bg-white border border-slate-200 p-1 rounded font-bold uppercase"
+                      className="text-[10px] bg-white border border-slate-200 px-3 py-1.5 rounded-lg font-black uppercase tracking-wider"
                     >
                       <option value="fixo">Fixo</option>
                       <option value="continuo">Contínuo</option>
@@ -1261,23 +1367,23 @@ function ScopeTab({ project, setProjects, users, globalConfig }: { project: Proj
               </div>
               <div className="h-px bg-slate-200" />
               <div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Projeção de Ganho (%)</p>
-                <div className="flex flex-col gap-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Projeção de Ganho (%)</p>
+                <div className="flex flex-col gap-4">
                   <div className="flex items-center gap-2">
                     <input 
                       type="number"
                       value={project.scope.financial.gainProjection.value}
                       onFocus={(e) => e.target.select()}
                       onChange={(e) => updateFinancial('gainProjection', 'value', parseFloat(e.target.value) || 0)}
-                      className="text-3xl font-black text-emerald-600 bg-transparent border-b border-emerald-100 outline-none w-full"
+                      className="text-4xl font-black text-emerald-600 bg-transparent border-b-2 border-emerald-100 outline-none w-full focus:border-emerald-500 transition-all"
                     />
-                    <span className="text-emerald-500 font-bold text-2xl">%</span>
+                    <span className="text-emerald-500 font-black text-3xl">%</span>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-3">
                     <select 
                       value={project.scope.financial.gainProjection.period}
                       onChange={(e) => updateFinancial('gainProjection', 'period', e.target.value)}
-                      className="text-xs bg-white border border-slate-200 p-1 rounded font-bold uppercase"
+                      className="text-[10px] bg-white border border-slate-200 px-3 py-1.5 rounded-lg font-black uppercase tracking-wider"
                     >
                       <option value="mensal">Mensal</option>
                       <option value="anual">Anual</option>
@@ -1285,7 +1391,7 @@ function ScopeTab({ project, setProjects, users, globalConfig }: { project: Proj
                     <select 
                       value={project.scope.financial.gainProjection.type}
                       onChange={(e) => updateFinancial('gainProjection', 'type', e.target.value)}
-                      className="text-xs bg-white border border-slate-200 p-1 rounded font-bold uppercase"
+                      className="text-[10px] bg-white border border-slate-200 px-3 py-1.5 rounded-lg font-black uppercase tracking-wider"
                     >
                       <option value="fixo">Fixo</option>
                       <option value="continuo">Contínuo</option>
@@ -1296,29 +1402,29 @@ function ScopeTab({ project, setProjects, users, globalConfig }: { project: Proj
             </div>
           </section>
 
-          <section>
-            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+          <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
               <Users className="text-indigo-500" size={20} />
               Setores e Ferramentas
             </h3>
-            <div className="space-y-4">
+            <div className="space-y-6">
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Setores Envolvidos</label>
-                <div className="flex flex-wrap gap-2 mb-3">
+                <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">Setores Envolvidos</label>
+                <div className="flex flex-wrap gap-2 mb-4">
                   {project.scope.involvedSectors.map(s => (
-                    <span key={s.id} className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-medium border border-indigo-100 flex items-center gap-2">
+                    <span key={s.id} className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-indigo-100 flex items-center gap-2">
                       {s.name}
                       <button 
                         onClick={() => updateScope('involvedSectors', project.scope.involvedSectors.filter(item => item.id !== s.id))}
-                        className="hover:text-rose-500"
+                        className="hover:text-rose-500 transition-colors"
                       >
-                        ×
+                        <X size={12} />
                       </button>
                     </span>
                   ))}
                 </div>
                 <select 
-                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
                   onChange={(e) => {
                     const name = e.target.value;
                     if (name && !project.scope.involvedSectors.find(s => s.name === name)) {
@@ -1334,22 +1440,22 @@ function ScopeTab({ project, setProjects, users, globalConfig }: { project: Proj
                 </select>
               </div>
               <div>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Ferramentas Utilizadas</label>
-                <div className="flex flex-wrap gap-2 mb-3">
+                <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">Ferramentas Utilizadas</label>
+                <div className="flex flex-wrap gap-2 mb-4">
                   {project.scope.toolsUsed.map(t => (
-                    <span key={t.id} className="bg-slate-100 text-slate-700 px-3 py-1 rounded-full text-sm font-medium border border-slate-200 flex items-center gap-2">
+                    <span key={t.id} className="bg-slate-50 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 flex items-center gap-2">
                       {t.name}
                       <button 
                         onClick={() => updateScope('toolsUsed', project.scope.toolsUsed.filter(item => item.id !== t.id))}
-                        className="hover:text-rose-500"
+                        className="hover:text-rose-500 transition-colors"
                       >
-                        ×
+                        <X size={12} />
                       </button>
                     </span>
                   ))}
                 </div>
                 <select 
-                  className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
                   onChange={(e) => {
                     const name = e.target.value;
                     if (name && !project.scope.toolsUsed.find(t => t.name === name)) {
@@ -1368,6 +1474,122 @@ function ScopeTab({ project, setProjects, users, globalConfig }: { project: Proj
           </section>
         </div>
       </div>
+
+      {/* Subtasks Section */}
+      <section className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+                <GitBranch size={20} />
+              </div>
+              Subtarefas do Projeto
+            </h3>
+            <p className="text-slate-500 text-sm mt-1">Clique em uma subtarefa para iniciar o Mapeamento e PDCA.</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-right">
+              <span className="text-2xl font-black text-indigo-600">{calculateProjectProgress(project)}%</span>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Progresso Total</p>
+            </div>
+            <button 
+              onClick={addSubtask}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+            >
+              <Plus size={18} />
+              Nova Subtarefa
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {(project.subtasks || []).map((subtask) => {
+            return (
+              <motion.div 
+                key={subtask.id}
+                whileHover={{ y: -4 }}
+                className="group p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-indigo-300 hover:bg-white transition-all shadow-sm hover:shadow-md relative"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <select 
+                    value={subtask.priority}
+                    onChange={(e) => updateSubtask(subtask.id, 'priority', e.target.value)}
+                    className={cn(
+                      "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border-none cursor-pointer",
+                      subtask.priority === 'Alta' ? "bg-rose-100 text-rose-600" :
+                      subtask.priority === 'Média' ? "bg-indigo-100 text-indigo-600" :
+                      "bg-slate-200 text-slate-600"
+                    )}
+                  >
+                    <option value="Alta">Alta</option>
+                    <option value="Média">Média</option>
+                    <option value="Baixa">Baixa</option>
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <select 
+                      value={subtask.status}
+                      onChange={(e) => updateSubtask(subtask.id, 'status', e.target.value)}
+                      className={cn(
+                        "flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border-none cursor-pointer",
+                        subtask.status === 'Concluído' ? "bg-emerald-100 text-emerald-600" :
+                        subtask.status === 'Em andamento' ? "bg-amber-100 text-amber-600" :
+                        "bg-slate-200 text-slate-500"
+                      )}
+                    >
+                      <option value="Pendente">Pendente</option>
+                      <option value="Em andamento">Em andamento</option>
+                      <option value="Concluído">Concluído</option>
+                    </select>
+                    <button 
+                      onClick={() => deleteSubtask(subtask.id)}
+                      className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+                
+                <input 
+                  value={subtask.title}
+                  onChange={(e) => updateSubtask(subtask.id, 'title', e.target.value)}
+                  className="w-full bg-transparent font-bold text-slate-800 group-hover:text-indigo-600 transition-colors mb-2 outline-none border-none p-0"
+                  placeholder="Título da subtarefa..."
+                />
+
+                <div 
+                  onClick={() => onSelectSubtask(subtask.id)}
+                  className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100 cursor-pointer"
+                >
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    {subtask.pdcaCycles.length} Ciclos PDCA
+                  </span>
+                  <div className="flex items-center gap-2 text-indigo-600 font-bold text-[10px] uppercase tracking-wider">
+                    Executar
+                    <ChevronRight size={16} className="text-slate-300 group-hover:text-indigo-400 transform group-hover:translate-x-1 transition-all" />
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+          {(project.subtasks || []).length === 0 && (
+            <div className="col-span-full py-12 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
+              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-slate-300 mx-auto mb-4 shadow-sm">
+                <GitBranch size={32} />
+              </div>
+              <h4 className="font-bold text-slate-600">Nenhuma subtarefa definida</h4>
+              <p className="text-slate-400 text-sm mt-1 max-w-xs mx-auto">
+                Adicione os processos ou frentes de trabalho que compõem este projeto.
+              </p>
+              <button 
+                onClick={addSubtask}
+                className="mt-6 px-6 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:border-indigo-300 hover:text-indigo-600 transition-all shadow-sm"
+              >
+                + Adicionar Subtarefa
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
@@ -1820,16 +2042,32 @@ function UserRegistrationTab({ users }: { users: User[] }) {
   );
 }
 
-function PDCATab({ project, setProjects }: { project: Project, setProjects: (p: Project) => void }) {
+function PDCATab({ 
+  project, 
+  subtask, 
+  onUpdateSubtask,
+  selectedTaskId 
+}: { 
+  project: Project, 
+  subtask: Subtask,
+  onUpdateSubtask: (s: Subtask) => void,
+  selectedTaskId?: string | null 
+}) {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+
+  const filteredCycles = selectedTaskId 
+    ? subtask.pdcaCycles.filter(c => c.taskId === selectedTaskId)
+    : subtask.pdcaCycles;
 
   if (isEditorOpen) {
     return (
       <div className="fixed inset-0 z-[100] bg-white">
         <PDCAEditor 
           project={project} 
-          setProjects={setProjects} 
+          subtask={subtask}
+          onUpdateSubtask={onUpdateSubtask}
           onBack={() => setIsEditorOpen(false)} 
+          defaultTaskId={selectedTaskId || undefined}
         />
       </div>
     );
@@ -1852,14 +2090,14 @@ function PDCATab({ project, setProjects }: { project: Project, setProjects: (p: 
       </div>
 
       <div className="grid grid-cols-1 gap-4">
-        {project.pdcaCycles.length === 0 ? (
+        {filteredCycles.length === 0 ? (
           <div className="py-20 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-slate-400">
             <RefreshCw size={48} className="mb-4 opacity-20" />
-            <p className="font-medium">Nenhum ciclo PDCA iniciado para este projeto.</p>
-            <p className="text-sm">Identifique problemas no mapeamento para iniciar um ciclo.</p>
+            <p className="font-medium">Nenhum ciclo PDCA iniciado para esta etapa.</p>
+            <p className="text-sm">Inicie um novo ciclo para resolver os problemas identificados.</p>
           </div>
         ) : (
-          project.pdcaCycles.map(cycle => (
+          filteredCycles.map(cycle => (
             <div 
               key={cycle.id} 
               onClick={() => setIsEditorOpen(true)}

@@ -87,34 +87,41 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
 
     // Gain Impact
     const projectGains = filteredProjects.map(p => {
-      const totalGain = p.pdcaCycles.reduce((sum, cycle) => {
-        // Apenas PDCAs finalizados
-        if (cycle.status !== 'Concluído') return sum;
-        
-        const cycleGain = cycle.plan.actionPlan.reduce((s, action) => {
-          if (action.finalProblemStatus === 'Resolvido') {
-            return s + (action.gainImpact || 0);
-          }
-          return s;
-        }, 0);
-        return sum + cycleGain;
-      }, 0);
+      let totalGain = 0;
+      (p.subtasks || []).forEach(subtask => {
+        subtask.pdcaCycles.forEach(cycle => {
+          // Apenas PDCAs finalizados
+          if (cycle.status !== 'Concluído') return;
+          
+          const cycleGain = cycle.plan.actionPlan.reduce((s, action) => {
+            if (action.finalProblemStatus === 'Resolvido') {
+              return s + (action.gainImpact || 0);
+            }
+            return s;
+          }, 0);
+          totalGain += cycleGain;
+        });
+      });
       return { name: p.name, gain: totalGain };
     }).filter(g => g.gain > 0).sort((a, b) => b.gain - a.gain).slice(0, 5);
 
     const totalGainValue = filteredProjects.reduce((sum, p) => {
-      return sum + p.pdcaCycles.reduce((s, cycle) => {
-        // Considerar apenas PDCAs finalizados
-        if (cycle.status !== 'Concluído') return s;
-        
-        return s + cycle.plan.actionPlan.reduce((acc, action) => {
-          // Considerar apenas ações resolvidas
-          if (action.finalProblemStatus === 'Resolvido') {
-            return acc + (action.gainImpact || 0);
-          }
-          return acc;
-        }, 0);
-      }, 0);
+      let pGain = 0;
+      (p.subtasks || []).forEach(subtask => {
+        subtask.pdcaCycles.forEach(cycle => {
+          // Considerar apenas PDCAs finalizados
+          if (cycle.status !== 'Concluído') return;
+          
+          pGain += cycle.plan.actionPlan.reduce((acc, action) => {
+            // Considerar apenas ações resolvidas
+            if (action.finalProblemStatus === 'Resolvido') {
+              return acc + (action.gainImpact || 0);
+            }
+            return acc;
+          }, 0);
+        });
+      });
+      return sum + pGain;
     }, 0);
 
     // Project Progress
@@ -131,12 +138,14 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
     // Recent Activity
     const activities: { type: string, title: string, date: string, projectName: string }[] = [];
     filteredProjects.forEach(p => {
-      p.pdcaCycles.forEach(c => {
-        activities.push({
-          type: c.status === 'Concluído' ? 'PDCA Concluído' : 'PDCA Iniciado',
-          title: c.title,
-          date: c.createdAt,
-          projectName: p.name
+      (p.subtasks || []).forEach(subtask => {
+        subtask.pdcaCycles.forEach(c => {
+          activities.push({
+            type: c.status === 'Concluído' ? 'PDCA Concluído' : 'PDCA Iniciado',
+            title: `${subtask.title}: ${c.title}`,
+            date: c.createdAt,
+            projectName: p.name
+          });
         });
       });
     });

@@ -58,6 +58,7 @@ export interface BPMNTaskData {
   responsibleRole: string;
   timeInMinutes: number;
   isProblemStep: boolean;
+  priority?: 'Baixa' | 'Média' | 'Alta';
   backgroundColor: string;
   borderColor: string;
   shapeType: BPMNShapeType;
@@ -162,15 +163,11 @@ export interface PDCACycle {
   };
 }
 
-export interface Project {
+export interface Subtask {
   id: string;
-  name: string;
-  createdAt: string;
-  progress: number;
-  status: ProjectStatus;
-  priority?: ProjectPriority;
-  assignedTo: string; // User ID
-  scope: ProjectScope;
+  title: string;
+  priority: ProjectPriority;
+  status: 'Pendente' | 'Em andamento' | 'Concluído';
   mapping: {
     xml?: string;
     customData?: Record<string, Partial<BPMNTaskData>>;
@@ -181,6 +178,18 @@ export interface Project {
     savedColors: SavedColor[];
   };
   pdcaCycles: PDCACycle[];
+}
+
+export interface Project {
+  id: string;
+  name: string;
+  createdAt: string;
+  progress: number;
+  status: ProjectStatus;
+  priority?: ProjectPriority;
+  assignedTo: string; // User ID
+  scope: ProjectScope;
+  subtasks: Subtask[];
 }
 
 export interface User {

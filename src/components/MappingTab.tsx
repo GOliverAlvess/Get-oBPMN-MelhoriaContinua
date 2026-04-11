@@ -1,17 +1,29 @@
 import React from 'react';
-import { Project } from '../types';
+import { Project, Subtask } from '../types';
 import BPMNModeler from './BPMNModeler';
 
-export default function MappingTab({ project, setProjects }: { project: Project, setProjects: (p: Project) => void }) {
-  const handleUpdateProject = (updatedProject: Project) => {
-    setProjects(updatedProject);
+export default function MappingTab({ 
+  project, 
+  subtask, 
+  onUpdateSubtask 
+}: { 
+  project: Project, 
+  subtask: Subtask, 
+  onUpdateSubtask: (s: Subtask) => void 
+}) {
+  const handleUpdateMapping = (updatedMapping: any) => {
+    onUpdateSubtask({
+      ...subtask,
+      mapping: updatedMapping
+    });
   };
 
   return (
     <div className="h-full flex flex-col bg-slate-50">
       <BPMNModeler 
-        project={project} 
-        onUpdateProject={handleUpdateProject} 
+        mapping={subtask.mapping} 
+        onUpdateMapping={handleUpdateMapping} 
+        projectName={project.scope.title}
       />
     </div>
   );

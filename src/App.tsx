@@ -564,7 +564,13 @@ export default function App() {
             {activeView === 'settings' ? (
               <SettingsView key="settings" users={users} globalConfig={globalConfig} />
             ) : activeView === 'dashboard' ? (
-              <DashboardView key="dashboard" projects={projects} users={users} onProjectClick={handleProjectClick} />
+              <DashboardView 
+                key="dashboard" 
+                projects={projects} 
+                users={users} 
+                actions={operationalActions}
+                onProjectClick={handleProjectClick} 
+              />
             ) : activeView === 'actions' ? (
               <OperationalActionsTab 
                 key="actions"

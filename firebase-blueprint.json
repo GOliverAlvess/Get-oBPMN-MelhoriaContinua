@@ -39,6 +39,28 @@
         "sectors": { "type": "array", "items": { "type": "string" } },
         "tools": { "type": "array", "items": { "type": "string" } }
       }
+    },
+    "OperationalAction": {
+      "title": "OperationalAction",
+      "description": "Operational actions and treatments linked to projects and subtasks",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "projectId": { "type": "string" },
+        "projectName": { "type": "string" },
+        "subtaskId": { "type": "string" },
+        "subtaskTitle": { "type": "string" },
+        "action": { "type": "string" },
+        "responsibleId": { "type": "string" },
+        "responsibleName": { "type": "string" },
+        "priority": { "type": "string", "enum": ["Baixa", "Média", "Alta"] },
+        "status": { "type": "string", "enum": ["Pendente", "Em andamento", "Concluído"] },
+        "forecastDate": { "type": "string", "format": "date" },
+        "completionDate": { "type": "string", "format": "date" },
+        "feedback": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "projectId", "projectName", "subtaskId", "subtaskTitle", "action", "responsibleId", "responsibleName", "priority", "status", "forecastDate", "createdAt"]
     }
   },
   "firestore": {
@@ -53,6 +75,10 @@
     "/config/{configId}": {
       "schema": "GlobalConfig",
       "description": "Global configuration settings"
+    },
+    "/operationalActions/{actionId}": {
+      "schema": "OperationalAction",
+      "description": "Operational actions and treatments"
     }
   }
 }

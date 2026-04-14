@@ -29,7 +29,9 @@ import {
   Leaf,
   Heart,
   ShieldCheck,
-  Briefcase
+  Briefcase,
+  History,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -57,11 +59,12 @@ import {
   getDoc
 } from './firebase';
 import type { FirebaseUser } from './firebase';
-import { Project, ProjectStatus, ProjectPriority, User, Subtask } from './types';
+import { Project, ProjectStatus, ProjectPriority, User, Subtask, OperationalAction } from './types';
 import { cn } from './lib/utils';
 import MappingTab from './components/MappingTab';
 import PDCAEditor from './components/PDCAEditor';
 import DashboardView from './components/DashboardView';
+import OperationalActionsTab from './components/OperationalActionsTab';
 import { calculateProjectProgress, calculateProjectStatus } from './lib/projectUtils';
 
 // Error Boundary Component
@@ -135,7 +138,8 @@ export default function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'scope' | 'mapping' | 'pdca'>('scope');
-  const [activeView, setActiveView] = useState<'kanban' | 'settings' | 'dashboard'>('dashboard');
+  const [activeView, setActiveView] = useState<'kanban' | 'settings' | 'dashboard' | 'actions'>('dashboard');
+  const [operationalActions, setOperationalActions] = useState<OperationalAction[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [globalConfig, setGlobalConfig] = useState<{ sectors: string[], tools: string[] }>({ sectors: [], tools: [] });
 
@@ -171,10 +175,17 @@ export default function App() {
       }
     }, (error) => handleFirestoreError(error, OperationType.GET, 'config/global'));
 
+    // Listen for Operational Actions
+    const actionsUnsubscribe = onSnapshot(collection(db, 'operationalActions'), (snapshot) => {
+      const actionsData = snapshot.docs.map(doc => doc.data() as OperationalAction);
+      setOperationalActions(actionsData);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'operationalActions'));
+
     return () => {
       usersUnsubscribe();
       projectsUnsubscribe();
       configUnsubscribe();
+      actionsUnsubscribe();
     };
   }, [user]);
 
@@ -443,6 +454,19 @@ export default function App() {
               <span>Projetos</span>
             </button>
             <button 
+              onClick={() => {
+                setActiveView('actions');
+                setSelectedProjectId(null);
+              }}
+              className={cn(
+                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
+                activeView === 'actions' ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              <History size={20} />
+              <span>Histórico de Ações</span>
+            </button>
+            <button 
               onClick={() => setActiveView('settings')}
               className={cn(
                 "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
@@ -482,6 +506,13 @@ export default function App() {
               <SettingsView key="settings" users={users} globalConfig={globalConfig} />
             ) : activeView === 'dashboard' ? (
               <DashboardView key="dashboard" projects={projects} users={users} onProjectClick={handleProjectClick} />
+            ) : activeView === 'actions' ? (
+              <OperationalActionsTab 
+                key="actions"
+                actions={operationalActions}
+                projects={projects}
+                users={users}
+              />
             ) : !selectedProjectId ? (
               <KanbanView 
                 key="kanban"

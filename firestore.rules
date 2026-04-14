@@ -101,6 +101,24 @@ service cloud.firestore {
              (!('tools' in data) || data.tools is list);
     }
 
+    function isValidOperationalAction(data) {
+      return hasRequiredFields(['id', 'projectId', 'projectName', 'subtaskId', 'subtaskTitle', 'action', 'responsibleId', 'responsibleName', 'priority', 'status', 'forecastDate', 'createdAt']) &&
+             data.id is string &&
+             data.projectId is string &&
+             data.projectName is string &&
+             data.subtaskId is string &&
+             data.subtaskTitle is string &&
+             data.action is string && data.action.size() > 0 && data.action.size() < 2000 &&
+             data.responsibleId is string &&
+             data.responsibleName is string &&
+             data.priority in ['Baixa', 'Média', 'Alta'] &&
+             data.status in ['Pendente', 'Em andamento', 'Concluído'] &&
+             isValidDateString(data.forecastDate) &&
+             isValidDateString(data.createdAt) &&
+             (!('completionDate' in data) || isValidDateString(data.completionDate)) &&
+             (!('feedback' in data) || (data.feedback is string && data.feedback.size() < 2000));
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -121,6 +139,12 @@ service cloud.firestore {
     match /config/{configId} {
       allow read: if isAuthenticated();
       allow write: if isAdmin() && isValidConfig(request.resource.data);
+    }
+
+    match /operationalActions/{actionId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidOperationalAction(request.resource.data);
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.responsibleId == request.auth.uid);
     }
 
     match /{path=**} {

@@ -204,3 +204,20 @@ export interface User {
   sector?: string;
   avatar?: string;
 }
+
+export interface OperationalAction {
+  id: string;
+  projectId: string;
+  projectName: string;
+  subtaskId: string;
+  subtaskTitle: string;
+  action: string;
+  responsibleId: string;
+  responsibleName: string;
+  priority: ProjectPriority;
+  status: 'Pendente' | 'Em andamento' | 'Concluído';
+  forecastDate: string;
+  completionDate?: string;
+  feedback?: string;
+  createdAt: string;
+}

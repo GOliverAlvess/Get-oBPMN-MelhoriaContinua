@@ -119,6 +119,15 @@ service cloud.firestore {
              (!('feedback' in data) || (data.feedback is string && data.feedback.size() < 2000));
     }
 
+    function isValidReportLog(data) {
+      return hasRequiredFields(['id', 'userId', 'userName', 'timestamp', 'reportType']) &&
+             data.id is string &&
+             data.userId is string &&
+             data.userName is string &&
+             isValidDateString(data.timestamp) &&
+             data.reportType in ['PDCA', 'Histórico de Ações'];
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -145,6 +154,12 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create, update: if isAuthenticated() && isValidOperationalAction(request.resource.data);
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.responsibleId == request.auth.uid);
+    }
+
+    match /reportLogs/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidReportLog(request.resource.data);
+      allow update, delete: if isAdmin();
     }
 
     match /{path=**} {

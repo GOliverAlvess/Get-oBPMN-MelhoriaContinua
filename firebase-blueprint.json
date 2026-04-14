@@ -61,6 +61,19 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["id", "projectId", "projectName", "subtaskId", "subtaskTitle", "action", "responsibleId", "responsibleName", "priority", "status", "forecastDate", "createdAt"]
+    },
+    "ReportLog": {
+      "title": "ReportLog",
+      "description": "Log of generated reports",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "reportType": { "type": "string", "enum": ["PDCA", "Histórico de Ações"] }
+      },
+      "required": ["id", "userId", "userName", "timestamp", "reportType"]
     }
   },
   "firestore": {
@@ -79,6 +92,10 @@
     "/operationalActions/{actionId}": {
       "schema": "OperationalAction",
       "description": "Operational actions and treatments"
+    },
+    "/reportLogs/{logId}": {
+      "schema": "ReportLog",
+      "description": "Logs of generated reports"
     }
   }
 }

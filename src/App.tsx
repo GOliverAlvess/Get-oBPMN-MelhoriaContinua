@@ -13,6 +13,7 @@ import {
   GitBranch,
   RefreshCw,
   Users,
+  User as UserIcon,
   FileText,
   Settings,
   LogOut,
@@ -65,6 +66,7 @@ import MappingTab from './components/MappingTab';
 import PDCAEditor from './components/PDCAEditor';
 import DashboardView from './components/DashboardView';
 import OperationalActionsTab from './components/OperationalActionsTab';
+import ReportsTab from './components/ReportsTab';
 import { calculateProjectProgress, calculateProjectStatus } from './lib/projectUtils';
 
 // Error Boundary Component
@@ -562,7 +564,13 @@ export default function App() {
         )}>
           <AnimatePresence mode="wait">
             {activeView === 'settings' ? (
-              <SettingsView key="settings" users={users} globalConfig={globalConfig} />
+              <SettingsView 
+                key="settings" 
+                users={users} 
+                globalConfig={globalConfig} 
+                projects={projects}
+                actions={operationalActions}
+              />
             ) : activeView === 'dashboard' ? (
               <DashboardView 
                 key="dashboard" 
@@ -1877,8 +1885,14 @@ function CreateProjectModal({ isOpen, onClose, onCreate, users }: {
 
 // --- SETTINGS VIEW ---
 
-function SettingsView({ users, globalConfig }: { users: User[], globalConfig: { sectors: string[], tools: string[] }, key?: string }) {
-  const [activeSubTab, setActiveSubTab] = useState<'perfil' | 'cadastros' | 'setores-ferramentas'>('cadastros');
+function SettingsView({ users, globalConfig, projects, actions }: { 
+  users: User[], 
+  globalConfig: { sectors: string[], tools: string[] }, 
+  projects: Project[],
+  actions: OperationalAction[],
+  key?: string 
+}) {
+  const [activeSubTab, setActiveSubTab] = useState<'perfil' | 'cadastros' | 'setores-ferramentas' | 'relatorios'>('cadastros');
 
   return (
     <motion.div 
@@ -1892,11 +1906,11 @@ function SettingsView({ users, globalConfig }: { users: User[], globalConfig: { 
         <p className="text-slate-500 mt-1">Gerencie as preferências do sistema e cadastros.</p>
       </div>
 
-      <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit">
+      <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit overflow-x-auto max-w-full">
         <button 
           onClick={() => setActiveSubTab('cadastros')}
           className={cn(
-            "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2",
+            "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2 shrink-0",
             activeSubTab === 'cadastros' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
           )}
         >
@@ -1906,7 +1920,7 @@ function SettingsView({ users, globalConfig }: { users: User[], globalConfig: { 
         <button 
           onClick={() => setActiveSubTab('setores-ferramentas')}
           className={cn(
-            "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2",
+            "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2 shrink-0",
             activeSubTab === 'setores-ferramentas' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
           )}
         >
@@ -1914,13 +1928,23 @@ function SettingsView({ users, globalConfig }: { users: User[], globalConfig: { 
           <span>Setores e Ferramentas</span>
         </button>
         <button 
-          onClick={() => setActiveSubTab('perfil')}
+          onClick={() => setActiveSubTab('relatorios')}
           className={cn(
-            "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2",
-            activeSubTab === 'perfil' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
+            "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2 shrink-0",
+            activeSubTab === 'relatorios' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
           )}
         >
           <FileText size={18} />
+          <span>Relatórios</span>
+        </button>
+        <button 
+          onClick={() => setActiveSubTab('perfil')}
+          className={cn(
+            "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2 shrink-0",
+            activeSubTab === 'perfil' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
+          )}
+        >
+          <UserIcon size={18} />
           <span>Meu Perfil</span>
         </button>
       </div>
@@ -1928,6 +1952,7 @@ function SettingsView({ users, globalConfig }: { users: User[], globalConfig: { 
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[500px]">
         {activeSubTab === 'cadastros' && <UserRegistrationTab users={users} />}
         {activeSubTab === 'setores-ferramentas' && <GlobalConfigTab config={globalConfig} />}
+        {activeSubTab === 'relatorios' && <ReportsTab projects={projects} users={users} actions={actions} />}
         {activeSubTab === 'perfil' && (
           <div className="p-12 text-center space-y-4">
             <div className="w-20 h-20 bg-slate-100 rounded-full mx-auto flex items-center justify-center text-slate-400">

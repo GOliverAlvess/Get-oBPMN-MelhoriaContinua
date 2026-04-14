@@ -1,0 +1,399 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  FileText, 
+  Download, 
+  Calendar, 
+  Users, 
+  Briefcase, 
+  Target,
+  History,
+  Filter,
+  Search,
+  CheckCircle2,
+  Clock,
+  User as UserIcon
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { format, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import * as XLSX from 'xlsx';
+import { v4 as uuidv4 } from 'uuid';
+import { 
+  db, 
+  auth, 
+  collection, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  setDoc, 
+  doc, 
+  handleFirestoreError, 
+  OperationType 
+} from '../firebase';
+import { Project, User, OperationalAction, ReportLog } from '../types';
+import { cn } from '../lib/utils';
+import FilterDropdown from './FilterDropdown';
+
+interface ReportsTabProps {
+  projects: Project[];
+  users: User[];
+  actions: OperationalAction[];
+}
+
+export default function ReportsTab({ projects, users, actions }: ReportsTabProps) {
+  const [reportType, setReportType] = useState<'PDCA' | 'Histórico de Ações'>('PDCA');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [reportLogs, setReportLogs] = useState<ReportLog[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  useEffect(() => {
+    const q = query(collection(db, 'reportLogs'), orderBy('timestamp', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ReportLog));
+      setReportLogs(logs);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'reportLogs');
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const toggleFilter = (list: string[], item: string, setter: (val: string[]) => void) => {
+    if (list.includes(item)) {
+      setter(list.filter(i => i !== item));
+    } else {
+      setter([...list, item]);
+    }
+  };
+
+  const generateReport = async () => {
+    setIsGenerating(true);
+    try {
+      const timestamp = new Date().toISOString();
+      const user = auth.currentUser;
+      
+      if (!user) throw new Error('Usuário não autenticado');
+
+      let data: any[] = [];
+      let fileName = '';
+
+      const filterByCommon = (itemDate: string, projectId: string, responsibleId: string, status: string) => {
+        const dateMatch = (!startDate || !endDate) || isWithinInterval(parseISO(itemDate), {
+          start: startOfDay(parseISO(startDate)),
+          end: endOfDay(parseISO(endDate))
+        });
+        const projectMatch = selectedProjectIds.length === 0 || selectedProjectIds.includes(projectId);
+        const collabMatch = selectedCollaborators.length === 0 || selectedCollaborators.includes(responsibleId);
+        const statusMatch = selectedStatuses.length === 0 || selectedStatuses.includes(status);
+        
+        return dateMatch && projectMatch && collabMatch && statusMatch;
+      };
+
+      if (reportType === 'PDCA') {
+        fileName = `Relatorio_PDCA_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
+        
+        projects.forEach(project => {
+          project.subtasks.forEach(subtask => {
+            subtask.pdcaCycles.forEach(cycle => {
+              // PDCA doesn't have a single "responsible" or "status" in the same way as actions, 
+              // but we can filter by project and date of creation
+              const dateMatch = (!startDate || !endDate) || isWithinInterval(parseISO(cycle.createdAt), {
+                start: startOfDay(parseISO(startDate)),
+                end: endOfDay(parseISO(endDate))
+              });
+              const projectMatch = selectedProjectIds.length === 0 || selectedProjectIds.includes(project.id);
+              
+              if (dateMatch && projectMatch) {
+                cycle.plan.actionPlan.forEach(action => {
+                  // Further filter by action responsible and status if selected
+                  const collabMatch = selectedCollaborators.length === 0 || selectedCollaborators.includes(action.who);
+                  const statusMatch = selectedStatuses.length === 0 || selectedStatuses.includes(action.status);
+
+                  if (collabMatch && statusMatch) {
+                    data.push({
+                      'Ciclo': cycle.title,
+                      'ID do Processo': subtask.id,
+                      'Nome do Problema': cycle.title,
+                      'Descrição do Problema': cycle.plan.problemDescription,
+                      'PLAN - Causa Raiz': cycle.plan.rootCauseAnalysis.identifiedRootCause || 'N/A',
+                      'PLAN - Impacto Descrição': cycle.plan.impact.description,
+                      'PLAN - Impacto Valor Atual': cycle.plan.impact.value,
+                      'PLAN - Meta (%)': cycle.plan.impact.goal,
+                      'DO - Ação (What)': action.what,
+                      'DO - Responsável': users.find(u => u.id === action.who)?.name || action.who,
+                      'DO - Setor': action.sector || 'N/A',
+                      'DO - Status': action.status,
+                      'DO - Data Inicio': action.startDate || 'N/A',
+                      'DO - Data Conclusão': action.endDate || 'N/A',
+                      'CHECK - Modo Acompanhamento': action.monitoringMode || 'N/A',
+                      'CHECK - Período': action.monitoringPeriod || 'N/A',
+                      'CHECK - Como Acompanha': action.monitoringTool || 'N/A',
+                      'CHECK - Funcionou': action.worked || 'N/A',
+                      'CHECK - Evidencias': action.evidence || 'N/A',
+                      'CHECK - Impacto de Ganho': action.gainImpact || 'N/A',
+                      'ACT - Status Final': action.finalProblemStatus || 'N/A',
+                      'ACT - Ação Final': action.finalAction || 'N/A',
+                      'ACT - Padronização': action.standardizationModels?.join(', ') || 'N/A'
+                    });
+                  }
+                });
+              }
+            });
+          });
+        });
+      } else {
+        fileName = `Historico_Acoes_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
+        
+        actions.forEach(action => {
+          if (filterByCommon(action.createdAt, action.projectId, action.responsibleId, action.status)) {
+            data.push({
+              'Projeto': action.projectName,
+              'Subtarefa': action.subtaskTitle,
+              'Responsável': action.responsibleName,
+              'Ação': action.action,
+              'Prioridade': action.priority,
+              'Status': action.status,
+              'Previsão': action.forecastDate,
+              'Retorno da tratativa': action.feedback || 'N/A',
+              'Data de conclusão': action.completionDate || 'N/A'
+            });
+          }
+        });
+      }
+
+      if (data.length === 0) {
+        alert('Nenhum dado encontrado para os filtros selecionados.');
+        return;
+      }
+
+      // Generate Excel
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Relatório");
+      XLSX.writeFile(wb, fileName);
+
+      // Log the generation
+      const logId = uuidv4();
+      const log: ReportLog = {
+        id: logId,
+        userId: user.uid,
+        userName: user.displayName || user.email || 'Usuário',
+        timestamp,
+        reportType
+      };
+
+      await setDoc(doc(db, 'reportLogs', logId), log);
+
+    } catch (error) {
+      console.error('Erro ao gerar relatório:', error);
+      alert('Erro ao gerar relatório. Verifique os logs do console.');
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  return (
+    <div className="p-8 lg:p-12 space-y-12">
+      <div className="space-y-8">
+        <div>
+          <h3 className="text-xl font-bold text-slate-900">Gerador de Relatórios</h3>
+          <p className="text-slate-500 text-sm mt-1">Selecione os filtros e gere relatórios em formato Excel.</p>
+        </div>
+
+        <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Tipo de Relatório */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo de Relatório</label>
+              <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                <button 
+                  onClick={() => setReportType('PDCA')}
+                  className={cn(
+                    "flex-1 py-2 rounded-lg text-xs font-bold transition-all",
+                    reportType === 'PDCA' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"
+                  )}
+                >
+                  PDCA
+                </button>
+                <button 
+                  onClick={() => setReportType('Histórico de Ações')}
+                  className={cn(
+                    "flex-1 py-2 rounded-lg text-xs font-bold transition-all",
+                    reportType === 'Histórico de Ações' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"
+                  )}
+                >
+                  Histórico de Ações
+                </button>
+              </div>
+            </div>
+
+            {/* Período */}
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Período</label>
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+                <span className="text-slate-400 text-xs font-bold">até</span>
+                <div className="relative flex-1">
+                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input 
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Projeto */}
+            <FilterDropdown
+              label="Projetos"
+              placeholder="Todos os projetos"
+              options={projects.map(p => ({ id: p.id, label: p.name }))}
+              selected={selectedProjectIds}
+              onToggle={(id) => toggleFilter(selectedProjectIds, id, setSelectedProjectIds)}
+              onClear={() => setSelectedProjectIds([])}
+              icon={<Briefcase size={16} />}
+              showSearch
+            />
+
+            {/* Colaborador */}
+            <FilterDropdown
+              label="Colaboradores"
+              placeholder="Todos os colaboradores"
+              options={users.map(u => ({ id: u.id, label: u.name }))}
+              selected={selectedCollaborators}
+              onToggle={(id) => toggleFilter(selectedCollaborators, id, setSelectedCollaborators)}
+              onClear={() => setSelectedCollaborators([])}
+              icon={<Users size={16} />}
+              showSearch
+            />
+
+            {/* Status */}
+            <FilterDropdown
+              label="Status"
+              placeholder="Todos os status"
+              options={['Pendente', 'Em andamento', 'Concluído'].map(s => ({ id: s, label: s }))}
+              selected={selectedStatuses}
+              onToggle={(id) => toggleFilter(selectedStatuses, id, setSelectedStatuses)}
+              onClear={() => setSelectedStatuses([])}
+              icon={<Target size={16} />}
+            />
+          </div>
+
+          <div className="pt-4 flex justify-end">
+            <button 
+              onClick={generateReport}
+              disabled={isGenerating}
+              className={cn(
+                "bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-3 shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                isGenerating && "animate-pulse"
+              )}
+            >
+              {isGenerating ? (
+                <>
+                  <RefreshCw className="animate-spin" size={18} />
+                  <span>Gerando...</span>
+                </>
+              ) : (
+                <>
+                  <Download size={18} />
+                  <span>Gerar Relatório</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="flex items-center gap-2">
+            <History size={18} className="text-slate-400" />
+            <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Histórico de Relatórios Gerados</h4>
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Usuário</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data e Hora</th>
+                  <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Tipo de Relatório</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {reportLogs.map((log) => (
+                  <tr key={log.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-500">
+                          <UserIcon size={14} />
+                        </div>
+                        <span className="text-sm font-bold text-slate-700">{log.userName}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-sm text-slate-500 font-medium">
+                        {format(parseISO(log.timestamp), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={cn(
+                        "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest",
+                        log.reportType === 'PDCA' ? "bg-indigo-100 text-indigo-600" : "bg-emerald-100 text-emerald-600"
+                      )}>
+                        {log.reportType}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {reportLogs.length === 0 && (
+                  <tr>
+                    <td colSpan={3} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center gap-2 text-slate-400">
+                        <FileText size={32} className="opacity-20" />
+                        <p className="text-sm italic">Nenhum relatório gerado ainda.</p>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RefreshCw({ className, size }: { className?: string, size?: number }) {
+  return (
+    <svg 
+      xmlns="http://www.w3.org/2000/svg" 
+      width={size || 24} 
+      height={size || 24} 
+      viewBox="0 0 24 24" 
+      fill="none" 
+      stroke="currentColor" 
+      strokeWidth="2" 
+      strokeLinecap="round" 
+      strokeLinejoin="round" 
+      className={className}
+    >
+      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+      <path d="M3 21v-5h5" />
+    </svg>
+  );
+}

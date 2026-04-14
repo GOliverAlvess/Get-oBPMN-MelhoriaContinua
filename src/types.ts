@@ -221,3 +221,11 @@ export interface OperationalAction {
   feedback?: string;
   createdAt: string;
 }
+
+export interface ReportLog {
+  id: string;
+  userId: string;
+  userName: string;
+  timestamp: string;
+  reportType: 'PDCA' | 'Histórico de Ações';
+}

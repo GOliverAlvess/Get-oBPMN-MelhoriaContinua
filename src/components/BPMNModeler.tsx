@@ -300,12 +300,17 @@ export default function BPMNModeler({ mapping, onUpdateMapping, projectName }: B
       <div className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-20 shadow-sm">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-indigo-200">
-              <GitBranch size={16} />
+            <div className="w-auto h-10 bg-white rounded-lg flex items-center justify-center shadow-md border border-slate-100 p-1">
+              <img 
+                src="/assets/logo-flowprocess.svg" 
+                alt="Logo" 
+                style={{ height: '36px', width: 'auto', objectFit: 'contain' }}
+                referrerPolicy="no-referrer"
+              />
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-800 leading-none">{projectName}</h3>
-              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">BPMN Modeler</p>
+              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Mapeamento BPMN</p>
             </div>
           </div>
 

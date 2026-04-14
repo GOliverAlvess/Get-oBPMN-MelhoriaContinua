@@ -64,10 +64,10 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
 
     // Process Status Data for Pie Chart
     const processStatusData = [
-      { name: 'Planejamento', value: planning, color: '#fbbf24' },
-      { name: 'Em andamento', value: inProgress, color: '#60a5fa' },
-      { name: 'Em melhoria', value: inImprovement, color: '#818cf8' },
-      { name: 'Concluídos', value: completed, color: '#10b981' },
+      { name: 'Planejamento', value: planning, color: '#EABE41' }, // Brand Gold
+      { name: 'Em andamento', value: inProgress, color: '#003489' }, // Brand Blue
+      { name: 'Em melhoria', value: inImprovement, color: '#678ecb' }, // Lighter Blue
+      { name: 'Concluídos', value: completed, color: '#10b981' }, // Emerald
     ].filter(d => d.value > 0);
 
     // Collaborators Ranking
@@ -246,7 +246,7 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
           title="Total Projetos" 
           value={stats.total} 
           icon={<Briefcase size={18} />} 
-          color="bg-indigo-600" 
+          color="bg-[#003489]" 
         />
         <StatCard 
           title="Concluídos" 
@@ -258,7 +258,7 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
           title="Em Planejamento" 
           value={stats.planning} 
           icon={<Clock size={18} />} 
-          color="bg-amber-500" 
+          color="bg-[#EABE41]" 
         />
         <StatCard 
           title="Em Melhoria" 
@@ -291,7 +291,7 @@ export default function DashboardView({ projects, users, onProjectClick }: Dashb
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                   formatter={(value: number) => [`R$ ${value.toLocaleString()}`, 'Ganho']}
                 />
-                <Bar dataKey="gain" fill="#10b981" radius={[0, 8, 8, 0]} barSize={20} />
+                <Bar dataKey="gain" fill="#003489" radius={[0, 8, 8, 0]} barSize={20} />
               </BarChart>
             </ResponsiveContainer>
           </div>

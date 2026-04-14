@@ -425,12 +425,17 @@ export default function App() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
         <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center space-y-8 border border-slate-100">
-          <div className="w-20 h-20 bg-indigo-600 rounded-2xl flex items-center justify-center text-white mx-auto shadow-xl shadow-indigo-100">
-            <LayoutDashboard size={40} />
+          <div className="w-auto h-12 bg-white rounded-2xl flex items-center justify-center mx-auto shadow-xl shadow-slate-200 p-2 border border-slate-100">
+            <img 
+              src="/assets/logo-flowprocess.svg" 
+              alt="FlowProcess" 
+              style={{ height: '36px', width: 'auto', objectFit: 'contain' }}
+              referrerPolicy="no-referrer"
+            />
           </div>
           <div className="space-y-2">
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">ProcessFlow</h2>
-            <p className="text-slate-500 text-sm">Gestão de Processos, BPMN e PDCA em um só lugar.</p>
+            <h2 className="text-3xl font-black text-[#003489] tracking-tight">FlowProcess</h2>
+            <p className="text-slate-500 text-sm">Gestão de Processos, BPMN e PDCA.</p>
           </div>
           <button 
             onClick={handleLogin}
@@ -453,20 +458,38 @@ export default function App() {
           "fixed left-0 top-0 h-full bg-white border-r border-slate-200 z-50 hidden lg:flex flex-col transition-all duration-300",
           isSidebarCollapsed ? "w-20" : "w-64"
         )}>
-          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-            <div className={cn("flex items-center gap-3 overflow-hidden transition-all duration-300", isSidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100")}>
-              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200 flex-shrink-0">
-                <LayoutDashboard size={24} />
+          <div className="p-4 border-b border-slate-100 flex flex-col items-center gap-4">
+            <div className="flex items-center justify-between w-full">
+              <div className={cn("flex items-center gap-3 overflow-hidden transition-all duration-300", isSidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100")}>
+                <div className="w-auto h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-slate-100 p-1 flex-shrink-0">
+                  <img 
+                    src="/assets/logo-flowprocess.svg" 
+                    alt="Logo" 
+                    style={{ height: '36px', width: 'auto', objectFit: 'contain' }}
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+                <h1 className="font-bold text-lg tracking-tight text-[#003489] whitespace-nowrap">FlowProcess</h1>
               </div>
-              <h1 className="font-bold text-xl tracking-tight text-slate-800 whitespace-nowrap">ProcessFlow</h1>
+              <button 
+                onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+                className={cn("p-2 hover:bg-slate-50 rounded-xl text-slate-400 transition-all", isSidebarCollapsed && "mx-auto")}
+                title={isSidebarCollapsed ? "Expandir Menu" : "Recolher Menu"}
+              >
+                <ChevronRight size={20} className={cn("transition-transform duration-300", !isSidebarCollapsed && "rotate-180")} />
+              </button>
             </div>
-            <button 
-              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 transition-all"
-              title={isSidebarCollapsed ? "Expandir Menu" : "Recolher Menu"}
-            >
-              <ChevronRight size={20} className={cn("transition-transform duration-300", !isSidebarCollapsed && "rotate-180")} />
-            </button>
+            
+            {isSidebarCollapsed && (
+              <div className="w-auto h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-slate-100 p-1">
+                <img 
+                  src="/assets/logo-flowprocess.svg" 
+                  alt="Logo" 
+                  style={{ height: '36px', width: 'auto', objectFit: 'contain' }}
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            )}
           </div>
 
           <nav className="flex-1 p-4 space-y-2">
@@ -1579,8 +1602,13 @@ function ScopeTab({
       <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-100">
-              <GitBranch size={20} />
+            <div className="w-auto h-10 rounded-2xl bg-white border border-slate-100 p-1 flex items-center justify-center shadow-md">
+              <img 
+                src="/assets/logo-flowprocess.svg" 
+                alt="Logo" 
+                style={{ height: '36px', width: 'auto', objectFit: 'contain' }}
+                referrerPolicy="no-referrer"
+              />
             </div>
             Subtarefas do Projeto
           </h3>
@@ -1675,8 +1703,13 @@ function ScopeTab({
                 <tr>
                   <td colSpan={4} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-300">
-                        <GitBranch size={24} />
+                      <div className="w-auto h-12 rounded-2xl bg-white border border-slate-100 p-2 flex items-center justify-center text-slate-300 shadow-sm">
+                        <img 
+                          src="/assets/logo-flowprocess.svg" 
+                          alt="Logo" 
+                          style={{ height: '36px', width: 'auto', objectFit: 'contain', opacity: 0.5 }}
+                          referrerPolicy="no-referrer"
+                        />
                       </div>
                       <div>
                         <p className="font-bold text-slate-500">Nenhuma subtarefa definida</p>

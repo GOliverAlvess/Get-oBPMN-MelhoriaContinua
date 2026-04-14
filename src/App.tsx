@@ -125,6 +125,38 @@ class ErrorBoundary extends Component<any, any> {
   }
 }
 
+function SidebarItem({ active, onClick, icon, label, collapsed }: { 
+  active: boolean, 
+  onClick: () => void, 
+  icon: React.ReactNode, 
+  label: string,
+  collapsed: boolean
+}) {
+  return (
+    <div className="relative group">
+      <button 
+        onClick={onClick}
+        className={cn(
+          "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
+          active ? "bg-indigo-50 text-indigo-700 font-bold" : "text-slate-500 hover:bg-slate-50",
+          collapsed ? "justify-center px-0" : ""
+        )}
+      >
+        <div className={cn("flex-shrink-0", active ? "text-indigo-600" : "text-slate-400")}>
+          {icon}
+        </div>
+        {!collapsed && <span className="whitespace-nowrap">{label}</span>}
+      </button>
+      
+      {collapsed && (
+        <div className="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[100] shadow-xl">
+          {label}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function isValidDate(dateStr: string) {
   if (!dateStr) return false;
   const d = new Date(dateStr);
@@ -139,6 +171,7 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'scope' | 'mapping' | 'pdca'>('scope');
   const [activeView, setActiveView] = useState<'kanban' | 'settings' | 'dashboard' | 'actions'>('dashboard');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [operationalActions, setOperationalActions] = useState<OperationalAction[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [globalConfig, setGlobalConfig] = useState<{ sectors: string[], tools: string[] }>({ sectors: [], tools: [] });
@@ -416,90 +449,93 @@ export default function App() {
     <ErrorBoundary>
       <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans">
         {/* Sidebar */}
-        <aside className="fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 z-50 hidden lg:flex flex-col">
-          <div className="p-6 border-b border-slate-100">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200">
+        <aside className={cn(
+          "fixed left-0 top-0 h-full bg-white border-r border-slate-200 z-50 hidden lg:flex flex-col transition-all duration-300",
+          isSidebarCollapsed ? "w-20" : "w-64"
+        )}>
+          <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+            <div className={cn("flex items-center gap-3 overflow-hidden transition-all duration-300", isSidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100")}>
+              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-200 flex-shrink-0">
                 <LayoutDashboard size={24} />
               </div>
-              <h1 className="font-bold text-xl tracking-tight text-slate-800">ProcessFlow</h1>
+              <h1 className="font-bold text-xl tracking-tight text-slate-800 whitespace-nowrap">ProcessFlow</h1>
             </div>
+            <button 
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="p-2 hover:bg-slate-50 rounded-xl text-slate-400 transition-all"
+              title={isSidebarCollapsed ? "Expandir Menu" : "Recolher Menu"}
+            >
+              <ChevronRight size={20} className={cn("transition-transform duration-300", !isSidebarCollapsed && "rotate-180")} />
+            </button>
           </div>
 
           <nav className="flex-1 p-4 space-y-2">
-            <button 
+            <SidebarItem 
+              active={activeView === 'dashboard'}
               onClick={() => {
                 setActiveView('dashboard');
                 setSelectedProjectId(null);
               }}
-              className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
-                activeView === 'dashboard' ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-500 hover:bg-slate-50"
-              )}
-            >
-              <LayoutDashboard size={20} />
-              <span>Dashboard</span>
-            </button>
-            <button 
+              icon={<LayoutDashboard size={20} />}
+              label="Dashboard"
+              collapsed={isSidebarCollapsed}
+            />
+            <SidebarItem 
+              active={activeView === 'kanban'}
               onClick={() => {
                 setActiveView('kanban');
                 setSelectedProjectId(null);
               }}
-              className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
-                activeView === 'kanban' ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-500 hover:bg-slate-50"
-              )}
-            >
-              <GitBranch size={20} />
-              <span>Projetos</span>
-            </button>
-            <button 
+              icon={<GitBranch size={20} />}
+              label="Projetos"
+              collapsed={isSidebarCollapsed}
+            />
+            <SidebarItem 
+              active={activeView === 'actions'}
               onClick={() => {
                 setActiveView('actions');
                 setSelectedProjectId(null);
               }}
-              className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
-                activeView === 'actions' ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-500 hover:bg-slate-50"
-              )}
-            >
-              <History size={20} />
-              <span>Histórico de Ações</span>
-            </button>
-            <button 
+              icon={<History size={20} />}
+              label="Histórico de Ações"
+              collapsed={isSidebarCollapsed}
+            />
+            <SidebarItem 
+              active={activeView === 'settings'}
               onClick={() => setActiveView('settings')}
-              className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
-                activeView === 'settings' ? "bg-indigo-50 text-indigo-700 font-medium" : "text-slate-500 hover:bg-slate-50"
-              )}
-            >
-              <Settings size={20} />
-              <span>Configurações</span>
-            </button>
+              icon={<Settings size={20} />}
+              label="Configurações"
+              collapsed={isSidebarCollapsed}
+            />
           </nav>
 
           <div className="p-4 border-t border-slate-100">
-            <div className="flex items-center gap-3 px-4 py-3">
-              <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
+            <div className={cn("flex items-center gap-3 px-4 py-3 transition-all duration-300", isSidebarCollapsed ? "justify-center" : "")}>
+              <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">
                 <img src={user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`} alt="User" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-slate-800 truncate">{user.displayName}</p>
-                <p className="text-xs text-slate-500 truncate">{user.email}</p>
-              </div>
-              <LogOut 
-                size={18} 
-                className="text-slate-400 hover:text-red-500 cursor-pointer" 
-                onClick={handleLogout}
-              />
+              {!isSidebarCollapsed && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">{user.displayName}</p>
+                  <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                </div>
+              )}
+              {!isSidebarCollapsed && (
+                <LogOut 
+                  size={18} 
+                  className="text-slate-400 hover:text-red-500 cursor-pointer" 
+                  onClick={handleLogout}
+                />
+              )}
             </div>
           </div>
         </aside>
 
         {/* Main Content */}
         <main className={cn(
-          "transition-all duration-300 min-h-screen",
-          "lg:ml-64 p-4 lg:p-8"
+          "transition-all duration-300 min-h-screen flex flex-col",
+          isSidebarCollapsed ? "lg:ml-20" : "lg:ml-64",
+          "p-4 lg:p-8"
         )}>
           <AnimatePresence mode="wait">
             {activeView === 'settings' ? (
@@ -1043,7 +1079,10 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
         <div className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
           <div className="flex items-center gap-4">
             <button 
-              onClick={() => setSelectedSubtaskId(null)}
+              onClick={() => {
+                setSelectedSubtaskId(null);
+                setActiveTab('scope');
+              }}
               className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 flex items-center gap-2 font-bold text-sm"
             >
               <ChevronRight size={20} className="rotate-180" />
@@ -1093,11 +1132,15 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
             />
           )}
           {activeTab === 'pdca' && (
-            <PDCATab 
+            <PDCAEditor 
               project={project} 
               subtask={selectedSubtask}
               onUpdateSubtask={handleUpdateSubtask}
-              selectedTaskId={selectedSubtaskId} 
+              onBack={() => {
+                setSelectedSubtaskId(null);
+                setActiveTab('scope');
+              }}
+              defaultTaskId={selectedSubtaskId} 
             />
           )}
         </div>

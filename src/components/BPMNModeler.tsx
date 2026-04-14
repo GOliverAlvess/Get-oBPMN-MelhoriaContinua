@@ -297,7 +297,7 @@ export default function BPMNModeler({ mapping, onUpdateMapping, projectName }: B
   return (
     <div className="h-[800px] flex flex-col relative bg-white font-sans overflow-hidden">
       {/* Header Toolbar */}
-      <div className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-4 z-20 shadow-sm">
+      <div className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-20 shadow-sm">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-lg shadow-indigo-200">

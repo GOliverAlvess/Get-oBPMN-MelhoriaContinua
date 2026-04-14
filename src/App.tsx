@@ -23,7 +23,13 @@ import {
   Filter,
   ChevronDown,
   X,
-  Activity
+  Activity,
+  ExternalLink,
+  Globe,
+  Leaf,
+  Heart,
+  ShieldCheck,
+  Briefcase
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -326,6 +332,11 @@ export default function App() {
         toolsUsed: [],
         startDate: new Date().toISOString().split('T')[0],
         forecastCompletion: new Date().toISOString().split('T')[0],
+        presentationLink: '',
+        ods: '',
+        esgEnvironmental: '',
+        esgSocial: '',
+        esgGovernance: '',
         financial: {
           currentImpact: { value: 0, type: 'continuo', period: 'mensal' },
           gainProjection: { value: 0, type: 'fixo', period: 'mensal' }
@@ -1219,19 +1230,6 @@ function ScopeTab({
     }
   };
 
-  const updateFinancial = (section: 'currentImpact' | 'gainProjection', field: string, value: any) => {
-    setProjects({ 
-      ...project, 
-      scope: { 
-        ...project.scope, 
-        financial: { 
-          ...project.scope.financial, 
-          [section]: { ...project.scope.financial[section], [field]: value } 
-        } 
-      } 
-    });
-  };
-
   const addSubtask = () => {
     const newSubtask: Subtask = {
       id: uuidv4(),
@@ -1263,274 +1261,312 @@ function ScopeTab({
   };
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-12">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-        <div className="space-y-10">
-          <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-              <FileText className="text-indigo-500" size={20} />
-              Informações Gerais
-            </h3>
-            <div className="space-y-5">
-              <FormField 
-                label="Título do Projeto" 
-                value={project.scope.title} 
-                onChange={(v) => updateScope('title', v)}
-              />
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Responsável</label>
-                <select 
-                  value={project.assignedTo}
-                  onChange={(e) => handleReassign(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium"
-                >
-                  {users.map(u => (
-                    <option key={u.id} value={u.id}>{u.name}</option>
-                  ))}
-                </select>
-              </div>
-              <FormField 
-                label="Descrição do Problema" 
-                value={project.scope.problemDescription} 
-                type="textarea" 
-                onChange={(v) => updateScope('problemDescription', v)}
-              />
-              <FormField 
-                label="Objetivo Mensurável" 
-                value={project.scope.measurableObjective} 
-                onChange={(v) => updateScope('measurableObjective', v)}
-              />
-            </div>
-          </section>
-
-          <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-              <Calendar className="text-indigo-500" size={20} />
-              Cronograma
-            </h3>
-            <div className="grid grid-cols-2 gap-6">
-              <FormField 
-                label="Data Início" 
-                value={project.scope.startDate} 
-                type="date" 
-                onChange={(v) => updateScope('startDate', v)}
-              />
-              <FormField 
-                label="Previsão Conclusão" 
-                value={project.scope.forecastCompletion} 
-                type="date" 
-                onChange={(v) => updateScope('forecastCompletion', v)}
-              />
-            </div>
-          </section>
-        </div>
-
-        <div className="space-y-10">
-          <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-              <Target className="text-indigo-500" size={20} />
-              Impacto Financeiro
-            </h3>
-            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-8">
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Impacto Atual</p>
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-slate-400 font-black text-xl">R$</span>
-                    <input 
-                      type="number"
-                      value={project.scope.financial.currentImpact.value}
-                      onFocus={(e) => e.target.select()}
-                      onChange={(e) => updateFinancial('currentImpact', 'value', parseFloat(e.target.value) || 0)}
-                      className="text-4xl font-black text-slate-900 bg-transparent border-b-2 border-slate-200 outline-none w-full focus:border-indigo-500 transition-all"
-                    />
-                  </div>
-                  <div className="flex gap-3">
-                    <select 
-                      value={project.scope.financial.currentImpact.period}
-                      onChange={(e) => updateFinancial('currentImpact', 'period', e.target.value)}
-                      className="text-[10px] bg-white border border-slate-200 px-3 py-1.5 rounded-lg font-black uppercase tracking-wider"
-                    >
-                      <option value="mensal">Mensal</option>
-                      <option value="anual">Anual</option>
-                    </select>
-                    <select 
-                      value={project.scope.financial.currentImpact.type}
-                      onChange={(e) => updateFinancial('currentImpact', 'type', e.target.value)}
-                      className="text-[10px] bg-white border border-slate-200 px-3 py-1.5 rounded-lg font-black uppercase tracking-wider"
-                    >
-                      <option value="fixo">Fixo</option>
-                      <option value="continuo">Contínuo</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-              <div className="h-px bg-slate-200" />
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Projeção de Ganho (%)</p>
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-center gap-2">
-                    <input 
-                      type="number"
-                      value={project.scope.financial.gainProjection.value}
-                      onFocus={(e) => e.target.select()}
-                      onChange={(e) => updateFinancial('gainProjection', 'value', parseFloat(e.target.value) || 0)}
-                      className="text-4xl font-black text-emerald-600 bg-transparent border-b-2 border-emerald-100 outline-none w-full focus:border-emerald-500 transition-all"
-                    />
-                    <span className="text-emerald-500 font-black text-3xl">%</span>
-                  </div>
-                  <div className="flex gap-3">
-                    <select 
-                      value={project.scope.financial.gainProjection.period}
-                      onChange={(e) => updateFinancial('gainProjection', 'period', e.target.value)}
-                      className="text-[10px] bg-white border border-slate-200 px-3 py-1.5 rounded-lg font-black uppercase tracking-wider"
-                    >
-                      <option value="mensal">Mensal</option>
-                      <option value="anual">Anual</option>
-                    </select>
-                    <select 
-                      value={project.scope.financial.gainProjection.type}
-                      onChange={(e) => updateFinancial('gainProjection', 'type', e.target.value)}
-                      className="text-[10px] bg-white border border-slate-200 px-3 py-1.5 rounded-lg font-black uppercase tracking-wider"
-                    >
-                      <option value="fixo">Fixo</option>
-                      <option value="continuo">Contínuo</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-            <h3 className="text-lg font-bold text-slate-800 mb-6 flex items-center gap-2">
-              <Users className="text-indigo-500" size={20} />
-              Setores e Ferramentas
-            </h3>
-            <div className="space-y-6">
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">Setores Envolvidos</label>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {project.scope.involvedSectors.map(s => (
-                    <span key={s.id} className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-indigo-100 flex items-center gap-2">
-                      {s.name}
-                      <button 
-                        onClick={() => updateScope('involvedSectors', project.scope.involvedSectors.filter(item => item.id !== s.id))}
-                        className="hover:text-rose-500 transition-colors"
-                      >
-                        <X size={12} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <select 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                  onChange={(e) => {
-                    const name = e.target.value;
-                    if (name && !project.scope.involvedSectors.find(s => s.name === name)) {
-                      updateScope('involvedSectors', [...project.scope.involvedSectors, { id: uuidv4(), name }]);
-                    }
-                    e.target.value = '';
-                  }}
-                >
-                  <option value="">+ Adicionar Setor</option>
-                  {globalConfig.sectors.map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">Ferramentas Utilizadas</label>
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {project.scope.toolsUsed.map(t => (
-                    <span key={t.id} className="bg-slate-50 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 flex items-center gap-2">
-                      {t.name}
-                      <button 
-                        onClick={() => updateScope('toolsUsed', project.scope.toolsUsed.filter(item => item.id !== t.id))}
-                        className="hover:text-rose-500 transition-colors"
-                      >
-                        <X size={12} />
-                      </button>
-                    </span>
-                  ))}
-                </div>
-                <select 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                  onChange={(e) => {
-                    const name = e.target.value;
-                    if (name && !project.scope.toolsUsed.find(t => t.name === name)) {
-                      updateScope('toolsUsed', [...project.scope.toolsUsed, { id: uuidv4(), name }]);
-                    }
-                    e.target.value = '';
-                  }}
-                >
-                  <option value="">+ Adicionar Ferramenta</option>
-                  {globalConfig.tools.map(t => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </section>
-        </div>
-      </div>
-
-      {/* Subtasks Section */}
-      <section className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-                <GitBranch size={20} />
-              </div>
-              Subtarefas do Projeto
-            </h3>
-            <p className="text-slate-500 text-sm mt-1">Clique em uma subtarefa para iniciar o Mapeamento e PDCA.</p>
+    <div className="p-8 max-w-5xl mx-auto space-y-12">
+      {/* 1. INFORMAÇÕES GERAIS */}
+      <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+        <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <FileText size={20} />
           </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <span className="text-2xl font-black text-indigo-600">{calculateProjectProgress(project)}%</span>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Progresso Total</p>
-            </div>
-            <button 
-              onClick={addSubtask}
-              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
-            >
-              <Plus size={18} />
-              Nova Subtarefa
-            </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {(project.subtasks || []).map((subtask) => {
-            return (
-              <motion.div 
-                key={subtask.id}
-                whileHover={{ y: -4 }}
-                className="group p-5 bg-slate-50 rounded-2xl border border-slate-200 hover:border-indigo-300 hover:bg-white transition-all shadow-sm hover:shadow-md relative"
+          Informações Gerais
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-6">
+            <FormField 
+              label="Título do Projeto" 
+              value={project.scope.title} 
+              onChange={(v) => updateScope('title', v)}
+            />
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Responsável</label>
+              <select 
+                value={project.assignedTo}
+                onChange={(e) => handleReassign(e.target.value)}
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium text-sm"
               >
-                <div className="flex items-start justify-between mb-4">
-                  <select 
-                    value={subtask.priority}
-                    onChange={(e) => updateSubtask(subtask.id, 'priority', e.target.value)}
-                    className={cn(
-                      "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border-none cursor-pointer",
-                      subtask.priority === 'Alta' ? "bg-rose-100 text-rose-600" :
-                      subtask.priority === 'Média' ? "bg-indigo-100 text-indigo-600" :
-                      "bg-slate-200 text-slate-600"
-                    )}
-                  >
-                    <option value="Alta">Alta</option>
-                    <option value="Média">Média</option>
-                    <option value="Baixa">Baixa</option>
-                  </select>
-                  <div className="flex items-center gap-2">
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="space-y-6">
+            <div className="space-y-2">
+              <FormField 
+                label="Link da apresentação do projeto" 
+                value={project.scope.presentationLink || ''} 
+                placeholder="Cole aqui o link da apresentação do projeto"
+                onChange={(v) => updateScope('presentationLink', v)}
+              />
+              {project.scope.presentationLink && (
+                <a 
+                  href={project.scope.presentationLink} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors ml-1"
+                >
+                  <ExternalLink size={14} />
+                  Abrir Apresentação
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 2. CONTEXTO DO PROJETO */}
+      <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+        <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+            <Target size={20} />
+          </div>
+          Contexto do Projeto
+        </h3>
+        <div className="space-y-8">
+          <FormField 
+            label="Descrição do Problema" 
+            value={project.scope.problemDescription} 
+            type="textarea" 
+            placeholder="Descreva detalhadamente o problema que este projeto visa resolver..."
+            onChange={(v) => updateScope('problemDescription', v)}
+          />
+          <FormField 
+            label="Objetivo Mensurável" 
+            value={project.scope.measurableObjective} 
+            type="textarea"
+            placeholder="Ex: Reduzir o tempo de processamento em 20% até o final do semestre..."
+            onChange={(v) => updateScope('measurableObjective', v)}
+          />
+        </div>
+      </section>
+
+      {/* 3. ESTRUTURA DO PROJETO */}
+      <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+        <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <Briefcase size={20} />
+          </div>
+          Estrutura do Projeto
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+          <div className="space-y-8">
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase mb-3 block ml-1">Setores Envolvidos</label>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {project.scope.involvedSectors.map(s => (
+                  <span key={s.id} className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-indigo-100 flex items-center gap-2">
+                    {s.name}
+                    <button 
+                      onClick={() => updateScope('involvedSectors', project.scope.involvedSectors.filter(item => item.id !== s.id))}
+                      className="hover:text-rose-500 transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <select 
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                onChange={(e) => {
+                  const name = e.target.value;
+                  if (name && !project.scope.involvedSectors.find(s => s.name === name)) {
+                    updateScope('involvedSectors', [...project.scope.involvedSectors, { id: uuidv4(), name }]);
+                  }
+                  e.target.value = '';
+                }}
+              >
+                <option value="">+ Adicionar Setor</option>
+                {globalConfig.sectors.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-slate-500 uppercase mb-3 block ml-1">Ferramentas Utilizadas</label>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {project.scope.toolsUsed.map(t => (
+                  <span key={t.id} className="bg-slate-50 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 flex items-center gap-2">
+                    {t.name}
+                    <button 
+                      onClick={() => updateScope('toolsUsed', project.scope.toolsUsed.filter(item => item.id !== t.id))}
+                      className="hover:text-rose-500 transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <select 
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                onChange={(e) => {
+                  const name = e.target.value;
+                  if (name && !project.scope.toolsUsed.find(t => t.name === name)) {
+                    updateScope('toolsUsed', [...project.scope.toolsUsed, { id: uuidv4(), name }]);
+                  }
+                  e.target.value = '';
+                }}
+              >
+                <option value="">+ Adicionar Ferramenta</option>
+                {globalConfig.tools.map(t => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 gap-8">
+            <FormField 
+              label="Data Início" 
+              value={project.scope.startDate} 
+              type="date" 
+              onChange={(v) => updateScope('startDate', v)}
+            />
+            <FormField 
+              label="Previsão Conclusão" 
+              value={project.scope.forecastCompletion} 
+              type="date" 
+              onChange={(v) => updateScope('forecastCompletion', v)}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* 4. ODS */}
+      <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+        <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+            <Globe size={20} />
+          </div>
+          ODS (Objetivos de Desenvolvimento Sustentável)
+        </h3>
+        <FormField 
+          label="ODS Vinculadas" 
+          value={project.scope.ods || ''} 
+          type="textarea"
+          placeholder="Exemplo:&#10;ODS 8 - Trabalho Decente e Crescimento Econômico: ...&#10;ODS 9 - Indústria, Inovação e Infraestrutura: ...&#10;ODS 12 - Consumo e Produção Responsáveis: ..."
+          onChange={(v) => updateScope('ods', v)}
+        />
+      </section>
+
+      {/* 5. ESG */}
+      <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+        <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <Leaf size={20} />
+          </div>
+          ESG (Environmental, Social and Governance)
+        </h3>
+        <div className="grid grid-cols-1 gap-8">
+          <div className="flex gap-4 items-start">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 mt-6">
+              <Leaf size={24} />
+            </div>
+            <div className="flex-1">
+              <FormField 
+                label="E – Environmental" 
+                value={project.scope.esgEnvironmental || ''} 
+                type="textarea"
+                placeholder="Descreva os impactos ambientais do projeto..."
+                onChange={(v) => updateScope('esgEnvironmental', v)}
+              />
+            </div>
+          </div>
+          <div className="flex gap-4 items-start">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 mt-6">
+              <Heart size={24} />
+            </div>
+            <div className="flex-1">
+              <FormField 
+                label="S – Social" 
+                value={project.scope.esgSocial || ''} 
+                type="textarea"
+                placeholder="Ex: Qualidade de vida, bem-estar, impacto nos colaboradores..."
+                onChange={(v) => updateScope('esgSocial', v)}
+              />
+            </div>
+          </div>
+          <div className="flex gap-4 items-start">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mt-6">
+              <ShieldCheck size={24} />
+            </div>
+            <div className="flex-1">
+              <FormField 
+                label="G – Governance" 
+                value={project.scope.esgGovernance || ''} 
+                type="textarea"
+                placeholder="Ex: Eficiência, conformidade, controles, governança..."
+                onChange={(v) => updateScope('esgGovernance', v)}
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 6. SUBTAREFAS (LIST FORMAT) */}
+      <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-lg shadow-indigo-100">
+              <GitBranch size={20} />
+            </div>
+            Subtarefas do Projeto
+          </h3>
+          <button 
+            onClick={addSubtask}
+            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+          >
+            <Plus size={18} />
+            Nova Subtarefa
+          </button>
+        </div>
+
+        <div className="overflow-hidden border border-slate-100 rounded-2xl">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-100">
+                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Título da Subtarefa</th>
+                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-32">Prioridade</th>
+                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-40">Status</th>
+                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-24 text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {(project.subtasks || []).map((subtask) => (
+                <tr key={subtask.id} className="group hover:bg-slate-50/50 transition-colors">
+                  <td className="px-6 py-4">
+                    <input 
+                      value={subtask.title}
+                      onChange={(e) => updateSubtask(subtask.id, 'title', e.target.value)}
+                      className="w-full bg-transparent font-bold text-slate-700 outline-none border-none p-0 focus:text-indigo-600 transition-colors"
+                      placeholder="Título da subtarefa..."
+                    />
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                        {subtask.pdcaCycles.length} Ciclos PDCA
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <select 
+                      value={subtask.priority}
+                      onChange={(e) => updateSubtask(subtask.id, 'priority', e.target.value)}
+                      className={cn(
+                        "w-full px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border-none cursor-pointer",
+                        subtask.priority === 'Alta' ? "bg-rose-100 text-rose-600" :
+                        subtask.priority === 'Média' ? "bg-indigo-100 text-indigo-600" :
+                        "bg-slate-200 text-slate-600"
+                      )}
+                    >
+                      <option value="Alta">Alta</option>
+                      <option value="Média">Média</option>
+                      <option value="Baixa">Baixa</option>
+                    </select>
+                  </td>
+                  <td className="px-6 py-4">
                     <select 
                       value={subtask.status}
                       onChange={(e) => updateSubtask(subtask.id, 'status', e.target.value)}
                       className={cn(
-                        "flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border-none cursor-pointer",
+                        "w-full px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border-none cursor-pointer",
                         subtask.status === 'Concluído' ? "bg-emerald-100 text-emerald-600" :
                         subtask.status === 'Em andamento' ? "bg-amber-100 text-amber-600" :
                         "bg-slate-200 text-slate-500"
@@ -1540,64 +1576,74 @@ function ScopeTab({
                       <option value="Em andamento">Em andamento</option>
                       <option value="Concluído">Concluído</option>
                     </select>
-                    <button 
-                      onClick={() => deleteSubtask(subtask.id)}
-                      className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </div>
-                </div>
-                
-                <input 
-                  value={subtask.title}
-                  onChange={(e) => updateSubtask(subtask.id, 'title', e.target.value)}
-                  className="w-full bg-transparent font-bold text-slate-800 group-hover:text-indigo-600 transition-colors mb-2 outline-none border-none p-0"
-                  placeholder="Título da subtarefa..."
-                />
-
-                <div 
-                  onClick={() => onSelectSubtask(subtask.id)}
-                  className="flex items-center justify-between mt-4 pt-4 border-t border-slate-100 cursor-pointer"
-                >
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                    {subtask.pdcaCycles.length} Ciclos PDCA
-                  </span>
-                  <div className="flex items-center gap-2 text-indigo-600 font-bold text-[10px] uppercase tracking-wider">
-                    Executar
-                    <ChevronRight size={16} className="text-slate-300 group-hover:text-indigo-400 transform group-hover:translate-x-1 transition-all" />
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-          {(project.subtasks || []).length === 0 && (
-            <div className="col-span-full py-12 text-center bg-slate-50 rounded-3xl border-2 border-dashed border-slate-200">
-              <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center text-slate-300 mx-auto mb-4 shadow-sm">
-                <GitBranch size={32} />
-              </div>
-              <h4 className="font-bold text-slate-600">Nenhuma subtarefa definida</h4>
-              <p className="text-slate-400 text-sm mt-1 max-w-xs mx-auto">
-                Adicione os processos ou frentes de trabalho que compõem este projeto.
-              </p>
-              <button 
-                onClick={addSubtask}
-                className="mt-6 px-6 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:border-indigo-300 hover:text-indigo-600 transition-all shadow-sm"
-              >
-                + Adicionar Subtarefa
-              </button>
-            </div>
-          )}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center justify-end gap-2">
+                      <button 
+                        onClick={() => onSelectSubtask(subtask.id)}
+                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                        title="Executar Mapeamento e PDCA"
+                      >
+                        <ArrowRight size={18} />
+                      </button>
+                      <button 
+                        onClick={() => deleteSubtask(subtask.id)}
+                        className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                        title="Excluir Subtarefa"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {(project.subtasks || []).length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-6 py-12 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-300">
+                        <GitBranch size={24} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-500">Nenhuma subtarefa definida</p>
+                        <p className="text-xs text-slate-400 mt-1">Adicione os processos ou frentes de trabalho que compõem este projeto.</p>
+                      </div>
+                      <button 
+                        onClick={addSubtask}
+                        className="mt-2 text-indigo-600 font-bold text-sm hover:underline"
+                      >
+                        + Adicionar primeira subtarefa
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
       </section>
     </div>
   );
 }
 
-function FormField({ label, value, type = 'text', readOnly = false, onChange }: { label: string, value: any, type?: string, readOnly?: boolean, onChange?: (v: any) => void }) {
+function FormField({ 
+  label, 
+  value, 
+  type = 'text', 
+  readOnly = false, 
+  placeholder,
+  onChange 
+}: { 
+  label: string, 
+  value: any, 
+  type?: string, 
+  readOnly?: boolean, 
+  placeholder?: string,
+  onChange?: (v: any) => void 
+}) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">{label}</label>
+      <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">{label}</label>
       {readOnly ? (
         <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-400 cursor-not-allowed">
           {value}
@@ -1605,15 +1651,17 @@ function FormField({ label, value, type = 'text', readOnly = false, onChange }: 
       ) : type === 'textarea' ? (
         <textarea 
           value={value}
+          placeholder={placeholder}
           onChange={(e) => onChange?.(e.target.value)}
-          className="w-full p-3 bg-white border border-slate-200 rounded-xl text-slate-700 min-h-[100px] outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+          className="w-full p-4 bg-white border border-slate-200 rounded-xl text-slate-700 min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm leading-relaxed"
         />
       ) : (
         <input 
           type={type}
           value={value}
+          placeholder={placeholder}
           onChange={(e) => onChange?.(e.target.value)}
-          className="w-full p-3 bg-white border border-slate-200 rounded-xl text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+          className="w-full p-4 bg-white border border-slate-200 rounded-xl text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm"
         />
       )}
     </div>

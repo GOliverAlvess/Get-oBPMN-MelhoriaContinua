@@ -14,12 +14,17 @@ export interface ToolUsed {
 export interface ProjectScope {
   title: string;
   responsible: string;
+  presentationLink?: string;
   problemDescription: string;
   measurableObjective: string;
   involvedSectors: InvolvedSector[];
   toolsUsed: ToolUsed[];
   startDate: string;
   forecastCompletion: string;
+  ods?: string;
+  esgEnvironmental?: string;
+  esgSocial?: string;
+  esgGovernance?: string;
   financial: {
     currentImpact: {
       value: number;

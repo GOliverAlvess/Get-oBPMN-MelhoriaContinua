@@ -40,6 +40,7 @@ export default function PDCAEditor({
 }) {
   const [activeCycleId, setActiveCycleId] = useState<string | null>(null);
   const [activePhase, setActivePhase] = useState<'PLAN' | 'DO' | 'CHECK' | 'ACT' | 'REPORT'>('PLAN');
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [showProblemsModal, setShowProblemsModal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(true);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
@@ -91,6 +92,32 @@ export default function PDCAEditor({
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [subtask.pdcaCycles, activeCycle?.taskId]);
 
+  const handlePhaseChange = (newPhase: typeof activePhase) => {
+    if (activePhase === 'PLAN' && newPhase !== 'PLAN' && activeCycle) {
+      const { rootCauseAnalysis } = activeCycle.plan;
+      let isValid = true;
+
+      if (rootCauseAnalysis.type === 'ishikawa') {
+        if (!rootCauseAnalysis.priorityCauses || rootCauseAnalysis.priorityCauses.length === 0) {
+          isValid = false;
+        }
+      } else if (rootCauseAnalysis.type === '5whys' || rootCauseAnalysis.type === 'list') {
+        if (!rootCauseAnalysis.identifiedRootCause?.trim()) {
+          isValid = false;
+        }
+      }
+
+      if (!isValid) {
+        setShowValidationErrors(true);
+        setSaveFeedback("Preencha a causa raiz antes de avançar para o plano de ação.");
+        return;
+      }
+    }
+    
+    setShowValidationErrors(false);
+    setActivePhase(newPhase);
+  };
+
   const createNewCycle = (taskId: string, taskLabel: string) => {
     const cycleCount = subtask.pdcaCycles.filter(c => c.taskId === taskId).length;
     const newCycle: PDCACycle = {
@@ -98,7 +125,7 @@ export default function PDCAEditor({
       taskId,
       title: cycleCount > 0 ? `Ciclo PDCA ${cycleCount + 1} - ${taskLabel}` : `Ciclo PDCA - ${taskLabel}`,
       createdAt: new Date().toISOString(),
-      status: 'Em planejamento',
+      status: 'Ativo',
       plan: {
         problemDescription: taskLabel,
         rootCauseAnalysis: {
@@ -284,12 +311,8 @@ export default function PDCAEditor({
 
   const dashboardStats = useMemo(() => {
     const total = cycles.length;
-    const resolved = cycles.filter(c => 
-      c.plan.actionPlan.every(a => a.finalProblemStatus === 'Resolvido') && 
-      c.status === 'Concluído' && 
-      c.plan.actionPlan.length > 0
-    ).length;
-    const inProgress = cycles.filter(c => c.status !== 'Concluído').length;
+    const resolved = cycles.filter(c => c.status === 'Concluído').length;
+    const inProgress = cycles.filter(c => c.status === 'Ativo').length;
     
     return { total, resolved, inProgress };
   }, [cycles]);
@@ -331,7 +354,19 @@ export default function PDCAEditor({
 
           {/* Cycles List */}
           <div className="space-y-4">
-            <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">Ciclos Ativos</h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">Acompanhamento de Ciclos</h4>
+              <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest">
+                <div className="flex items-center gap-1.5 text-indigo-600">
+                  <div className="w-2 h-2 rounded-full bg-indigo-600" />
+                  Ativos
+                </div>
+                <div className="flex items-center gap-1.5 text-slate-400">
+                  <div className="w-2 h-2 rounded-full bg-slate-300" />
+                  Concluídos
+                </div>
+              </div>
+            </div>
             {cycles.length === 0 ? (
               <div className="py-20 bg-white border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-slate-400">
                 <Target size={48} className="mb-4 opacity-20" />
@@ -347,11 +382,17 @@ export default function PDCAEditor({
                       setActiveCycleId(cycle.id);
                       setShowDashboard(false);
                     }}
-                    className="bg-white p-6 rounded-2xl border border-slate-200 hover:border-indigo-300 transition-all cursor-pointer group shadow-sm"
+                    className={cn(
+                      "bg-white p-6 rounded-2xl border transition-all cursor-pointer group shadow-sm",
+                      cycle.status === 'Concluído' ? "border-slate-100 opacity-75 grayscale-[0.5]" : "border-slate-200 hover:border-indigo-300"
+                    )}
                   >
                     <div className="flex justify-between items-start mb-4">
                       <div>
-                        <h5 className="font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{cycle.title}</h5>
+                        <h5 className={cn(
+                          "font-bold transition-colors",
+                          cycle.status === 'Concluído' ? "text-slate-500" : "text-slate-800 group-hover:text-indigo-600"
+                        )}>{cycle.title}</h5>
                         <p className="text-xs text-slate-400 mt-1">Iniciado em {format(new Date(cycle.createdAt), 'dd/MM/yyyy')}</p>
                       </div>
                       <StatusBadge status={cycle.status} />
@@ -400,13 +441,17 @@ export default function PDCAEditor({
                     </div>
                   ) : (
                     problemsFromMapping.map(p => {
-                      const isCompleted = subtask.pdcaCycles.some(c => c.taskId === p.id && c.status === 'Concluído');
+                      const hasActiveCycle = subtask.pdcaCycles.some(c => c.taskId === p.id && c.status === 'Ativo');
+                      const completedCycles = subtask.pdcaCycles.filter(c => c.taskId === p.id && c.status === 'Concluído');
+                      const isCompleted = completedCycles.length > 0 && !hasActiveCycle;
+
                       return (
                         <div 
                           key={p.id}
                           className={cn(
                             "p-4 border rounded-2xl flex items-center justify-between group transition-all",
-                            isCompleted ? "bg-slate-100 border-slate-200 opacity-60 grayscale" : "bg-slate-50 border-slate-200 hover:border-indigo-300"
+                            hasActiveCycle ? "bg-indigo-50 border-indigo-200" : 
+                            isCompleted ? "bg-slate-50 border-slate-200 opacity-80" : "bg-slate-50 border-slate-200 hover:border-indigo-300"
                           )}
                         >
                           <div>
@@ -416,19 +461,39 @@ export default function PDCAEditor({
                                 <Clock size={10} /> {p.time} min
                               </span>
                               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{p.role}</span>
-                              {isCompleted && (
+                              {hasActiveCycle && (
+                                <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1">
+                                  <RefreshCw size={10} className="animate-spin-slow" /> Ciclo Ativo
+                                </span>
+                              )}
+                              {isCompleted && !hasActiveCycle && (
                                 <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest flex items-center gap-1">
-                                  <CheckCircle2 size={10} /> Finalizado
+                                  <CheckCircle2 size={10} /> Histórico Concluído
                                 </span>
                               )}
                             </div>
                           </div>
-                          {!isCompleted && (
+                          {!hasActiveCycle && (
                             <button 
                               onClick={() => createNewCycle(p.id, p.label)}
                               className="bg-white text-indigo-600 px-4 py-2 rounded-xl text-xs font-black shadow-sm border border-slate-200 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all"
                             >
-                              Iniciar PDCA
+                              {isCompleted ? 'Iniciar Novo Ciclo' : 'Iniciar PDCA'}
+                            </button>
+                          )}
+                          {hasActiveCycle && (
+                            <button 
+                              onClick={() => {
+                                const activeCycle = subtask.pdcaCycles.find(c => c.taskId === p.id && c.status === 'Ativo');
+                                if (activeCycle) {
+                                  setActiveCycleId(activeCycle.id);
+                                  setShowDashboard(false);
+                                  setShowProblemsModal(false);
+                                }
+                              }}
+                              className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-black shadow-md hover:bg-indigo-700 transition-all"
+                            >
+                              Ver Ciclo
                             </button>
                           )}
                         </div>
@@ -459,7 +524,7 @@ export default function PDCAEditor({
             <div>
               <h3 className="font-bold text-slate-800 truncate max-w-[300px]">{activeCycle?.title}</h3>
               <div className="flex items-center gap-2">
-                <StatusBadge status={activeCycle?.status || 'Não iniciado'} />
+                <StatusBadge status={activeCycle?.status || 'Ativo'} />
                 <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                   {activeCycle && format(new Date(activeCycle.createdAt), 'dd/MM/yyyy')}
                 </span>
@@ -485,10 +550,7 @@ export default function PDCAEditor({
             onChange={(e) => updateCycle({ status: e.target.value as any })}
             className="bg-slate-100 border-none text-xs font-black uppercase tracking-widest px-4 py-2 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            <option value="Não iniciado">Não iniciado</option>
-            <option value="Em planejamento">Em planejamento</option>
-            <option value="Em execução">Em execução</option>
-            <option value="Em validação">Em validação</option>
+            <option value="Ativo">Ativo</option>
             <option value="Concluído">Concluído</option>
           </select>
           <button 
@@ -506,11 +568,11 @@ export default function PDCAEditor({
           <>
             {/* Phase Tabs */}
             <div className="bg-white border-b border-slate-200 px-8 flex gap-8">
-              <PhaseTab active={activePhase === 'PLAN'} onClick={() => setActivePhase('PLAN')} label="PLAN (P)" color="indigo" />
-              <PhaseTab active={activePhase === 'DO'} onClick={() => setActivePhase('DO')} label="DO (D)" color="amber" />
-              <PhaseTab active={activePhase === 'CHECK'} onClick={() => setActivePhase('CHECK')} label="CHECK (C)" color="emerald" />
-              <PhaseTab active={activePhase === 'ACT'} onClick={() => setActivePhase('ACT')} label="ACT (A)" color="rose" />
-              <PhaseTab active={activePhase === 'REPORT'} onClick={() => setActivePhase('REPORT')} label="RELATÓRIO PDCA" color="slate" />
+              <PhaseTab active={activePhase === 'PLAN'} onClick={() => handlePhaseChange('PLAN')} label="PLAN (P)" color="indigo" />
+              <PhaseTab active={activePhase === 'DO'} onClick={() => handlePhaseChange('DO')} label="DO (D)" color="amber" />
+              <PhaseTab active={activePhase === 'CHECK'} onClick={() => handlePhaseChange('CHECK')} label="CHECK (C)" color="emerald" />
+              <PhaseTab active={activePhase === 'ACT'} onClick={() => handlePhaseChange('ACT')} label="ACT (A)" color="rose" />
+              <PhaseTab active={activePhase === 'REPORT'} onClick={() => handlePhaseChange('REPORT')} label="RELATÓRIO PDCA" color="slate" />
             </div>
 
             {/* Phase Content */}
@@ -719,6 +781,12 @@ export default function PDCAEditor({
                                       )}
                                     </motion.div>
                                   )}
+                                  {activeCycle.plan.rootCauseAnalysis.type === 'ishikawa' && (!activeCycle.plan.rootCauseAnalysis.priorityCauses || activeCycle.plan.rootCauseAnalysis.priorityCauses.length === 0) && showValidationErrors && (
+                                    <div className="mt-4 p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-rose-600 animate-pulse">
+                                      <AlertCircle size={20} />
+                                      <p className="text-xs font-black uppercase tracking-widest">Selecione as causas prioritárias para avançar</p>
+                                    </div>
+                                  )}
                                 </>
                               ) : activeCycle.plan.rootCauseAnalysis.entries.map((entry, idx) => (
                               <div key={entry.id} className="flex items-center gap-4">
@@ -768,7 +836,12 @@ export default function PDCAEditor({
                                         identifiedRootCause: e.target.value 
                                       } 
                                     })}
-                                    className="w-full p-4 bg-white border border-indigo-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm min-h-[100px]"
+                                    className={cn(
+                                      "w-full p-4 bg-white border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm min-h-[100px] transition-all",
+                                      showValidationErrors && !activeCycle.plan.rootCauseAnalysis.identifiedRootCause?.trim() 
+                                        ? "border-rose-300 bg-rose-50/30" 
+                                        : "border-indigo-100"
+                                    )}
                                   />
                                   <p className="text-[10px] text-indigo-400 font-bold italic">* Campo obrigatório para conclusão do PLAN</p>
                                   {!activeCycle.plan.rootCauseAnalysis.identifiedRootCause && (
@@ -954,6 +1027,16 @@ export default function PDCAEditor({
                           </div>
                         </div>
                       </div>
+
+                      <div className="flex justify-end pt-8 border-t border-slate-200">
+                        <button 
+                          onClick={() => handlePhaseChange('DO')}
+                          className="flex items-center gap-2 bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all group"
+                        >
+                          Próxima Etapa: DO (Execução)
+                          <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                        </button>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -989,7 +1072,13 @@ export default function PDCAEditor({
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                  <StatusBadge status={item.status === 'Concluído' ? 'Concluído' : item.status === 'Em andamento' ? 'Em execução' : 'Não iniciado'} />
+                                  <span className={cn(
+                                    "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
+                                    item.status === 'Concluído' ? "bg-emerald-100 text-emerald-700" :
+                                    item.status === 'Em andamento' ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
+                                  )}>
+                                    {item.status}
+                                  </span>
                                 </div>
                               </div>
 
@@ -1565,10 +1654,7 @@ export default function PDCAEditor({
 
   function getProgress(status: PDCAStatus) {
     switch (status) {
-      case 'Não iniciado': return 0;
-      case 'Em planejamento': return 25;
-      case 'Em execução': return 50;
-      case 'Em validação': return 75;
+      case 'Ativo': return 50;
       case 'Concluído': return 100;
       default: return 0;
     }
@@ -1625,17 +1711,16 @@ function StatCard({ title, value, icon, color }: { title: string, value: number,
   );
 }
 
-function StatusBadge({ status }: { status: PDCAStatus }) {
+function StatusBadge({ status }: { status: string }) {
   const styles: any = {
-    'Não iniciado': "bg-slate-100 text-slate-500",
-    'Em planejamento': "bg-indigo-100 text-indigo-700",
-    'Em execução': "bg-amber-100 text-amber-700",
-    'Em validação': "bg-emerald-100 text-emerald-700",
-    'Concluído': "bg-slate-900 text-white"
+    'Ativo': "bg-indigo-100 text-indigo-700",
+    'Concluído': "bg-emerald-100 text-emerald-700 border border-emerald-200",
+    'Em andamento': "bg-amber-100 text-amber-700",
+    'Pendente': "bg-slate-100 text-slate-600"
   };
 
   return (
-    <span className={cn("text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider", styles[status])}>
+    <span className={cn("text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider", styles[status] || "bg-slate-100 text-slate-600")}>
       {status}
     </span>
   );

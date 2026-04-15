@@ -141,7 +141,7 @@ export interface ActionPlanItem {
   standardizationModels?: ('POP' | 'ITO' | 'Painel de controle')[];
 }
 
-export type PDCAStatus = 'Não iniciado' | 'Em planejamento' | 'Em execução' | 'Em validação' | 'Concluído';
+export type PDCAStatus = 'Ativo' | 'Concluído';
 export type PDCAPriority = 'Baixa' | 'Média' | 'Alta' | 'Crítica';
 
 export interface PDCACycle {

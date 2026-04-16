@@ -22,9 +22,8 @@ service cloud.firestore {
     //   - status: string (required, enum)
     //   - assignedTo: string (required, userId)
     //   - scope: map (required)
-    //   - mapping: map (required)
-    //   - pdcaCycles: list (optional)
-    //   - savedColors: list (optional)
+    //   - subtasks: list (required)
+    //   - priority: string (optional, enum)
     //
     // Collection: config
     // Document ID: {configId}
@@ -84,7 +83,7 @@ service cloud.firestore {
     }
 
     function isValidProject(data) {
-      return hasRequiredFields(['id', 'name', 'createdAt', 'progress', 'status', 'assignedTo', 'scope', 'mapping']) &&
+      return hasRequiredFields(['id', 'name', 'createdAt', 'progress', 'status', 'assignedTo', 'scope', 'subtasks']) &&
              data.id is string && data.id.size() > 0 &&
              data.name is string && data.name.size() > 0 && data.name.size() < 200 &&
              isValidDateString(data.createdAt) &&
@@ -93,7 +92,7 @@ service cloud.firestore {
              (!('priority' in data) || data.priority in ['Baixa', 'Média', 'Alta']) &&
              data.assignedTo is string &&
              data.scope is map &&
-             data.mapping is map;
+             data.subtasks is list;
     }
 
     function isValidConfig(data) {

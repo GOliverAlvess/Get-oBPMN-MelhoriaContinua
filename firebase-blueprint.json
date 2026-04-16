@@ -14,7 +14,7 @@
     },
     "Project": {
       "title": "Project",
-      "description": "A process management project including BPMN and PDCA",
+      "description": "A process management project including multiple subtasks with BPMN and PDCA",
       "type": "object",
       "properties": {
         "id": { "type": "string" },
@@ -25,11 +25,9 @@
         "priority": { "type": "string", "enum": ["Baixa", "Média", "Alta"] },
         "assignedTo": { "type": "string", "description": "User ID" },
         "scope": { "type": "object" },
-        "mapping": { "type": "object" },
-        "pdcaCycles": { "type": "array" },
-        "savedColors": { "type": "array" }
+        "subtasks": { "type": "array" }
       },
-      "required": ["id", "name", "createdAt", "progress", "status", "assignedTo", "scope", "mapping"]
+      "required": ["id", "name", "createdAt", "progress", "status", "assignedTo", "scope", "subtasks"]
     },
     "GlobalConfig": {
       "title": "GlobalConfig",

@@ -51,7 +51,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [actions, searchTerm, filterProject, filterResponsible, filterStatus, filterPriority]);
 
-  const handleUpdateAction = React.useCallback(async (id: string, updates: Partial<OperationalAction>) => {
+  const handleUpdateAction = async (id: string, updates: Partial<OperationalAction>) => {
     try {
       const actionRef = doc(db, 'operationalActions', id);
       const action = actions.find(a => a.id === id);
@@ -61,18 +61,18 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `operationalActions/${id}`);
     }
-  }, [actions]);
+  };
 
-  const handleDeleteAction = React.useCallback(async (id: string) => {
+  const handleDeleteAction = async (id: string) => {
     if (!window.confirm('Tem certeza que deseja excluir esta ação?')) return;
     try {
       await deleteDoc(doc(db, 'operationalActions', id));
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, `operationalActions/${id}`);
     }
-  }, []);
+  };
 
-  const exportToCSV = React.useCallback(() => {
+  const exportToCSV = () => {
     const headers = ['Projeto', 'Subtarefa', 'Responsável', 'Ação', 'Prioridade', 'Status', 'Previsão', 'Conclusão', 'Retorno'];
     const rows = filteredActions.map(a => [
       a.projectName,
@@ -100,10 +100,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }, [filteredActions]);
-
-  const [visibleCount, setVisibleCount] = useState(50);
-  const visibleActions = useMemo(() => filteredActions.slice(0, visibleCount), [filteredActions, visibleCount]);
+  };
 
   return (
     <div className="space-y-8">
@@ -210,7 +207,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {visibleActions.map((action) => (
+              {filteredActions.map((action) => (
                 <tr key={action.id} className="group hover:bg-slate-50/50 transition-colors">
                   <td className="px-8 py-6">
                     <span className="font-bold text-slate-700 text-sm whitespace-nowrap">{action.projectName}</span>
@@ -311,16 +308,6 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
             </tbody>
           </table>
         </div>
-        {filteredActions.length > visibleCount && (
-          <div className="p-6 border-t border-slate-100 text-center">
-            <button 
-              onClick={() => setVisibleCount(prev => prev + 50)}
-              className="px-6 py-2 bg-slate-50 text-slate-500 rounded-xl font-bold text-sm hover:bg-slate-100 transition-all border border-slate-200"
-            >
-              Carregar mais ações ({filteredActions.length - visibleCount} restantes)
-            </button>
-          </div>
-        )}
       </div>
 
       <CreateActionModal 
@@ -333,7 +320,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
   );
 }
 
-const CreateActionModal = React.memo(({ isOpen, onClose, projects, users }: { isOpen: boolean, onClose: () => void, projects: Project[], users: User[] }) => {
+function CreateActionModal({ isOpen, onClose, projects, users }: { isOpen: boolean, onClose: () => void, projects: Project[], users: User[] }) {
   const [projectId, setProjectId] = useState('');
   const [subtaskId, setSubtaskId] = useState('');
   const [action, setAction] = useState('');
@@ -341,10 +328,10 @@ const CreateActionModal = React.memo(({ isOpen, onClose, projects, users }: { is
   const [priority, setPriority] = useState<ProjectPriority>('Média');
   const [forecastDate, setForecastDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const selectedProject = useMemo(() => projects.find(p => p.id === projectId), [projects, projectId]);
-  const subtasks = useMemo(() => selectedProject?.subtasks || [], [selectedProject]);
+  const selectedProject = projects.find(p => p.id === projectId);
+  const subtasks = selectedProject?.subtasks || [];
 
-  const handleSubmit = React.useCallback(async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!projectId || !subtaskId || !action || !responsibleId) {
       alert('Por favor, preencha todos os campos obrigatórios.');
@@ -382,7 +369,7 @@ const CreateActionModal = React.memo(({ isOpen, onClose, projects, users }: { is
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `operationalActions/${newAction.id}`);
     }
-  }, [projectId, subtaskId, action, responsibleId, priority, forecastDate, subtasks, users, selectedProject, onClose]);
+  };
 
   return (
     <AnimatePresence>
@@ -520,4 +507,4 @@ const CreateActionModal = React.memo(({ isOpen, onClose, projects, users }: { is
       )}
     </AnimatePresence>
   );
-});
+}

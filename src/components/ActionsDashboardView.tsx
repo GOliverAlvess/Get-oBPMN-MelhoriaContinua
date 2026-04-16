@@ -103,13 +103,13 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
     };
   }, [filteredActions, users, projects]);
 
-  const toggleFilter = React.useCallback((list: string[], item: string, setter: (val: string[]) => void) => {
+  const toggleFilter = (list: string[], item: string, setter: (val: string[]) => void) => {
     if (list.includes(item)) {
       setter(list.filter(i => i !== item));
     } else {
       setter([...list, item]);
     }
-  }, []);
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -317,7 +317,7 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
   );
 }
 
-const SummaryCard = React.memo(({ title, value, icon, color }: { title: string, value: number, icon: React.ReactNode, color: string }) => {
+function SummaryCard({ title, value, icon, color }: { title: string, value: number, icon: React.ReactNode, color: string }) {
   return (
     <motion.div 
       whileHover={{ y: -3 }}
@@ -332,4 +332,4 @@ const SummaryCard = React.memo(({ title, value, icon, color }: { title: string, 
       </div>
     </motion.div>
   );
-});
+}

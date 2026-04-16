@@ -92,7 +92,7 @@ export default function PDCAEditor({
       .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   }, [subtask.pdcaCycles, activeCycle?.taskId]);
 
-  const handlePhaseChange = React.useCallback((newPhase: typeof activePhase) => {
+  const handlePhaseChange = (newPhase: typeof activePhase) => {
     if (activePhase === 'PLAN' && newPhase !== 'PLAN' && activeCycle) {
       const { rootCauseAnalysis } = activeCycle.plan;
       let isValid = true;
@@ -116,9 +116,9 @@ export default function PDCAEditor({
     
     setShowValidationErrors(false);
     setActivePhase(newPhase);
-  }, [activePhase, activeCycle]);
+  };
 
-  const createNewCycle = React.useCallback((taskId: string, taskLabel: string) => {
+  const createNewCycle = (taskId: string, taskLabel: string) => {
     const cycleCount = subtask.pdcaCycles.filter(c => c.taskId === taskId).length;
     const newCycle: PDCACycle = {
       id: uuidv4(),
@@ -152,20 +152,20 @@ export default function PDCAEditor({
     setActivePhase('PLAN');
     setShowDashboard(false);
     setShowProblemsModal(false);
-  }, [subtask, onUpdateSubtask]);
+  };
 
-  const updateCycle = React.useCallback((newData: Partial<PDCACycle>) => {
+  const updateCycle = (newData: Partial<PDCACycle>) => {
     if (!activeCycleId) return;
     const newCycles = subtask.pdcaCycles.map(c => c.id === activeCycleId ? { ...c, ...newData } : c);
     onUpdateSubtask({ ...subtask, pdcaCycles: newCycles });
-  }, [activeCycleId, subtask.pdcaCycles, onUpdateSubtask]);
+  };
 
-  const handleSave = React.useCallback(() => {
+  const handleSave = () => {
     setSaveFeedback('Dados salvos com sucesso!');
     setTimeout(() => setSaveFeedback(null), 3000);
-  }, []);
+  };
 
-  const exportToCSV = React.useCallback(() => {
+  const exportToCSV = () => {
     if (relatedCycles.length === 0) return;
     
     const headers = [
@@ -236,7 +236,7 @@ export default function PDCAEditor({
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  }, [relatedCycles, activeCycle?.taskId]);
+  };
 
   const normalizeColors = (element: HTMLElement) => {
     const all = element.querySelectorAll("*");
@@ -1661,7 +1661,7 @@ export default function PDCAEditor({
   }
 }
 
-const ReportSection = React.memo(({ title, color, children }: { title: string, color: string, children: React.ReactNode }) => {
+function ReportSection({ title, color, children }: { title: string, color: string, children: React.ReactNode }) {
   const colorClasses: Record<string, string> = {
     indigo: "bg-indigo-50 border-indigo-100 text-indigo-800",
     amber: "bg-amber-50 border-amber-100 text-amber-800",
@@ -1680,18 +1680,18 @@ const ReportSection = React.memo(({ title, color, children }: { title: string, c
       </div>
     </div>
   );
-});
+}
 
-const ReportField = React.memo(({ label, value }: { label: string, value: any }) => {
+function ReportField({ label, value }: { label: string, value: any }) {
   return (
     <div className="space-y-1">
       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</p>
       <p className="text-sm font-bold text-slate-700">{value || 'N/A'}</p>
     </div>
   );
-});
+}
 
-const StatCard = React.memo(({ title, value, icon, color }: { title: string, value: number, icon: React.ReactNode, color: string }) => {
+function StatCard({ title, value, icon, color }: { title: string, value: number, icon: React.ReactNode, color: string }) {
   const colors: any = {
     indigo: "bg-indigo-50 text-indigo-600",
     amber: "bg-amber-50 text-amber-600",
@@ -1709,9 +1709,9 @@ const StatCard = React.memo(({ title, value, icon, color }: { title: string, val
       </div>
     </div>
   );
-});
+}
 
-const StatusBadge = React.memo(({ status }: { status: string }) => {
+function StatusBadge({ status }: { status: string }) {
   const styles: any = {
     'Ativo': "bg-indigo-100 text-indigo-700",
     'Concluído': "bg-emerald-100 text-emerald-700 border border-emerald-200",
@@ -1724,9 +1724,9 @@ const StatusBadge = React.memo(({ status }: { status: string }) => {
       {status}
     </span>
   );
-});
+}
 
-const PhaseTab = React.memo(({ active, onClick, label, color }: { active: boolean, onClick: () => void, label: string, color: string }) => {
+function PhaseTab({ active, onClick, label, color }: { active: boolean, onClick: () => void, label: string, color: string }) {
   const colors: any = {
     indigo: "border-indigo-600 text-indigo-600",
     amber: "border-amber-500 text-amber-500",
@@ -1745,9 +1745,9 @@ const PhaseTab = React.memo(({ active, onClick, label, color }: { active: boolea
       {label}
     </button>
   );
-});
+}
 
-const SectionHeader = React.memo(({ number, title }: { number: string, title: string }) => {
+function SectionHeader({ number, title }: { number: string, title: string }) {
   return (
     <div className="flex items-center gap-4">
       <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black shadow-lg">
@@ -1756,9 +1756,9 @@ const SectionHeader = React.memo(({ number, title }: { number: string, title: st
       <h4 className="text-xl font-black text-slate-800 tracking-tight">{title}</h4>
     </div>
   );
-});
+}
 
-const ParetoInput = React.memo(({ label, value, onChange }: { label: string, value: string, onChange: (v: string) => void }) => {
+function ParetoInput({ label, value, onChange }: { label: string, value: string, onChange: (v: string) => void }) {
   return (
     <div className="space-y-1">
       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</label>
@@ -1770,9 +1770,9 @@ const ParetoInput = React.memo(({ label, value, onChange }: { label: string, val
       />
     </div>
   );
-});
+}
 
-const PhaseSection = React.memo(({ title, value, onChange }: { title: string, value: string, onChange: (v: string) => void }) => {
+function PhaseSection({ title, value, onChange }: { title: string, value: string, onChange: (v: string) => void }) {
   return (
     <section className="space-y-4">
       <h4 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2">
@@ -1787,4 +1787,4 @@ const PhaseSection = React.memo(({ title, value, onChange }: { title: string, va
       />
     </section>
   );
-});
+}

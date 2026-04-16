@@ -486,7 +486,7 @@ function formatCompactNumber(number: number) {
   return number.toString();
 }
 
-const StatCard = React.memo(({ 
+function StatCard({ 
   title, 
   value, 
   icon, 
@@ -500,7 +500,7 @@ const StatCard = React.memo(({
   color: string,
   highlight?: boolean,
   isCurrency?: boolean
-}) => {
+}) {
   const displayValue = typeof value === 'number' ? formatCompactNumber(value) : value;
   const finalValue = isCurrency ? `R$ ${displayValue}` : displayValue;
 
@@ -546,4 +546,4 @@ const StatCard = React.memo(({
       )}
     </motion.div>
   );
-});
+}

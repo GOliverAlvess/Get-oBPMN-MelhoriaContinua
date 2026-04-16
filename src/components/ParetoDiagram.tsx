@@ -14,7 +14,7 @@ import {
 } from 'recharts';
 import { ParetoItem } from '../types';
 
-const ParetoDiagram = React.memo(({ data }: { data: ParetoItem[] }) => {
+export default function ParetoDiagram({ data }: { data: ParetoItem[] }) {
   const sortedData = useMemo(() => {
     const sorted = [...data].sort((a, b) => b.quantity - a.quantity);
     const total = sorted.reduce((sum, item) => sum + item.quantity, 0);
@@ -83,6 +83,4 @@ const ParetoDiagram = React.memo(({ data }: { data: ParetoItem[] }) => {
       </ResponsiveContainer>
     </div>
   );
-});
-
-export default ParetoDiagram;
+}

@@ -127,13 +127,13 @@ class ErrorBoundary extends Component<any, any> {
   }
 }
 
-const SidebarItem = React.memo(({ active, onClick, icon, label, collapsed }: { 
+function SidebarItem({ active, onClick, icon, label, collapsed }: { 
   active: boolean, 
   onClick: () => void, 
   icon: React.ReactNode, 
   label: string,
   collapsed: boolean
-}) => {
+}) {
   return (
     <div className="relative group">
       <button 
@@ -157,7 +157,7 @@ const SidebarItem = React.memo(({ active, onClick, icon, label, collapsed }: {
       )}
     </div>
   );
-});
+}
 
 function isValidDate(dateStr: string) {
   if (!dateStr) return false;
@@ -236,7 +236,7 @@ export default function App() {
     }
   }, [user]);
 
-  const handleLogin = React.useCallback(async () => {
+  const handleLogin = async () => {
     try {
       await signInWithPopup(auth, googleProvider);
     } catch (error: any) {
@@ -249,11 +249,11 @@ export default function App() {
         alert(`Falha no login: ${error.message}`);
       }
     }
-  }, []);
+  };
 
-  const handleLogout = React.useCallback(() => auth.signOut(), []);
+  const handleLogout = () => auth.signOut();
 
-  const updateProjectInFirestore = React.useCallback(async (updatedProjects: Project[] | ((prev: Project[]) => Project[])) => {
+  const updateProjectInFirestore = async (updatedProjects: Project[] | ((prev: Project[]) => Project[])) => {
     // If it's a function, we need to get the current state
     let newProjects: Project[];
     if (typeof updatedProjects === 'function') {
@@ -267,12 +267,12 @@ export default function App() {
     // For now, let's just update the local state and the Firestore will sync back via onSnapshot
     // But we need to actually write to Firestore here
     setProjects(newProjects);
-  }, [projects]);
+  };
 
   const [isSaving, setIsSaving] = useState(false);
 
   // Improved update function for child components
-  const syncProjectToFirestore = React.useCallback(async (projectToSync: Project) => {
+  const syncProjectToFirestore = async (projectToSync: Project) => {
     // Recalculate status automatically
     const updatedProject = {
       ...projectToSync,
@@ -289,11 +289,12 @@ export default function App() {
     } catch (error) {
       console.error("Auto-save failed:", error);
     }
-  }, []);
+  };
 
-  const handleManualSave = React.useCallback(async (projectToSave: Project) => {
+  const handleManualSave = async (projectToSave: Project) => {
     setIsSaving(true);
     try {
+      console.log("⏳ Iniciando salvamento MANUAL no Firestore para o projeto:", projectToSave.id);
       const projectRef = doc(db, 'projects', projectToSave.id);
       
       // Ensure date is valid ISO string for security rules
@@ -316,6 +317,7 @@ export default function App() {
       };
 
       await setDoc(projectRef, finalProject);
+      console.log("✅ Projeto salvo com sucesso!");
     } catch (error: any) {
       console.error("❌ Erro ao salvar no Firestore:", error);
       if (error.message?.includes('offline') || error.message?.includes('not found')) {
@@ -325,18 +327,24 @@ export default function App() {
     } finally {
       setTimeout(() => setIsSaving(false), 1000);
     }
-  }, []);
+  };
 
-  const handleDeleteProject = React.useCallback(async (id: string) => {
+  const handleDeleteProject = async (id: string) => {
+    console.log('🗑️ [App] Iniciando exclusão do projeto:', id);
+    
     try {
       const projectRef = doc(db, 'projects', id);
+      console.log('📡 [App] Chamando deleteDoc para:', projectRef.path);
       await deleteDoc(projectRef);
       
       // Update local state immediately
       setProjects(prev => {
         const filtered = prev.filter(p => p.id !== id);
+        console.log(`✅ [App] Estado local atualizado. De ${prev.length} para ${filtered.length} projetos.`);
         return filtered;
       });
+      
+      console.log('✅ [App] Projeto excluído com sucesso do Firestore.');
     } catch (error: any) {
       console.error('❌ [App] Erro crítico ao excluir projeto:', error);
       
@@ -346,9 +354,9 @@ export default function App() {
         // Ignore
       }
     }
-  }, []);
+  };
 
-  const handleCreateProject = React.useCallback(async (data: { name: string, priority: ProjectPriority, assignedTo: string }) => {
+  const handleCreateProject = async (data: { name: string, priority: ProjectPriority, assignedTo: string }) => {
     if (!user) return;
     const newId = uuidv4();
     const assignedUser = users.find(u => u.id === data.assignedTo);
@@ -391,18 +399,18 @@ export default function App() {
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `projects/${newId}`);
     }
-  }, [user, users]);
+  };
 
-  const selectedProject = React.useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
+  const selectedProject = projects.find(p => p.id === selectedProjectId);
 
-  const handleProjectClick = React.useCallback((id: string) => {
+  const handleProjectClick = (id: string) => {
     setSelectedProjectId(id);
     setActiveTab('scope');
-  }, []);
+  };
 
-  const handleBackToKanban = React.useCallback(() => {
+  const handleBackToKanban = () => {
     setSelectedProjectId(null);
-  }, []);
+  };
 
   if (!isAuthReady) {
     return (
@@ -628,14 +636,14 @@ export default function App() {
 
 // --- KANBAN VIEW ---
 
-const KanbanView = React.memo(({ projects, users, onProjectClick, onCreateProject, onDeleteProject }: { 
+function KanbanView({ projects, users, onProjectClick, onCreateProject, onDeleteProject }: { 
   projects: Project[], 
   users: User[], 
   onProjectClick: (id: string) => void,
   onCreateProject: () => void,
   onDeleteProject: (id: string) => void,
   key?: string
-}) => {
+}) {
   const [groupBy, setGroupBy] = useState<'status' | 'collaborator'>('status');
   const [visibleStatuses, setVisibleStatuses] = useState<ProjectStatus[]>(['Planejamento', 'Em andamento', 'Em melhoria', 'Concluído']);
   const [visibleCollaborators, setVisibleCollaborators] = useState<string[]>(users.map(u => u.id));
@@ -651,34 +659,30 @@ const KanbanView = React.memo(({ projects, users, onProjectClick, onCreateProjec
     }
   }, [users]);
 
-  const toggleStatus = React.useCallback((status: ProjectStatus) => {
+  const toggleStatus = (status: ProjectStatus) => {
     setVisibleStatuses(prev => 
       prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status]
     );
-  }, []);
+  };
 
-  const toggleCollaborator = React.useCallback((userId: string) => {
+  const toggleCollaborator = (userId: string) => {
     setVisibleCollaborators(prev => 
       prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
     );
-  }, []);
+  };
 
-  const filteredProjects = React.useMemo(() => {
-    return projects.map(p => ({ ...p, progress: calculateProjectProgress(p) })).filter(p => 
-      visibleStatuses.includes(p.status) && 
-      visibleCollaborators.includes(p.assignedTo) &&
-      (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-       p.scope.responsible.toLowerCase().includes(searchTerm.toLowerCase()))
-    );
-  }, [projects, visibleStatuses, visibleCollaborators, searchTerm]);
+  const filteredProjects = projects.map(p => ({ ...p, progress: calculateProjectProgress(p) })).filter(p => 
+    visibleStatuses.includes(p.status) && 
+    visibleCollaborators.includes(p.assignedTo) &&
+    (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+     p.scope.responsible.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
 
   const activeFiltersCount = (statuses.length - visibleStatuses.length) + (users.length - visibleCollaborators.length);
 
-  const columns = React.useMemo(() => {
-    return groupBy === 'status' 
-      ? statuses.filter(s => visibleStatuses.includes(s))
-      : users.filter(u => visibleCollaborators.includes(u.id));
-  }, [groupBy, statuses, visibleStatuses, users, visibleCollaborators]);
+  const columns = groupBy === 'status' 
+    ? statuses.filter(s => visibleStatuses.includes(s))
+    : users.filter(u => visibleCollaborators.includes(u.id));
 
   return (
     <motion.div 
@@ -914,13 +918,13 @@ const KanbanView = React.memo(({ projects, users, onProjectClick, onCreateProjec
       </div>
     </motion.div>
   );
-});
+}
 
-const ProjectCard = React.memo(({ project, users, onClick, onDelete }: { project: Project, users: User[], onClick: () => void, onDelete: () => void, key?: string }) => {
+function ProjectCard({ project, users, onClick, onDelete }: { project: Project, users: User[], onClick: () => void, onDelete: () => void, key?: string }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const assignedUser = React.useMemo(() => users.find(u => u.id === project.assignedTo), [users, project.assignedTo]);
+  const assignedUser = users.find(u => u.id === project.assignedTo);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1075,11 +1079,11 @@ const ProjectCard = React.memo(({ project, users, onClick, onDelete }: { project
       </div>
     </motion.div>
   );
-});
+}
 
 // --- PROJECT DETAIL VIEW ---
 
-const ProjectDetailView = React.memo(({ project, activeTab, setActiveTab, onBack, setProjects, onSave, isSaving, users, globalConfig }: { 
+function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjects, onSave, isSaving, users, globalConfig }: { 
   project: Project, 
   activeTab: string, 
   setActiveTab: (tab: any) => void,
@@ -1090,15 +1094,15 @@ const ProjectDetailView = React.memo(({ project, activeTab, setActiveTab, onBack
   users: User[],
   globalConfig: { sectors: string[], tools: string[] },
   key?: string
-}) => {
+}) {
   const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
 
-  const selectedSubtask = React.useMemo(() => project.subtasks?.find(s => s.id === selectedSubtaskId), [project.subtasks, selectedSubtaskId]);
+  const selectedSubtask = project.subtasks?.find(s => s.id === selectedSubtaskId);
 
-  const handleUpdateSubtask = React.useCallback((updatedSubtask: Subtask) => {
+  const handleUpdateSubtask = (updatedSubtask: Subtask) => {
     const updatedSubtasks = (project.subtasks || []).map(s => s.id === updatedSubtask.id ? updatedSubtask : s);
     setProjects({ ...project, subtasks: updatedSubtasks });
-  }, [project, setProjects]);
+  };
 
   // If a subtask is selected, we show the "Execution" view (Mapping + PDCA)
   if (selectedSubtaskId && selectedSubtask) {
@@ -1284,9 +1288,9 @@ const ProjectDetailView = React.memo(({ project, activeTab, setActiveTab, onBack
       </div>
     </motion.div>
   );
-});
+}
 
-const TabButton = React.memo(({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) => {
+function TabButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
   return (
     <button 
       onClick={onClick}
@@ -1301,11 +1305,11 @@ const TabButton = React.memo(({ active, onClick, icon, label }: { active: boolea
       <span>{label}</span>
     </button>
   );
-});
+}
 
 // --- SCOPE TAB ---
 
-const ScopeTab = React.memo(({ 
+function ScopeTab({ 
   project, 
   setProjects, 
   users, 
@@ -1317,7 +1321,7 @@ const ScopeTab = React.memo(({
   users: User[], 
   globalConfig: { sectors: string[], tools: string[] },
   onSelectSubtask: (taskId: string) => void
-}) => {
+}) {
   const updateScope = (field: string, value: any) => {
     const updatedProject = { ...project, scope: { ...project.scope, [field]: value } };
     if (field === 'title') {
@@ -1741,9 +1745,9 @@ const ScopeTab = React.memo(({
       </section>
     </div>
   );
-});
+}
 
-const FormField = React.memo(({ 
+function FormField({ 
   label, 
   value, 
   type = 'text', 
@@ -1757,7 +1761,7 @@ const FormField = React.memo(({
   readOnly?: boolean, 
   placeholder?: string,
   onChange?: (v: any) => void 
-}) => {
+}) {
   return (
     <div className="space-y-1.5">
       <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">{label}</label>
@@ -1783,16 +1787,16 @@ const FormField = React.memo(({
       )}
     </div>
   );
-});
+}
 
 // --- MODALS ---
 
-const CreateProjectModal = React.memo(({ isOpen, onClose, onCreate, users }: { 
+function CreateProjectModal({ isOpen, onClose, onCreate, users }: { 
   isOpen: boolean, 
   onClose: () => void, 
   onCreate: (data: { name: string, priority: ProjectPriority, assignedTo: string }) => void,
   users: User[]
-}) => {
+}) {
   const [name, setName] = useState('');
   const [priority, setPriority] = useState<ProjectPriority>('Média');
   const [assignedTo, setAssignedTo] = useState('');
@@ -1877,17 +1881,17 @@ const CreateProjectModal = React.memo(({ isOpen, onClose, onCreate, users }: {
       </motion.div>
     </div>
   );
-});
+}
 
 // --- SETTINGS VIEW ---
 
-const SettingsView = React.memo(({ users, globalConfig, projects, actions }: { 
+function SettingsView({ users, globalConfig, projects, actions }: { 
   users: User[], 
   globalConfig: { sectors: string[], tools: string[] }, 
   projects: Project[],
   actions: OperationalAction[],
   key?: string 
-}) => {
+}) {
   const [activeSubTab, setActiveSubTab] = useState<'perfil' | 'cadastros' | 'setores-ferramentas' | 'relatorios'>('cadastros');
 
   return (
@@ -1960,9 +1964,9 @@ const SettingsView = React.memo(({ users, globalConfig, projects, actions }: {
       </div>
     </motion.div>
   );
-});
+}
 
-const GlobalConfigTab = React.memo(({ config }: { config: { sectors: string[], tools: string[] } }) => {
+function GlobalConfigTab({ config }: { config: { sectors: string[], tools: string[] } }) {
   const [newSector, setNewSector] = useState('');
   const [newTool, setNewTool] = useState('');
 
@@ -2057,9 +2061,9 @@ const GlobalConfigTab = React.memo(({ config }: { config: { sectors: string[], t
       </div>
     </div>
   );
-});
+}
 
-const UserRegistrationTab = React.memo(({ users }: { users: User[] }) => {
+function UserRegistrationTab({ users }: { users: User[] }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [sector, setSector] = useState('');
@@ -2222,9 +2226,9 @@ const UserRegistrationTab = React.memo(({ users }: { users: User[] }) => {
       </div>
     </div>
   );
-});
+}
 
-const PDCATab = React.memo(({ 
+function PDCATab({ 
   project, 
   subtask, 
   onUpdateSubtask,
@@ -2234,7 +2238,7 @@ const PDCATab = React.memo(({
   subtask: Subtask,
   onUpdateSubtask: (s: Subtask) => void,
   selectedTaskId?: string | null 
-}) => {
+}) {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
 
   const filteredCycles = selectedTaskId 
@@ -2305,4 +2309,4 @@ const PDCATab = React.memo(({
       </div>
     </div>
   );
-});
+}

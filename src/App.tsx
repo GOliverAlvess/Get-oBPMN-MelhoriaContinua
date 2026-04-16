@@ -172,7 +172,7 @@ export default function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'scope' | 'mapping' | 'pdca'>('scope');
-  const [activeView, setActiveView] = useState<'kanban' | 'settings' | 'dashboard' | 'actions'>('dashboard');
+  const [activeView, setActiveView] = useState<'kanban' | 'settings' | 'dashboard' | 'actions' | 'home'>('home');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [operationalActions, setOperationalActions] = useState<OperationalAction[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -563,7 +563,31 @@ export default function App() {
           "p-4 lg:p-8"
         )}>
           <AnimatePresence mode="wait">
-            {activeView === 'settings' ? (
+            {activeView === 'home' ? (
+              <motion.div 
+                key="home"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 1.05 }}
+                className="flex-1 flex flex-col items-center justify-center"
+              >
+                 <div className="flex flex-col items-center gap-8 text-center animate-in fade-in zoom-in duration-700">
+                    <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl shadow-indigo-100/40 border border-slate-100">
+                       <img 
+                         src="/assets/logo-flowprocess.svg" 
+                         alt="Logo" 
+                         className="h-32 w-auto object-contain"
+                         referrerPolicy="no-referrer"
+                       />
+                    </div>
+                    <div className="space-y-4">
+                      <h2 className="text-5xl font-black text-[#003489] tracking-tighter">FlowProcess</h2>
+                      <div className="h-1.5 w-24 bg-indigo-600 mx-auto rounded-full" />
+                      <p className="text-slate-400 text-lg font-medium tracking-wide">Gestão Inteligente de Processos</p>
+                    </div>
+                 </div>
+              </motion.div>
+            ) : activeView === 'settings' ? (
               <SettingsView 
                 key="settings" 
                 users={users} 

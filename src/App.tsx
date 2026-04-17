@@ -1992,12 +1992,12 @@ function FormField({
     <div className="space-y-1.5">
       <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">{label}</label>
       {readOnly ? (
-        <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-400 cursor-not-allowed">
-          {value}
+        <div className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-400 cursor-not-allowed text-sm">
+          {value || ''}
         </div>
       ) : type === 'textarea' ? (
         <textarea 
-          value={value}
+          value={value || ''}
           placeholder={placeholder}
           onChange={(e) => onChange?.(e.target.value)}
           className="w-full p-4 bg-white border border-slate-200 rounded-xl text-slate-700 min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm leading-relaxed"
@@ -2005,7 +2005,7 @@ function FormField({
       ) : (
         <input 
           type={type}
-          value={value}
+          value={value || ''}
           placeholder={placeholder}
           onChange={(e) => onChange?.(e.target.value)}
           className="w-full p-4 bg-white border border-slate-200 rounded-xl text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm"

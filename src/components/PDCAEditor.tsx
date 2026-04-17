@@ -593,7 +593,7 @@ export default function PDCAEditor({
                           <SectionHeader number="1" title="Descrição do Problema" />
                           <textarea 
                             placeholder="Descreva o problema de forma clara..."
-                            value={activeCycle.plan.problemDescription}
+                            value={activeCycle.plan.problemDescription || ''}
                             onChange={(e) => updatePlan({ problemDescription: e.target.value })}
                             className="w-full p-6 bg-white border border-slate-200 rounded-3xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all min-h-[120px] text-slate-700 font-medium shadow-sm"
                           />
@@ -682,7 +682,7 @@ export default function PDCAEditor({
                                           <input 
                                             type="text"
                                             placeholder="Descreva a causa..."
-                                            value={entry.text}
+                                            value={entry.text || ''}
                                             onChange={(e) => {
                                               const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
                                               const newIshikawa = [...currentIshikawa];
@@ -797,7 +797,7 @@ export default function PDCAEditor({
                                   <input 
                                     type="text" 
                                     placeholder={activeCycle.plan.rootCauseAnalysis.type === '5whys' ? `Por quê ${idx + 1}?` : "Descreva a causa..."}
-                                    value={entry.text}
+                                    value={entry.text || ''}
                                     onChange={(e) => {
                                       const newEntries = [...activeCycle.plan.rootCauseAnalysis.entries];
                                       newEntries[idx].text = e.target.value;
@@ -889,7 +889,7 @@ export default function PDCAEditor({
                                   <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">What (O que será feito?)</label>
                                     <input 
-                                      value={item.what} 
+                                      value={item.what || ''} 
                                       placeholder="O que será feito?"
                                       onChange={(e) => updateActionPlan(idx, { what: e.target.value })}
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
@@ -898,7 +898,7 @@ export default function PDCAEditor({
                                   <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Why (Por que será feito?)</label>
                                     <input 
-                                      value={item.why} 
+                                      value={item.why || ''} 
                                       placeholder="Por que essa ação é necessária?"
                                       onChange={(e) => updateActionPlan(idx, { why: e.target.value })}
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
@@ -907,7 +907,7 @@ export default function PDCAEditor({
                                   <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Where (Onde?)</label>
                                     <input 
-                                      value={item.where} 
+                                      value={item.where || ''} 
                                       placeholder="Onde será executada?"
                                       onChange={(e) => updateActionPlan(idx, { where: e.target.value })}
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
@@ -918,7 +918,7 @@ export default function PDCAEditor({
                                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">When (Quando?)</label>
                                       <input 
                                         type="date"
-                                        value={item.when} 
+                                        value={item.when || ''} 
                                         placeholder="Quando será realizada?"
                                         onChange={(e) => updateActionPlan(idx, { when: e.target.value })}
                                         className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
@@ -927,7 +927,7 @@ export default function PDCAEditor({
                                     <div className="space-y-1">
                                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Who (Responsável)</label>
                                       <input 
-                                        value={item.who} 
+                                        value={item.who || ''} 
                                         placeholder="Quem é o responsável?"
                                         onChange={(e) => updateActionPlan(idx, { who: e.target.value })}
                                         className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
@@ -936,7 +936,7 @@ export default function PDCAEditor({
                                     <div className="space-y-1">
                                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Setor</label>
                                       <input 
-                                        value={item.sector} 
+                                        value={item.sector || ''} 
                                         placeholder="Qual o setor?"
                                         onChange={(e) => updateActionPlan(idx, { sector: e.target.value })}
                                         className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
@@ -946,7 +946,7 @@ export default function PDCAEditor({
                                   <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">How (Como será feito?)</label>
                                     <input 
-                                      value={item.how} 
+                                      value={item.how || ''} 
                                       placeholder="Como será executada?"
                                       onChange={(e) => updateActionPlan(idx, { how: e.target.value })}
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
@@ -955,7 +955,7 @@ export default function PDCAEditor({
                                   <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">How much (Custo ou esforço)</label>
                                     <input 
-                                      value={item.howMuch} 
+                                      value={item.howMuch || ''} 
                                       placeholder="Qual o custo ou esforço estimado?"
                                       onChange={(e) => updateActionPlan(idx, { howMuch: e.target.value })}
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
@@ -987,7 +987,7 @@ export default function PDCAEditor({
                             </label>
                             <textarea 
                               placeholder="Qual o prejuízo atual?"
-                              value={activeCycle.plan.impact.description}
+                              value={activeCycle.plan.impact.description || ''}
                               onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, description: e.target.value } })}
                               className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 min-h-[100px]"
                             />
@@ -1001,7 +1001,7 @@ export default function PDCAEditor({
                             <input 
                               type="number"
                               placeholder="Ex: 5000"
-                              value={activeCycle.plan.impact.value}
+                              value={activeCycle.plan.impact.value || 0}
                               onFocus={(e) => e.target.select()}
                               onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, value: parseFloat(e.target.value) || 0 } })}
                               className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
@@ -1017,7 +1017,7 @@ export default function PDCAEditor({
                               <input 
                                 type="number"
                                 placeholder="Ex: 20"
-                                value={activeCycle.plan.impact.goal}
+                                value={activeCycle.plan.impact.goal || 0}
                                 onFocus={(e) => e.target.select()}
                                 onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, goal: parseFloat(e.target.value) || 0 } })}
                                 className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 pr-12"
@@ -1236,7 +1236,7 @@ export default function PDCAEditor({
                                 <div className="space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Modo de Acompanhamento</label>
                                   <select 
-                                    value={item.monitoringMode}
+                                    value={item.monitoringMode || 'Dias'}
                                     onChange={(e) => updateActionPlan(idx, { monitoringMode: e.target.value as any })}
                                     className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
                                   >
@@ -1249,7 +1249,7 @@ export default function PDCAEditor({
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Período</label>
                                   <input 
                                     type="number"
-                                    value={item.monitoringPeriod}
+                                    value={item.monitoringPeriod || 0}
                                     onFocus={(e) => e.target.select()}
                                     onChange={(e) => updateActionPlan(idx, { monitoringPeriod: parseInt(e.target.value) || 0 })}
                                     className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
@@ -1259,7 +1259,7 @@ export default function PDCAEditor({
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Como está sendo feito o acompanhamento?</label>
                                   <input 
                                     type="text"
-                                    value={item.monitoringTool}
+                                    value={item.monitoringTool || ''}
                                     onChange={(e) => updateActionPlan(idx, { monitoringTool: e.target.value })}
                                     placeholder="Ex: Power BI, Excel, E-mail, WhatsApp..."
                                     className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
@@ -1268,7 +1268,7 @@ export default function PDCAEditor({
                                 <div className="space-y-1">
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Funcionou?</label>
                                   <select 
-                                    value={item.worked}
+                                    value={item.worked || 'Sim'}
                                     onChange={(e) => updateActionPlan(idx, { worked: e.target.value as any })}
                                     className={cn(
                                       "w-full px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest outline-none border-none",
@@ -1285,7 +1285,7 @@ export default function PDCAEditor({
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Evidências</label>
                                   <input 
                                     type="text"
-                                    value={item.evidence}
+                                    value={item.evidence || ''}
                                     onChange={(e) => updateActionPlan(idx, { evidence: e.target.value })}
                                     placeholder="Link ou descrição..."
                                     className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
@@ -1295,7 +1295,7 @@ export default function PDCAEditor({
                                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Impacto de ganho</label>
                                   <input 
                                     type="number"
-                                    value={item.gainImpact}
+                                    value={item.gainImpact || 0}
                                     onFocus={(e) => e.target.select()}
                                     onChange={(e) => updateActionPlan(idx, { gainImpact: parseFloat(e.target.value) || 0 })}
                                     placeholder="Informe o custo atual após o plano de ação"
@@ -1344,7 +1344,7 @@ export default function PDCAEditor({
                                   <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Status Final do Problema</label>
                                     <select 
-                                      value={item.finalProblemStatus}
+                                      value={item.finalProblemStatus || 'Resolvido'}
                                       onChange={(e) => updateActionPlan(idx, { finalProblemStatus: e.target.value as any })}
                                       className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
                                     >
@@ -1355,7 +1355,7 @@ export default function PDCAEditor({
                                   <div className="space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Ação Final</label>
                                     <select 
-                                      value={item.finalAction}
+                                      value={item.finalAction || 'Padronizar processo'}
                                       onChange={(e) => updateActionPlan(idx, { finalAction: e.target.value as any })}
                                       className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
                                     >

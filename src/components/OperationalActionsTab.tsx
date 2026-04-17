@@ -32,6 +32,8 @@ interface OperationalActionsTabProps {
 export default function OperationalActionsTab({ actions, projects, users }: OperationalActionsTabProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [actionToDelete, setActionToDelete] = useState<OperationalAction | null>(null);
+  const [showBlockedMessage, setShowBlockedMessage] = useState(false);
   const [filterProject, setFilterProject] = useState<string>('');
   const [filterResponsible, setFilterResponsible] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
@@ -63,13 +65,24 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
     }
   };
 
-  const handleDeleteAction = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir esta ação?')) return;
+  const handleConfirmDelete = async () => {
+    if (!actionToDelete) return;
+    
     try {
-      await deleteDoc(doc(db, 'operationalActions', id));
+      await deleteDoc(doc(db, 'operationalActions', actionToDelete.id));
+      setActionToDelete(null);
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `operationalActions/${id}`);
+      handleFirestoreError(error, OperationType.DELETE, `operationalActions/${actionToDelete.id}`);
     }
+  };
+
+  const handleDeleteClick = (action: OperationalAction) => {
+    if (action.status === 'Concluído') {
+      setShowBlockedMessage(true);
+      setTimeout(() => setShowBlockedMessage(false), 3000);
+      return;
+    }
+    setActionToDelete(action);
   };
 
   const exportToCSV = () => {
@@ -282,7 +295,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
                   </td>
                   <td className="px-8 py-6 text-right">
                     <button 
-                      onClick={() => handleDeleteAction(action.id)}
+                      onClick={() => handleDeleteClick(action)}
                       className="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all shadow-sm border border-transparent hover:border-rose-100"
                     >
                       <Trash2 size={18} />
@@ -316,6 +329,64 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
         projects={projects}
         users={users}
       />
+
+      {/* Alerta de Ação Bloqueada */}
+      <AnimatePresence>
+        {showBlockedMessage && (
+          <motion.div 
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-8 right-8 z-[200] bg-rose-600 text-white px-6 py-4 rounded-2xl shadow-xl flex items-center gap-3 font-bold border border-rose-500"
+          >
+            <AlertCircle size={20} />
+            <span>Ações concluídas não podem ser excluídas.</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Confirmação de Exclusão */}
+      <AnimatePresence>
+        {actionToDelete && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setActionToDelete(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative bg-white w-full max-w-sm rounded-[2rem] shadow-2xl p-8 text-center"
+            >
+              <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-black text-slate-900 mb-2">Confirmar Exclusão</h3>
+              <p className="text-slate-500 text-sm leading-relaxed mb-8">
+                Tem certeza que deseja excluir esta ação? Esta operação não poderá ser desfeita.
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setActionToDelete(null)}
+                  className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all"
+                >
+                  Não, voltar
+                </button>
+                <button 
+                  onClick={handleConfirmDelete}
+                  className="flex-1 px-6 py-3 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-all shadow-lg shadow-rose-100"
+                >
+                  Sim, excluir
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

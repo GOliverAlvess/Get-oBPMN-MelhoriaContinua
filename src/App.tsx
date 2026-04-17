@@ -183,6 +183,12 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setUser(firebaseUser);
       setIsAuthReady(true);
+      // Sempre que o usuário logar ou o sistema for recarregado com um usuário ativo, 
+      // garantimos que a tela inicial seja a 'home' com a logo.
+      if (firebaseUser) {
+        setActiveView('home');
+        setSelectedProjectId(null);
+      }
     });
     return () => unsubscribe();
   }, []);

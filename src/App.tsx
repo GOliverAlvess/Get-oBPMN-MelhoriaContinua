@@ -60,7 +60,7 @@ import {
   getDoc
 } from './firebase';
 import type { FirebaseUser } from './firebase';
-import { Project, ProjectStatus, ProjectPriority, User, Subtask, OperationalAction } from './types';
+import { Project, ProjectStatus, ProjectPriority, User, Subtask, OperationalAction, SavedColor } from './types';
 import { cn } from './lib/utils';
 import MappingTab from './components/MappingTab';
 import PDCAEditor from './components/PDCAEditor';
@@ -177,6 +177,7 @@ export default function App() {
   const [operationalActions, setOperationalActions] = useState<OperationalAction[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [globalConfig, setGlobalConfig] = useState<{ sectors: string[], tools: string[] }>({ sectors: [], tools: [] });
+  const [bpmnSavedColors, setBpmnSavedColors] = useState<SavedColor[]>([]);
 
   // Auth State Listener
   useEffect(() => {
@@ -222,11 +223,18 @@ export default function App() {
       setOperationalActions(actionsData);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'operationalActions'));
 
+    // Listen for Global BPMN Colors
+    const colorsUnsubscribe = onSnapshot(collection(db, 'bpmnSavedColors'), (snapshot) => {
+      const colorsData = snapshot.docs.map(doc => doc.data() as SavedColor);
+      setBpmnSavedColors(colorsData);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'bpmnSavedColors'));
+
     return () => {
       usersUnsubscribe();
       projectsUnsubscribe();
       configUnsubscribe();
       actionsUnsubscribe();
+      colorsUnsubscribe();
     };
   }, [user]);
 
@@ -332,6 +340,22 @@ export default function App() {
       handleFirestoreError(error, OperationType.WRITE, `projects/${projectToSave.id}`);
     } finally {
       setTimeout(() => setIsSaving(false), 1000);
+    }
+  };
+
+  const handleSaveGlobalColor = async (color: SavedColor) => {
+    try {
+      await setDoc(doc(db, 'bpmnSavedColors', color.id), color);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `bpmnSavedColors/${color.id}`);
+    }
+  };
+
+  const handleDeleteGlobalColor = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'bpmnSavedColors', id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `bpmnSavedColors/${id}`);
     }
   };
 
@@ -637,6 +661,9 @@ export default function App() {
                 isSaving={isSaving}
                 users={users}
                 globalConfig={globalConfig}
+                savedColors={bpmnSavedColors}
+                onSaveGlobalColor={handleSaveGlobalColor}
+                onDeleteGlobalColor={handleDeleteGlobalColor}
               />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
@@ -1113,7 +1140,20 @@ function ProjectCard({ project, users, onClick, onDelete }: { project: Project, 
 
 // --- PROJECT DETAIL VIEW ---
 
-function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjects, onSave, isSaving, users, globalConfig }: { 
+function ProjectDetailView({ 
+  project, 
+  activeTab, 
+  setActiveTab, 
+  onBack, 
+  setProjects, 
+  onSave, 
+  isSaving, 
+  users, 
+  globalConfig,
+  savedColors,
+  onSaveGlobalColor,
+  onDeleteGlobalColor
+}: { 
   project: Project, 
   activeTab: string, 
   setActiveTab: (tab: any) => void,
@@ -1123,6 +1163,9 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
   isSaving: boolean,
   users: User[],
   globalConfig: { sectors: string[], tools: string[] },
+  savedColors: SavedColor[],
+  onSaveGlobalColor: (color: SavedColor) => void,
+  onDeleteGlobalColor: (id: string) => void,
   key?: string
 }) {
   const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
@@ -1195,7 +1238,10 @@ function ProjectDetailView({ project, activeTab, setActiveTab, onBack, setProjec
             <MappingTab 
               project={project} 
               subtask={selectedSubtask} 
-              onUpdateSubtask={handleUpdateSubtask} 
+              onUpdateSubtask={handleUpdateSubtask}
+              savedColors={savedColors}
+              onSaveGlobalColor={onSaveGlobalColor}
+              onDeleteGlobalColor={onDeleteGlobalColor}
             />
           )}
           {activeTab === 'pdca' && (
@@ -1352,6 +1398,14 @@ function ScopeTab({
   globalConfig: { sectors: string[], tools: string[] },
   onSelectSubtask: (taskId: string) => void
 }) {
+  const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false);
+  const [newSubtaskData, setNewSubtaskData] = useState({
+    title: '',
+    priority: 'Média' as ProjectPriority,
+    status: 'Pendente' as any,
+    responsibleId: ''
+  });
+
   const updateScope = (field: string, value: any) => {
     const updatedProject = { ...project, scope: { ...project.scope, [field]: value } };
     if (field === 'title') {
@@ -1372,11 +1426,17 @@ function ScopeTab({
   };
 
   const addSubtask = () => {
+    if (!newSubtaskData.title) {
+      alert('Por favor, informe o título da subtarefa.');
+      return;
+    }
+
     const newSubtask: Subtask = {
       id: uuidv4(),
-      title: 'Novo Processo',
-      priority: 'Média',
-      status: 'Em andamento',
+      title: newSubtaskData.title,
+      priority: newSubtaskData.priority,
+      status: newSubtaskData.status,
+      responsibleId: newSubtaskData.responsibleId,
       mapping: {
         nodes: [],
         edges: [],
@@ -1387,6 +1447,13 @@ function ScopeTab({
       pdcaCycles: []
     };
     setProjects({ ...project, subtasks: [...(project.subtasks || []), newSubtask] });
+    setIsSubtaskModalOpen(false);
+    setNewSubtaskData({
+      title: '',
+      priority: 'Média',
+      status: 'Pendente',
+      responsibleId: ''
+    });
   };
 
   const updateSubtask = (id: string, field: keyof Subtask, value: any) => {
@@ -1657,7 +1724,7 @@ function ScopeTab({
             Subtarefas do Projeto
           </h3>
           <button 
-            onClick={addSubtask}
+            onClick={() => setIsSubtaskModalOpen(true)}
             className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
           >
             <Plus size={18} />
@@ -1672,80 +1739,103 @@ function ScopeTab({
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Título da Subtarefa</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-32">Prioridade</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-40">Status</th>
+                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-48">Responsável</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-24 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {(project.subtasks || []).map((subtask) => (
-                <tr key={subtask.id} className="group hover:bg-slate-50/50 transition-colors">
-                  <td className="px-6 py-4">
-                    <input 
-                      value={subtask.title}
-                      onChange={(e) => updateSubtask(subtask.id, 'title', e.target.value)}
-                      className="w-full bg-transparent font-bold text-slate-700 outline-none border-none p-0 focus:text-indigo-600 transition-colors"
-                      placeholder="Título da subtarefa..."
-                    />
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                        {subtask.pdcaCycles.length} Ciclos PDCA
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <select 
-                      value={subtask.priority}
-                      onChange={(e) => updateSubtask(subtask.id, 'priority', e.target.value)}
-                      className={cn(
-                        "w-full px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border-none cursor-pointer",
-                        subtask.priority === 'Alta' ? "bg-rose-100 text-rose-600" :
-                        subtask.priority === 'Média' ? "bg-indigo-100 text-indigo-600" :
-                        "bg-slate-200 text-slate-600"
-                      )}
-                    >
-                      <option value="Alta">Alta</option>
-                      <option value="Média">Média</option>
-                      <option value="Baixa">Baixa</option>
-                    </select>
-                  </td>
-                  <td className="px-6 py-4">
-                    <select 
-                      value={subtask.status}
-                      onChange={(e) => updateSubtask(subtask.id, 'status', e.target.value)}
-                      className={cn(
-                        "w-full px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border-none cursor-pointer",
-                        subtask.status === 'Concluído' ? "bg-emerald-100 text-emerald-600" :
-                        subtask.status === 'Em andamento' ? "bg-amber-100 text-amber-600" :
-                        "bg-slate-200 text-slate-500"
-                      )}
-                    >
-                      <option value="Pendente">Pendente</option>
-                      <option value="Em andamento">Em andamento</option>
-                      <option value="Concluído">Concluído</option>
-                    </select>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center justify-end gap-2">
-                      <button 
-                        onClick={() => onSelectSubtask(subtask.id)}
-                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                        title="Executar Mapeamento e PDCA"
+              {(project.subtasks || []).map((subtask) => {
+                const isReadOnly = subtask.status === 'Concluído';
+                return (
+                  <tr key={subtask.id} className={cn("group hover:bg-slate-50/50 transition-colors", isReadOnly && "bg-slate-50/30")}>
+                    <td className="px-6 py-4">
+                      <input 
+                        value={subtask.title}
+                        onChange={(e) => updateSubtask(subtask.id, 'title', e.target.value)}
+                        readOnly={isReadOnly}
+                        className={cn(
+                          "w-full bg-transparent font-bold text-slate-700 outline-none border-none p-0 transition-colors",
+                          isReadOnly ? "text-slate-400 cursor-not-allowed" : "focus:text-indigo-600"
+                        )}
+                        placeholder="Título da subtarefa..."
+                      />
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                          {subtask.pdcaCycles.length} Ciclos PDCA
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <select 
+                        value={subtask.priority}
+                        onChange={(e) => updateSubtask(subtask.id, 'priority', e.target.value)}
+                        disabled={isReadOnly}
+                        className={cn(
+                          "w-full px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border-none cursor-pointer disabled:cursor-not-allowed",
+                          subtask.priority === 'Alta' ? "bg-rose-100 text-rose-600" :
+                          subtask.priority === 'Média' ? "bg-indigo-100 text-indigo-600" :
+                          "bg-slate-200 text-slate-600"
+                        )}
                       >
-                        <ArrowRight size={18} />
-                      </button>
-                      <button 
-                        onClick={() => deleteSubtask(subtask.id)}
-                        className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                        title="Excluir Subtarefa"
+                        <option value="Alta">Alta</option>
+                        <option value="Média">Média</option>
+                        <option value="Baixa">Baixa</option>
+                      </select>
+                    </td>
+                    <td className="px-6 py-4">
+                      <select 
+                        value={subtask.status}
+                        onChange={(e) => updateSubtask(subtask.id, 'status', e.target.value)}
+                        className={cn(
+                          "w-full px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border-none cursor-pointer",
+                          subtask.status === 'Concluído' ? "bg-emerald-100 text-emerald-600" :
+                          subtask.status === 'Em andamento' ? "bg-amber-100 text-amber-600" :
+                          "bg-slate-200 text-slate-500"
+                        )}
                       >
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                        <option value="Pendente">Pendente</option>
+                        <option value="Em andamento">Em andamento</option>
+                        <option value="Concluído">Concluído</option>
+                      </select>
+                    </td>
+                    <td className="px-6 py-4">
+                      <select 
+                        value={subtask.responsibleId || ''}
+                        onChange={(e) => updateSubtask(subtask.id, 'responsibleId', e.target.value)}
+                        disabled={isReadOnly}
+                        className={cn(
+                          "w-full px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border border-slate-200 cursor-pointer disabled:cursor-not-allowed bg-white text-xs",
+                          isReadOnly ? "opacity-50" : ""
+                        )}
+                      >
+                        <option value="">Sem Responsável</option>
+                        {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center justify-end gap-2">
+                        <button 
+                          onClick={() => onSelectSubtask(subtask.id)}
+                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                          title="Executar Mapeamento e PDCA"
+                        >
+                          <ArrowRight size={18} />
+                        </button>
+                        <button 
+                          onClick={() => deleteSubtask(subtask.id)}
+                          className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                          title="Excluir Subtarefa"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {(project.subtasks || []).length === 0 && (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center">
+                  <td colSpan={5} className="px-6 py-12 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-auto h-12 rounded-2xl bg-white border border-slate-100 p-2 flex items-center justify-center text-slate-300 shadow-sm">
                         <img 
@@ -1760,7 +1850,7 @@ function ScopeTab({
                         <p className="text-xs text-slate-400 mt-1">Adicione os processos ou frentes de trabalho que compõem este projeto.</p>
                       </div>
                       <button 
-                        onClick={addSubtask}
+                        onClick={() => setIsSubtaskModalOpen(true)}
                         className="mt-2 text-indigo-600 font-bold text-sm hover:underline"
                       >
                         + Adicionar primeira subtarefa
@@ -1773,6 +1863,112 @@ function ScopeTab({
           </table>
         </div>
       </section>
+
+      {/* MODAL PARA NOVA SUBTAREFA */}
+      <AnimatePresence>
+        {isSubtaskModalOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSubtaskModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden"
+            >
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg">
+                    <Plus size={24} />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-slate-900">Nova Subtarefa</h3>
+                    <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-0.5">Estrutura do Projeto</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsSubtaskModalOpen(false)} className="p-2 hover:bg-white rounded-xl transition-all text-slate-400">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="p-8 space-y-6">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Título da Subtarefa</label>
+                  <input 
+                    required
+                    value={newSubtaskData.title}
+                    onChange={(e) => setNewSubtaskData({ ...newSubtaskData, title: e.target.value })}
+                    placeholder="Ex: Mapeamento de Processo RH"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Prioridade</label>
+                    <select 
+                      value={newSubtaskData.priority}
+                      onChange={(e) => setNewSubtaskData({ ...newSubtaskData, priority: e.target.value as any })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                    >
+                      <option value="Baixa">Baixa</option>
+                      <option value="Média">Média</option>
+                      <option value="Alta">Alta</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Status Inicial</label>
+                    <select 
+                      value={newSubtaskData.status}
+                      onChange={(e) => setNewSubtaskData({ ...newSubtaskData, status: e.target.value as any })}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                    >
+                      <option value="Pendente">Pendente</option>
+                      <option value="Em andamento">Em andamento</option>
+                      <option value="Concluído">Concluído</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Responsável</label>
+                  <select 
+                    value={newSubtaskData.responsibleId}
+                    onChange={(e) => setNewSubtaskData({ ...newSubtaskData, responsibleId: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  >
+                    <option value="">Selecionar Responsável</option>
+                    {users.map(u => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="pt-4 flex gap-3">
+                  <button 
+                    onClick={() => setIsSubtaskModalOpen(false)}
+                    className="flex-1 px-6 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={addSubtask}
+                    className="flex-[2] px-6 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg"
+                  >
+                    Criar subtarefa
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

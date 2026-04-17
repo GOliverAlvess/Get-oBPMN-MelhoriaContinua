@@ -173,6 +173,7 @@ export interface Subtask {
   title: string;
   priority: ProjectPriority;
   status: 'Pendente' | 'Em andamento' | 'Concluído';
+  responsibleId?: string;
   mapping: {
     xml?: string;
     customData?: Record<string, Partial<BPMNTaskData>>;

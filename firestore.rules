@@ -31,6 +31,14 @@ service cloud.firestore {
     //   - sectors: list (optional, strings)
     //   - tools: list (optional, strings)
     //
+    // Collection: bpmnSavedColors
+    // Document ID: {colorId}
+    // Fields:
+    //   - id: string (required)
+    //   - name: string (required)
+    //   - backgroundColor: string (required)
+    //   - borderColor: string (required)
+    //
     // ===============================================================
 
     // ===============================================================
@@ -127,6 +135,14 @@ service cloud.firestore {
              data.reportType in ['PDCA', 'Histórico de Ações'];
     }
 
+    function isValidSavedColor(data) {
+      return hasRequiredFields(['id', 'name', 'backgroundColor', 'borderColor']) &&
+             data.id is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.backgroundColor is string && data.backgroundColor.matches("^#[0-9a-fA-F]{6}$") &&
+             data.borderColor is string && data.borderColor.matches("^#[0-9a-fA-F]{6}$");
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -159,6 +175,12 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isValidReportLog(request.resource.data);
       allow update, delete: if isAdmin();
+    }
+
+    match /bpmnSavedColors/{colorId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated() && isValidSavedColor(request.resource.data);
+      allow delete: if isAuthenticated();
     }
 
     match /{path=**} {

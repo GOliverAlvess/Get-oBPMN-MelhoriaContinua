@@ -29,6 +29,9 @@ interface BPMNModelerProps {
   mapping: any;
   onUpdateMapping: (mapping: any) => void;
   projectName: string;
+  savedColors: SavedColor[];
+  onSaveGlobalColor: (color: SavedColor) => void;
+  onDeleteGlobalColor: (id: string) => void;
 }
 
 const INITIAL_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -45,7 +48,14 @@ const INITIAL_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
-export default function BPMNModeler({ mapping, onUpdateMapping, projectName }: BPMNModelerProps) {
+export default function BPMNModeler({ 
+  mapping, 
+  onUpdateMapping, 
+  projectName,
+  savedColors,
+  onSaveGlobalColor,
+  onDeleteGlobalColor
+}: BPMNModelerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const modelerRef = useRef<Modeler | null>(null);
   const [selectedElement, setSelectedElement] = useState<any>(null);
@@ -267,17 +277,20 @@ export default function BPMNModeler({ mapping, onUpdateMapping, projectName }: B
     const elementId = selectedElement.id;
     const data = customData[elementId] || {};
     
+    // Check if color is already in library with same name
+    if (savedColors.some(c => c.name.toLowerCase() === newColorName.toLowerCase().trim())) {
+      alert('Já existe uma cor com este nome na biblioteca.');
+      return;
+    }
+
     const newColor: SavedColor = {
       id: uuidv4(),
-      name: newColorName,
+      name: newColorName.trim(),
       backgroundColor: data.backgroundColor || '#ffffff',
       borderColor: data.borderColor || '#333333'
     };
 
-    onUpdateMapping({
-      ...mapping,
-      savedColors: [...(mapping.savedColors || []), newColor]
-    });
+    onSaveGlobalColor(newColor);
     setNewColorName('');
   };
 
@@ -401,6 +414,7 @@ export default function BPMNModeler({ mapping, onUpdateMapping, projectName }: B
                       <input 
                         type="number" 
                         value={currentElementData?.timeInMinutes || 0}
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) => updateElementData(selectedElement.id, { timeInMinutes: parseInt(e.target.value) || 0 })}
                         className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700 text-xs"
                       />
@@ -460,39 +474,77 @@ export default function BPMNModeler({ mapping, onUpdateMapping, projectName }: B
                 </div>
 
                 <div className="pt-6 border-t border-slate-100 space-y-4">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                    <Palette size={12} />
-                    Cores Salvas
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Palette size={12} />
+                      Biblioteca de Cores
+                    </div>
+                    <span className="text-[9px] font-bold text-indigo-500 tabular-nums">
+                      {savedColors.length} cores
+                    </span>
                   </label>
-                  <div className="grid grid-cols-4 gap-2">
-                    {(mapping.savedColors || []).map((color) => (
-                      <button
-                        key={color.id}
-                        onClick={() => updateElementData(selectedElement.id, { 
-                          backgroundColor: color.backgroundColor,
-                          borderColor: color.borderColor
-                        })}
-                        title={color.name}
-                        className="w-full aspect-square rounded-lg border-2 transition-all hover:scale-110 shadow-sm"
-                        style={{ backgroundColor: color.backgroundColor, borderColor: color.borderColor }}
-                      />
-                    ))}
+                  
+                  <div className="grid grid-cols-1 gap-3">
+                    {savedColors.length > 0 ? (
+                      <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+                        {savedColors.map((color) => (
+                          <div 
+                            key={color.id}
+                            className="flex items-center gap-3 p-2 bg-slate-50 border border-slate-100 rounded-xl group hover:border-indigo-200 transition-all cursor-pointer"
+                            onClick={() => updateElementData(selectedElement.id, { 
+                              backgroundColor: color.backgroundColor,
+                              borderColor: color.borderColor
+                            })}
+                          >
+                            <div 
+                              className="w-8 h-8 rounded-lg border-2 shadow-sm shrink-0"
+                              style={{ backgroundColor: color.backgroundColor, borderColor: color.borderColor }}
+                            />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[10px] font-black text-slate-700 truncate">{color.name}</p>
+                              <p className="text-[8px] font-mono text-slate-400 mt-0.5">{color.backgroundColor}</p>
+                            </div>
+                            <button 
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm(`Deseja excluir a cor "${color.name}" da biblioteca?`)) {
+                                  onDeleteGlobalColor(color.id);
+                                }
+                              }}
+                              className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-white rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-6 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nenhuma cor salva</p>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex gap-2">
-                    <input 
-                      type="text"
-                      placeholder="Nome da cor..."
-                      value={newColorName}
-                      onChange={(e) => setNewColorName(e.target.value)}
-                      className="flex-1 p-2 bg-slate-50 border border-slate-200 rounded-lg text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <button 
-                      onClick={saveCurrentColor}
-                      disabled={!newColorName.trim()}
-                      className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-[10px] font-black uppercase tracking-tight disabled:opacity-50 hover:bg-indigo-700 transition-colors"
-                    >
-                      Salvar
-                    </button>
+
+                  <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 space-y-3">
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-black text-indigo-600 uppercase tracking-widest ml-1">Salvar Cor Atual</label>
+                      <div className="flex gap-2">
+                        <input 
+                          type="text"
+                          placeholder="Ex: Etapa Crítica"
+                          value={newColorName}
+                          onChange={(e) => setNewColorName(e.target.value)}
+                          className="flex-1 px-3 py-2 bg-white border border-indigo-100 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                        />
+                        <button 
+                          onClick={saveCurrentColor}
+                          disabled={!newColorName.trim()}
+                          className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-tight disabled:opacity-50 hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
+                        >
+                          Salvar
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

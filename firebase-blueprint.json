@@ -72,6 +72,18 @@
         "reportType": { "type": "string", "enum": ["PDCA", "Histórico de Ações"] }
       },
       "required": ["id", "userId", "userName", "timestamp", "reportType"]
+    },
+    "SavedColor": {
+      "title": "SavedColor",
+      "description": "Custom BPMN element colors saved to the global library",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "backgroundColor": { "type": "string" },
+        "borderColor": { "type": "string" }
+      },
+      "required": ["id", "name", "backgroundColor", "borderColor"]
     }
   },
   "firestore": {
@@ -94,6 +106,10 @@
     "/reportLogs/{logId}": {
       "schema": "ReportLog",
       "description": "Logs of generated reports"
+    },
+    "/bpmnSavedColors/{colorId}": {
+      "schema": "SavedColor",
+      "description": "Global storage for custom BPMN colors"
     }
   }
 }

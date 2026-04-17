@@ -147,8 +147,8 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
           <Filter size={16} />
           <span className="text-xs font-black uppercase tracking-widest">Filtros de Busca</span>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="relative">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 min-w-0">
+          <div className="relative min-w-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
             <input 
               type="text"
@@ -222,18 +222,18 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
             <tbody className="divide-y divide-slate-50">
               {filteredActions.map((action) => (
                 <tr key={action.id} className="group hover:bg-slate-50/50 transition-colors">
-                  <td className="px-8 py-6">
-                    <span className="font-bold text-slate-700 text-sm whitespace-nowrap">{action.projectName}</span>
+                  <td className="px-8 py-6 min-w-0">
+                    <span className="font-bold text-slate-700 text-sm break-words line-clamp-2" title={action.projectName}>{action.projectName}</span>
                   </td>
-                  <td className="px-8 py-6">
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">{action.subtaskTitle}</span>
+                  <td className="px-8 py-6 min-w-0">
+                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider break-words line-clamp-2" title={action.subtaskTitle}>{action.subtaskTitle}</span>
                   </td>
-                  <td className="px-8 py-6">
-                    <div className="flex items-center gap-3 whitespace-nowrap">
-                      <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-black">
+                  <td className="px-8 py-6 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-black shrink-0">
                         {action.responsibleName.charAt(0)}
                       </div>
-                      <span className="text-sm font-bold text-slate-600">{action.responsibleName}</span>
+                      <span className="text-sm font-bold text-slate-600 truncate">{action.responsibleName}</span>
                     </div>
                   </td>
                   <td className="px-8 py-6">

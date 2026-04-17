@@ -645,11 +645,11 @@ export default function PDCAEditor({
                               <>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {(activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories).map((cat, catIdx) => (
-                                  <div key={cat.id} className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4">
-                                    <div className="flex items-center justify-between">
-                                      <div>
-                                        <h5 className="font-black text-slate-800 text-xs uppercase tracking-widest">{cat.name}</h5>
-                                        <p className="text-[10px] text-slate-400 font-medium">{cat.description}</p>
+                                  <div key={cat.id} className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4 min-w-0">
+                                    <div className="flex items-center justify-between gap-2 min-w-0">
+                                      <div className="min-w-0 flex-1">
+                                        <h5 className="font-black text-slate-800 text-xs uppercase tracking-widest truncate">{cat.name}</h5>
+                                        <p className="text-[10px] text-slate-400 font-medium truncate">{cat.description}</p>
                                       </div>
                                       <button 
                                         disabled={(cat.entries?.length || 0) >= 3}
@@ -679,34 +679,36 @@ export default function PDCAEditor({
                                     <div className="space-y-2">
                                       {cat.entries.map((entry, entryIdx) => (
                                         <div key={entry.id} className="flex gap-2">
-                                          <input 
-                                            type="text"
-                                            placeholder="Descreva a causa..."
-                                            value={entry.text || ''}
-                                            onChange={(e) => {
-                                              const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
-                                              const newIshikawa = [...currentIshikawa];
-                                              const newEntries = [...newIshikawa[catIdx].entries];
-                                              newEntries[entryIdx] = { ...newEntries[entryIdx], text: e.target.value };
-                                              newIshikawa[catIdx] = { ...newIshikawa[catIdx], entries: newEntries };
-                                              updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, ishikawa: newIshikawa } });
-                                            }}
-                                            className="flex-1 p-2 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-medium"
-                                          />
-                                          <button 
-                                            onClick={() => {
-                                              const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
-                                              const newIshikawa = [...currentIshikawa];
-                                              newIshikawa[catIdx] = {
-                                                ...newIshikawa[catIdx],
-                                                entries: newIshikawa[catIdx].entries.filter((_, i) => i !== entryIdx)
-                                              };
-                                              updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, ishikawa: newIshikawa } });
-                                            }}
-                                            className="text-slate-300 hover:text-rose-500 transition-colors"
-                                          >
-                                            <Trash2 size={14} />
-                                          </button>
+                                          <div className="flex-1 min-w-0 flex gap-2">
+                                            <input 
+                                              type="text"
+                                              placeholder="Descreva a causa..."
+                                              value={entry.text || ''}
+                                              onChange={(e) => {
+                                                const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
+                                                const newIshikawa = [...currentIshikawa];
+                                                const newEntries = [...newIshikawa[catIdx].entries];
+                                                newEntries[entryIdx] = { ...newEntries[entryIdx], text: e.target.value };
+                                                newIshikawa[catIdx] = { ...newIshikawa[catIdx], entries: newEntries };
+                                                updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, ishikawa: newIshikawa } });
+                                              }}
+                                              className="flex-1 min-w-0 p-2 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-medium"
+                                            />
+                                            <button 
+                                              onClick={() => {
+                                                const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
+                                                const newIshikawa = [...currentIshikawa];
+                                                newIshikawa[catIdx] = {
+                                                  ...newIshikawa[catIdx],
+                                                  entries: newIshikawa[catIdx].entries.filter((_, i) => i !== entryIdx)
+                                                };
+                                                updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, ishikawa: newIshikawa } });
+                                              }}
+                                              className="text-slate-300 hover:text-rose-500 transition-colors shrink-0"
+                                            >
+                                              <Trash2 size={14} />
+                                            </button>
+                                          </div>
                                         </div>
                                       ))}
                                     </div>
@@ -793,7 +795,7 @@ export default function PDCAEditor({
                                 <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-black shadow-sm shrink-0">
                                   {activeCycle.plan.rootCauseAnalysis.type === '5whys' ? idx + 1 : <AlertCircle size={16} />}
                                 </div>
-                                <div className="flex-1 flex gap-2">
+                                <div className="flex-1 min-w-0 flex gap-2">
                                   <input 
                                     type="text" 
                                     placeholder={activeCycle.plan.rootCauseAnalysis.type === '5whys' ? `Por quê ${idx + 1}?` : "Descreva a causa..."}
@@ -803,7 +805,7 @@ export default function PDCAEditor({
                                       newEntries[idx].text = e.target.value;
                                       updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, entries: newEntries } });
                                     }}
-                                    className="flex-1 p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm"
+                                    className="flex-1 min-w-0 p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm"
                                   />
                                   {activeCycle.plan.rootCauseAnalysis.type === 'list' && (
                                     <button 
@@ -885,9 +887,9 @@ export default function PDCAEditor({
                                   <Trash2 size={20} />
                                 </button>
                                 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">What (O que será feito?)</label>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 min-w-0">
+                                  <div className="space-y-1 min-w-0">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate block">What (O que será feito?)</label>
                                     <input 
                                       value={item.what || ''} 
                                       placeholder="O que será feito?"
@@ -895,8 +897,8 @@ export default function PDCAEditor({
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                     />
                                   </div>
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Why (Por que será feito?)</label>
+                                  <div className="space-y-1 min-w-0">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate block">Why (Por que será feito?)</label>
                                     <input 
                                       value={item.why || ''} 
                                       placeholder="Por que essa ação é necessária?"
@@ -904,8 +906,8 @@ export default function PDCAEditor({
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                     />
                                   </div>
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Where (Onde?)</label>
+                                  <div className="space-y-1 min-w-0">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate block">Where (Onde?)</label>
                                     <input 
                                       value={item.where || ''} 
                                       placeholder="Onde será executada?"
@@ -913,9 +915,9 @@ export default function PDCAEditor({
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                     />
                                   </div>
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-1">
-                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">When (Quando?)</label>
+                                  <div className="grid grid-cols-2 gap-4 min-w-0">
+                                    <div className="space-y-1 min-w-0">
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate block">When (Quando?)</label>
                                       <input 
                                         type="date"
                                         value={item.when || ''} 
@@ -924,8 +926,8 @@ export default function PDCAEditor({
                                         className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                       />
                                     </div>
-                                    <div className="space-y-1">
-                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Who (Responsável)</label>
+                                    <div className="space-y-1 min-w-0">
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate block">Who (Responsável)</label>
                                       <input 
                                         value={item.who || ''} 
                                         placeholder="Quem é o responsável?"
@@ -933,8 +935,8 @@ export default function PDCAEditor({
                                         className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                       />
                                     </div>
-                                    <div className="space-y-1">
-                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Setor</label>
+                                    <div className="space-y-1 min-w-0">
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate block">Setor</label>
                                       <input 
                                         value={item.sector || ''} 
                                         placeholder="Qual o setor?"
@@ -943,8 +945,8 @@ export default function PDCAEditor({
                                       />
                                     </div>
                                   </div>
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">How (Como será feito?)</label>
+                                  <div className="space-y-1 min-w-0">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate block">How (Como será feito?)</label>
                                     <input 
                                       value={item.how || ''} 
                                       placeholder="Como será executada?"
@@ -952,8 +954,8 @@ export default function PDCAEditor({
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                     />
                                   </div>
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">How much (Custo ou esforço)</label>
+                                  <div className="space-y-1 min-w-0">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate block">How much (Custo ou esforço)</label>
                                     <input 
                                       value={item.howMuch || ''} 
                                       placeholder="Qual o custo ou esforço estimado?"

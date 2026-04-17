@@ -186,12 +186,12 @@ export default function DashboardView({ projects, users, actions, onProjectClick
 
   return (
     <div className="space-y-8 pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Dashboard Executivo</h2>
-          <p className="text-slate-500 mt-1">Visão estratégica e financeira do sistema.</p>
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 min-w-0">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-3xl font-black text-slate-900 tracking-tight truncate">Dashboard Executivo</h2>
+          <p className="text-slate-500 mt-1 truncate">Visão estratégica e financeira do sistema.</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 shrink-0 flex-wrap md:flex-nowrap">
           <div className="bg-white p-1 rounded-xl border border-slate-200 shadow-sm flex items-center">
             <button 
               onClick={() => setActiveTab('projects')}
@@ -407,9 +407,9 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                       onClick={() => onProjectClick(p.id)}
                       className="group p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-indigo-200 transition-all cursor-pointer"
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">{p.name}</span>
-                        <span className="text-xs font-black text-slate-500">{p.progress}%</span>
+                      <div className="flex items-center justify-between mb-2 min-w-0 gap-2">
+                        <span className="font-bold text-slate-700 group-hover:text-indigo-600 transition-colors truncate">{p.name}</span>
+                        <span className="text-xs font-black text-slate-500 shrink-0">{p.progress}%</span>
                       </div>
                       <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                         <motion.div 
@@ -441,14 +441,14 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                       )}>
                         {activity.type.includes('Concluído') ? <CheckCircle2 size={20} /> : <TrendingUp size={20} />}
                       </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-black text-slate-400 uppercase tracking-widest">{activity.type}</span>
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-black text-slate-400 uppercase tracking-widest truncate">{activity.type}</span>
                           <span className="text-[10px] text-slate-300">•</span>
-                          <span className="text-[10px] font-bold text-slate-400">{format(new Date(activity.date), "dd/MM HH:mm")}</span>
+                          <span className="text-[10px] font-bold text-slate-400 shrink-0">{format(new Date(activity.date), "dd/MM HH:mm")}</span>
                         </div>
-                        <p className="font-bold text-slate-800">{activity.title}</p>
-                        <p className="text-xs text-slate-500 font-medium">Projeto: {activity.projectName}</p>
+                        <p className="font-bold text-slate-800 break-words line-clamp-2" title={activity.title}>{activity.title}</p>
+                        <p className="text-xs text-slate-500 font-medium truncate">Projeto: {activity.projectName}</p>
                       </div>
                     </div>
                   ))}
@@ -508,7 +508,7 @@ function StatCard({
     <motion.div 
       whileHover={{ y: -3 }}
       className={cn(
-        "p-4 rounded-[1.5rem] border shadow-sm flex items-center justify-between gap-3 transition-all min-h-[80px]",
+        "p-4 rounded-[1.5rem] border shadow-sm flex items-center justify-between gap-3 transition-all min-h-[80px] min-w-0",
         highlight 
           ? "bg-slate-900 border-slate-800 text-white" 
           : "bg-white border-slate-200 text-slate-900"
@@ -521,12 +521,12 @@ function StatCard({
         )}>
           {icon}
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 overflow-hidden">
           <p className={cn(
             "text-[9px] font-black uppercase tracking-widest text-slate-400 truncate"
-          )}>{title}</p>
+          )} title={title}>{title}</p>
           <h4 
-            className="font-black tracking-tight truncate"
+            className="font-black tracking-tight"
             style={{ 
               fontSize: 'clamp(14px, 1.5vw, 20px)',
               whiteSpace: 'nowrap',

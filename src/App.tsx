@@ -490,9 +490,9 @@ export default function App() {
           "fixed left-0 top-0 h-full bg-white border-r border-slate-200 z-50 hidden lg:flex flex-col transition-all duration-300",
           isSidebarCollapsed ? "w-20" : "w-64"
         )}>
-          <div className="p-4 border-b border-slate-100 flex flex-col items-center gap-4">
-            <div className="flex items-center justify-between w-full">
-              <div className={cn("flex items-center gap-3 overflow-hidden transition-all duration-300", isSidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100")}>
+          <div className="p-4 border-b border-slate-100 flex flex-col items-center gap-4 shrink-0">
+            <div className="flex items-center justify-between w-full min-w-0">
+              <div className={cn("flex items-center gap-3 overflow-hidden transition-all duration-300", isSidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100 min-w-0 flex-1")}>
                 <div className="w-auto h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-slate-100 p-1 flex-shrink-0">
                   <img 
                     src="/assets/logo-flowprocess.svg" 
@@ -501,11 +501,11 @@ export default function App() {
                     referrerPolicy="no-referrer"
                   />
                 </div>
-                <h1 className="font-bold text-lg tracking-tight text-[#003489] whitespace-nowrap">FlowProcess</h1>
+                <h1 className="font-bold text-lg tracking-tight text-[#003489] whitespace-nowrap truncate">FlowProcess</h1>
               </div>
               <button 
                 onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                className={cn("p-2 hover:bg-slate-50 rounded-xl text-slate-400 transition-all", isSidebarCollapsed && "mx-auto")}
+                className={cn("p-2 hover:bg-slate-50 rounded-xl text-slate-400 transition-all shrink-0", isSidebarCollapsed && "mx-auto")}
                 title={isSidebarCollapsed ? "Expandir Menu" : "Recolher Menu"}
               >
                 <ChevronRight size={20} className={cn("transition-transform duration-300", !isSidebarCollapsed && "rotate-180")} />
@@ -513,7 +513,7 @@ export default function App() {
             </div>
             
             {isSidebarCollapsed && (
-              <div className="w-auto h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-slate-100 p-1">
+              <div className="w-auto h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-slate-100 p-1 shrink-0">
                 <img 
                   src="/assets/logo-flowprocess.svg" 
                   alt="Logo" 
@@ -524,7 +524,7 @@ export default function App() {
             )}
           </div>
 
-          <nav className="flex-1 p-4 space-y-2">
+          <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
             <SidebarItem 
               active={activeView === 'dashboard'}
               onClick={() => {
@@ -565,20 +565,20 @@ export default function App() {
           </nav>
 
           <div className="p-4 border-t border-slate-100">
-            <div className={cn("flex items-center gap-3 px-4 py-3 transition-all duration-300", isSidebarCollapsed ? "justify-center" : "")}>
+            <div className={cn("flex items-center gap-3 px-4 py-3 transition-all duration-300 min-w-0 w-full", isSidebarCollapsed ? "justify-center" : "")}>
               <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">
                 <img src={user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`} alt="User" />
               </div>
               {!isSidebarCollapsed && (
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-slate-800 truncate">{user.displayName}</p>
-                  <p className="text-xs text-slate-500 truncate">{user.email}</p>
+                <div className="flex-1 min-w-0 overflow-hidden">
+                  <p className="text-sm font-semibold text-slate-800 truncate select-none">{user.displayName}</p>
+                  <p className="text-xs text-slate-500 truncate select-none">{user.email}</p>
                 </div>
               )}
               {!isSidebarCollapsed && (
                 <LogOut 
                   size={18} 
-                  className="text-slate-400 hover:text-red-500 cursor-pointer" 
+                  className="text-slate-400 hover:text-red-500 cursor-pointer shrink-0" 
                   onClick={handleLogout}
                 />
               )}

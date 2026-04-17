@@ -611,7 +611,7 @@ export default function App() {
                        />
                     </div>
                     <div className="space-y-4">
-                      <h2 className="text-5xl font-black text-[#003489] tracking-tighter">FlowProcess</h2>
+                      <h2 className="text-5xl font-black text-[#003489] tracking-tighter" translate="no">FlowProcess</h2>
                       <div className="h-1.5 w-24 bg-indigo-600 mx-auto rounded-full" />
                       <p className="text-slate-400 text-lg font-medium tracking-wide">Gestão Inteligente de Processos</p>
                     </div>
@@ -1750,7 +1750,7 @@ function ScopeTab({
                   <tr key={subtask.id} className={cn("group hover:bg-slate-50/50 transition-colors", isReadOnly && "bg-slate-50/30")}>
                     <td className="px-6 py-4">
                       <input 
-                        value={subtask.title}
+                        value={subtask.title || ''}
                         onChange={(e) => updateSubtask(subtask.id, 'title', e.target.value)}
                         readOnly={isReadOnly}
                         className={cn(
@@ -1767,7 +1767,7 @@ function ScopeTab({
                     </td>
                     <td className="px-6 py-4">
                       <select 
-                        value={subtask.priority}
+                        value={subtask.priority || 'Média'}
                         onChange={(e) => updateSubtask(subtask.id, 'priority', e.target.value)}
                         disabled={isReadOnly}
                         className={cn(
@@ -1784,7 +1784,7 @@ function ScopeTab({
                     </td>
                     <td className="px-6 py-4">
                       <select 
-                        value={subtask.status}
+                        value={subtask.status || 'Pendente'}
                         onChange={(e) => updateSubtask(subtask.id, 'status', e.target.value)}
                         className={cn(
                           "w-full px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border-none cursor-pointer",

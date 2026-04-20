@@ -62,8 +62,14 @@ export default function BPMNModeler({
   const [customData, setCustomData] = useState<Record<string, Partial<BPMNTaskData>>>(mapping.customData || {});
   const customDataRef = useRef(customData);
   const [newColorName, setNewColorName] = useState('');
+  const [isDiagramReady, setIsDiagramReady] = useState(false);
   const isSyncingRef = useRef(false);
   const isLoadedRef = useRef(false);
+
+  // Force scroll to top on mount
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
 
   // Keep ref in sync
   useEffect(() => {
@@ -93,10 +99,13 @@ export default function BPMNModeler({
       modeler.importXML(xml).then(() => {
         if (!isMounted) return;
         isLoadedRef.current = true;
+        setIsDiagramReady(true);
         const canvas = modeler.get('canvas') as any;
         if (canvas) {
           try {
             canvas.zoom('fit-viewport');
+            canvas.viewbox({ x: 0, y: 0, width: 1000, height: 1000 }); // Attempt better centering
+            canvas.zoom('fit-viewport', 'auto');
           } catch (e) {
             console.warn('Could not zoom to fit-viewport', e);
           }
@@ -219,16 +228,21 @@ export default function BPMNModeler({
   }, [customData]);
 
   const totalTime = useMemo(() => {
-    if (!modelerRef.current) return 0;
+    // If diagram is not ready yet, calculate from customData as source of truth
+    // This prevents the total time from "disappearing" on screen load
+    if (!modelerRef.current || !isDiagramReady) {
+      return Object.values(customData).reduce((acc: number, curr: Partial<BPMNTaskData>) => acc + (curr.timeInMinutes || 0), 0);
+    }
+
     const elementRegistry = modelerRef.current.get('elementRegistry');
     return Object.entries(customData).reduce((acc, [id, curr]: [string, any]) => {
-      // Only count if the element still exists in diagram
+      // Once diagram is ready, we use the element registry to ensure element still exists
       if (elementRegistry.get(id)) {
         return acc + (curr.timeInMinutes || 0);
       }
       return acc;
     }, 0);
-  }, [customData]);
+  }, [customData, isDiagramReady]);
 
   // Update overlays for problem steps
   useEffect(() => {

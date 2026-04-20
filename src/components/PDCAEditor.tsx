@@ -3,6 +3,8 @@ import {
   RefreshCw, 
   AlertCircle, 
   ChevronRight, 
+  ChevronDown,
+  Users,
   Plus, 
   Trash2, 
   CheckCircle2, 
@@ -40,11 +42,14 @@ export default function PDCAEditor({
 }) {
   const [activeCycleId, setActiveCycleId] = useState<string | null>(null);
   const [activePhase, setActivePhase] = useState<'PLAN' | 'DO' | 'CHECK' | 'ACT' | 'REPORT'>('PLAN');
+  const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
   const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [showProblemsModal, setShowProblemsModal] = useState(false);
   const [showDashboard, setShowDashboard] = useState(true);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
+
+  const [confirmingLog, setConfirmingLog] = useState<{ idx: number, updates: any, obsInputId: string } | null>(null);
 
   // Filter cycles if defaultTaskId is provided
   const cycles = useMemo(() => {
@@ -1061,145 +1066,253 @@ export default function PDCAEditor({
                             Nenhuma ação planejada no PLAN.
                           </div>
                         ) : (
-                          activeCycle.plan.actionPlan.map((item, idx) => (
-                            <div key={item.id} className="p-8 space-y-6 hover:bg-slate-50/50 transition-all">
-                              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                <div className="flex items-center gap-3">
-                                  <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-xs shrink-0">
-                                    {idx + 1}
-                                  </span>
-                                  <div>
-                                    <h5 className="font-bold text-slate-800 text-lg">{item.what || 'Ação sem descrição'}</h5>
-                                    <p className="text-xs text-slate-400">Responsável: <span className="font-bold text-slate-600">{item.who}</span></p>
+                          activeCycle.plan.actionPlan.map((item, idx) => {
+                            const isExpanded = expandedActionId === item.id;
+                            
+                            return (
+                              <div key={item.id} className={cn(
+                                "border-b border-slate-100 last:border-0 transition-all",
+                                isExpanded ? "bg-white" : "hover:bg-slate-50/50"
+                              )}>
+                                {/* Accordion Header */}
+                                <button 
+                                  onClick={() => setExpandedActionId(isExpanded ? null : item.id)}
+                                  className="w-full p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left group"
+                                >
+                                  <div className="flex items-center gap-4 flex-1">
+                                    <span className={cn(
+                                      "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
+                                      isExpanded ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100"
+                                    )}>
+                                      {idx + 1}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <h5 className="font-bold text-slate-800 text-lg truncate group-hover:text-indigo-600 transition-colors">
+                                        {item.what || 'Ação sem descrição'}
+                                      </h5>
+                                      <div className="flex items-center gap-3 mt-1">
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                          <Users size={12} className="text-slate-400" />
+                                          <span className="text-slate-600 font-black">{item.who}</span>
+                                        </p>
+                                        {item.when && (
+                                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                            <Clock size={12} className="text-slate-400" />
+                                            <span>{format(new Date(item.when), 'dd/MM/yyyy')}</span>
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <span className={cn(
-                                    "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
-                                    item.status === 'Concluído' ? "bg-emerald-100 text-emerald-700" :
-                                    item.status === 'Em andamento' ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
-                                  )}>
-                                    {item.status}
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* History Log */}
-                              <div className="space-y-4">
-                                <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Histórico de Atualizações</h6>
-                                <div className="space-y-3">
-                                  {(item.executionLogs || []).map((log) => (
-                                    <div key={log.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4">
-                                      <div className={cn(
-                                        "w-2 h-2 rounded-full mt-2 shrink-0",
-                                        log.status === 'Concluído' ? "bg-emerald-500" :
-                                        log.status === 'Em andamento' ? "bg-amber-500" : "bg-slate-300"
-                                      )} />
-                                      <div className="flex-1">
-                                        <div className="flex items-center justify-between mb-1">
-                                          <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">{log.status}</span>
-                                          <span className="text-[10px] text-slate-400 font-medium">{format(new Date(log.timestamp), 'dd/MM/yyyy HH:mm')}</span>
-                                        </div>
-                                        <p className="text-xs text-slate-600 font-medium">{log.observation}</p>
-                                        <div className="mt-2 flex items-center gap-2">
-                                          <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full text-slate-500 font-bold">{log.responsible}</span>
-                                          {log.sector && <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded-full text-slate-500 font-bold">{log.sector}</span>}
-                                        </div>
-                                      </div>
+                                  
+                                  <div className="flex items-center gap-6">
+                                    <div className="hidden sm:block">
+                                      <span className={cn(
+                                        "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
+                                        item.status === 'Concluído' ? "bg-emerald-100 text-emerald-700" :
+                                        item.status === 'Em andamento' ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
+                                      )}>
+                                        {item.status}
+                                      </span>
                                     </div>
-                                  ))}
-                                </div>
-
-                                {/* Add Log Form */}
-                                {item.status !== 'Concluído' ? (
-                                  <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-4">
-                                    <p className="text-xs font-black text-slate-800 uppercase tracking-widest">Nova Atualização</p>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Novo Status</label>
-                                        <select 
-                                          id={`status-${item.id}`}
-                                          className="w-full bg-white border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold outline-none"
-                                        >
-                                          <option value="Pendente">Pendente</option>
-                                          <option value="Em andamento">Em andamento</option>
-                                          <option value="Concluído">Concluído</option>
-                                        </select>
-                                      </div>
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Setor</label>
-                                        <input 
-                                          id={`sector-${item.id}`}
-                                          type="text"
-                                          placeholder="Setor do responsável"
-                                          className="w-full bg-white border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold outline-none"
-                                        />
-                                      </div>
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observação</label>
-                                        <input 
-                                          id={`obs-${item.id}`}
-                                          type="text"
-                                          placeholder="O que foi feito nesta etapa?"
-                                          className="w-full bg-white border border-slate-200 px-4 py-2 rounded-xl text-xs font-bold outline-none"
-                                        />
-                                      </div>
+                                    <div className={cn(
+                                      "w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 transition-transform duration-300 group-hover:border-indigo-200 group-hover:text-indigo-500",
+                                      isExpanded && "rotate-180 bg-indigo-50 border-indigo-200 text-indigo-600"
+                                    )}>
+                                      <ChevronDown size={18} />
                                     </div>
-                                    <div className="flex justify-end">
-                                      <button 
-                                        onClick={() => {
-                                          const statusSelect = document.getElementById(`status-${item.id}`) as HTMLSelectElement;
-                                          const sectorInput = document.getElementById(`sector-${item.id}`) as HTMLInputElement;
-                                          const obsInput = document.getElementById(`obs-${item.id}`) as HTMLInputElement;
+                                  </div>
+                                </button>
+
+                                {/* Accordion Content */}
+                                <AnimatePresence>
+                                  {isExpanded && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      transition={{ duration: 0.3, ease: 'easeInOut' }}
+                                      className="overflow-hidden"
+                                    >
+                                      <div className="px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-1 duration-300">
+                                        {/* History Log */}
+                                        <div className="space-y-4 pt-4 border-t border-slate-50">
+                                          <div className="flex items-center justify-between">
+                                            <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                              <Clock size={14} />
+                                              Histórico de Atualizações
+                                            </h6>
+                                            <span className="text-[10px] font-black text-slate-300">
+                                              {(item.executionLogs || []).length} registros
+                                            </span>
+                                          </div>
                                           
-                                          if (!obsInput.value) return;
+                                          <div className="space-y-3">
+                                            {(item.executionLogs || []).length === 0 ? (
+                                              <div className="py-8 bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-slate-400 gap-2">
+                                                <AlertCircle size={24} className="opacity-20" />
+                                                <p className="text-[10px] font-bold uppercase tracking-widest">Sem movimentações registradas</p>
+                                              </div>
+                                            ) : (
+                                              (item.executionLogs || []).map((log) => (
+                                                <div key={log.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4 hover:border-slate-200 transition-colors">
+                                                  <div className={cn(
+                                                    "w-2 h-2 rounded-full mt-2 shrink-0 shadow-sm",
+                                                    log.status === 'Concluído' ? "bg-emerald-500" :
+                                                    log.status === 'Em andamento' ? "bg-amber-500" : "bg-slate-300"
+                                                  )} />
+                                                  <div className="flex-1">
+                                                    <div className="flex items-center justify-between mb-1">
+                                                      <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">{log.status}</span>
+                                                      <span className="text-[10px] text-slate-400 font-medium">{format(new Date(log.timestamp), 'dd/MM/yyyy HH:mm')}</span>
+                                                    </div>
+                                                    <p className="text-xs text-slate-600 font-medium leading-relaxed">{log.observation}</p>
+                                                    <div className="mt-3 flex items-center gap-2">
+                                                      <span className="text-[10px] bg-slate-100 px-2.5 py-1 rounded-lg text-slate-500 font-bold flex items-center gap-1">
+                                                        <Users size={10} />
+                                                        {log.responsible}
+                                                      </span>
+                                                      {log.sector && (
+                                                        <span className="text-[10px] bg-indigo-50 px-2.5 py-1 rounded-lg text-indigo-600 font-bold">
+                                                          {log.sector}
+                                                        </span>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              ))
+                                            )}
+                                          </div>
 
-                                          const newLog = {
-                                            id: uuidv4(),
-                                            timestamp: new Date().toISOString(),
-                                            status: statusSelect.value as any,
-                                            responsible: item.who,
-                                            sector: sectorInput.value,
-                                            observation: obsInput.value,
-                                            type: statusSelect.value === 'Concluído' ? 'completion' : 'update'
-                                          };
+                                          {/* Add Log Form */}
+                                          <div className="mt-8">
+                                            {item.status !== 'Concluído' ? (
+                                              <div className="bg-slate-900 p-6 rounded-[2rem] text-white space-y-6 shadow-xl shadow-slate-200">
+                                                <div className="flex items-center gap-3">
+                                                  <div className="w-8 h-8 rounded-lg bg-indigo-500 flex items-center justify-center">
+                                                    <Plus size={18} />
+                                                  </div>
+                                                  <h6 className="text-[10px] font-black uppercase tracking-widest">Nova Atualização</h6>
+                                                </div>
 
-                                          const newLogs = [...(item.executionLogs || []), newLog];
-                                          const updates: any = { 
-                                            executionLogs: newLogs,
-                                            status: statusSelect.value as any
-                                          };
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                  <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Novo Status</label>
+                                                    <select 
+                                                      id={`status-${item.id}`}
+                                                      className="w-full bg-slate-800 border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                                                    >
+                                                      <option value="Pendente" className="bg-slate-900">Pendente</option>
+                                                      <option value="Em andamento" className="bg-slate-900">Em andamento</option>
+                                                      <option value="Concluído" className="bg-slate-900">Concluído</option>
+                                                    </select>
+                                                  </div>
+                                                  <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Setor</label>
+                                                    <input 
+                                                      id={`sector-${item.id}`}
+                                                      type="text"
+                                                      placeholder="Setor do responsável"
+                                                      className="w-full bg-slate-800 border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
+                                                    />
+                                                  </div>
+                                                  <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observação</label>
+                                                    <input 
+                                                      id={`obs-${item.id}`}
+                                                      type="text"
+                                                      placeholder="O que foi feito nesta etapa?"
+                                                      className="w-full bg-slate-800 border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
+                                                    />
+                                                  </div>
+                                                </div>
+                                                <div className="flex justify-end pr-1">
+                                                  <button 
+                                                    onClick={() => {
+                                                      const statusSelect = document.getElementById(`status-${item.id}`) as HTMLSelectElement;
+                                                      const sectorInput = document.getElementById(`sector-${item.id}`) as HTMLInputElement;
+                                                      const obsInput = document.getElementById(`obs-${item.id}`) as HTMLInputElement;
+                                                      
+                                                      if (!obsInput.value) return;
 
-                                          if (statusSelect.value === 'Em andamento' && !item.startDate) {
-                                            updates.startDate = new Date().toISOString();
-                                          }
-                                          if (statusSelect.value === 'Concluído') {
-                                            updates.endDate = new Date().toISOString();
-                                          }
+                                                      if (statusSelect.value === 'Concluído') {
+                                                        const updates: any = { 
+                                                          executionLogs: [...(item.executionLogs || []), {
+                                                            id: uuidv4(),
+                                                            timestamp: new Date().toISOString(),
+                                                            status: 'Concluído' as any,
+                                                            responsible: item.who,
+                                                            sector: sectorInput.value,
+                                                            observation: obsInput.value,
+                                                            type: 'completion'
+                                                          }],
+                                                          status: 'Concluído' as any,
+                                                          endDate: new Date().toISOString()
+                                                        };
 
-                                          updateActionPlan(idx, updates);
-                                          obsInput.value = '';
-                                        }}
-                                        className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition-all"
-                                      >
-                                        Registrar Atualização
-                                      </button>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 flex items-center gap-4">
-                                    <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
-                                      <CheckCircle2 size={20} />
-                                    </div>
-                                    <div>
-                                      <p className="text-xs font-black text-emerald-800 uppercase tracking-widest">Ação Concluída</p>
-                                      <p className="text-[10px] text-emerald-600 font-medium">Esta ação foi finalizada e não permite novos registros.</p>
-                                    </div>
-                                  </div>
-                                )}
+                                                        if (!item.startDate) {
+                                                          updates.startDate = new Date().toISOString();
+                                                        }
+                                                        
+                                                        setConfirmingLog({ idx, updates, obsInputId: `obs-${item.id}` });
+                                                        return;
+                                                      }
+
+                                                      const newLog = {
+                                                        id: uuidv4(),
+                                                        timestamp: new Date().toISOString(),
+                                                        status: statusSelect.value as any,
+                                                        responsible: item.who,
+                                                        sector: sectorInput.value,
+                                                        observation: obsInput.value,
+                                                        type: statusSelect.value === 'Concluído' ? 'completion' : 'update'
+                                                      };
+
+                                                      const newLogs = [...(item.executionLogs || []), newLog];
+                                                      const updates: any = { 
+                                                        executionLogs: newLogs,
+                                                        status: statusSelect.value as any
+                                                      };
+
+                                                      if (statusSelect.value === 'Em andamento' && !item.startDate) {
+                                                        updates.startDate = new Date().toISOString();
+                                                      }
+
+                                                      updateActionPlan(idx, updates);
+                                                      obsInput.value = '';
+                                                    }}
+                                                    className="bg-indigo-600 text-white px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-500/20"
+                                                  >
+                                                    Registrar Atualização
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            ) : (
+                                              <div className="bg-emerald-50 p-8 rounded-[2.5rem] border border-emerald-100 flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
+                                                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center shadow-sm">
+                                                  <CheckCircle2 size={32} />
+                                                </div>
+                                                <div className="flex-1">
+                                                  <h6 className="text-sm font-black text-emerald-900 uppercase tracking-widest mb-1">Ação Concluída com Sucesso!</h6>
+                                                  <p className="text-xs text-emerald-600 font-medium">Todos os registros para este plano de ação foram finalizados. Verifique agora os resultados na etapa <strong>CHECK</strong>.</p>
+                                                </div>
+                                                <button 
+                                                  onClick={() => handlePhaseChange('CHECK')}
+                                                  className="bg-emerald-600 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2 shrink-0"
+                                                >
+                                                  Verificar Resultados <ChevronRight size={14} />
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
                               </div>
-                            </div>
-                          ))
+                            );
+                          })
                         )}
                       </div>
                     </div>
@@ -1225,88 +1338,163 @@ export default function PDCAEditor({
                             Nenhuma ação planejada no PLAN.
                           </div>
                         ) : (
-                          activeCycle.plan.actionPlan.map((item, idx) => (
-                            <div key={item.id} className="p-8 space-y-6 hover:bg-slate-50/50 transition-all">
-                              <div className="flex items-center gap-3">
-                                <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-xs shrink-0">
-                                  {idx + 1}
-                                </span>
-                                <h5 className="font-bold text-slate-800 text-lg">{item.what || 'Ação sem descrição'}</h5>
-                              </div>
+                          activeCycle.plan.actionPlan.map((item, idx) => {
+                            const isExpanded = expandedActionId === item.id;
+                            
+                            return (
+                              <div key={item.id} className={cn(
+                                "border-b border-slate-100 last:border-0 transition-all",
+                                isExpanded ? "bg-white" : "hover:bg-slate-50/50"
+                              )}>
+                                {/* Accordion Header */}
+                                <button 
+                                  onClick={() => setExpandedActionId(isExpanded ? null : item.id)}
+                                  className="w-full p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left group"
+                                >
+                                  <div className="flex items-center gap-4 flex-1">
+                                    <span className={cn(
+                                      "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
+                                      isExpanded ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100"
+                                    )}>
+                                      {idx + 1}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <h5 className="font-bold text-slate-800 text-lg truncate group-hover:text-indigo-600 transition-colors">
+                                        {item.what || 'Ação sem descrição'}
+                                      </h5>
+                                      <div className="flex items-center gap-3 mt-1">
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                          <TrendingUp size={12} className="text-slate-400" />
+                                          Modo: <span className="text-slate-600 font-black">{item.monitoringMode || 'Dias'}</span>
+                                        </p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                          <Target size={12} className="text-slate-400" />
+                                          Período: <span className="text-slate-600 font-black">{item.monitoringPeriod || 0}</span>
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-6">
+                                    <div className="hidden sm:block">
+                                      <span className={cn(
+                                        "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
+                                        item.worked === 'Sim' ? "bg-emerald-100 text-emerald-700" :
+                                        item.worked === 'Não' ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                                      )}>
+                                        Funcionou? {item.worked || 'Pendente'}
+                                      </span>
+                                    </div>
+                                    <div className={cn(
+                                      "w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 transition-transform duration-300 group-hover:border-indigo-200 group-hover:text-indigo-500",
+                                      isExpanded && "rotate-180 bg-indigo-50 border-indigo-200 text-indigo-600"
+                                    )}>
+                                      <ChevronDown size={18} />
+                                    </div>
+                                  </div>
+                                </button>
 
-                              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Modo de Acompanhamento</label>
-                                  <select 
-                                    value={item.monitoringMode || 'Dias'}
-                                    onChange={(e) => updateActionPlan(idx, { monitoringMode: e.target.value as any })}
-                                    className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
-                                  >
-                                    <option value="Dias">Dias</option>
-                                    <option value="Semanas">Semanas</option>
-                                    <option value="Meses">Meses</option>
-                                  </select>
-                                </div>
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Período</label>
-                                  <input 
-                                    type="number"
-                                    value={item.monitoringPeriod || 0}
-                                    onFocus={(e) => e.target.select()}
-                                    onChange={(e) => updateActionPlan(idx, { monitoringPeriod: parseInt(e.target.value) || 0 })}
-                                    className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
-                                  />
-                                </div>
-                                <div className="md:col-span-2 space-y-1">
-                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Como está sendo feito o acompanhamento?</label>
-                                  <input 
-                                    type="text"
-                                    value={item.monitoringTool || ''}
-                                    onChange={(e) => updateActionPlan(idx, { monitoringTool: e.target.value })}
-                                    placeholder="Ex: Power BI, Excel, E-mail, WhatsApp..."
-                                    className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
-                                  />
-                                </div>
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Funcionou?</label>
-                                  <select 
-                                    value={item.worked || 'Sim'}
-                                    onChange={(e) => updateActionPlan(idx, { worked: e.target.value as any })}
-                                    className={cn(
-                                      "w-full px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest outline-none border-none",
-                                      item.worked === 'Sim' ? "bg-emerald-100 text-emerald-700" :
-                                      item.worked === 'Não' ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
-                                    )}
-                                  >
-                                    <option value="Sim">Sim</option>
-                                    <option value="Não">Não</option>
-                                    <option value="Parcial">Parcial</option>
-                                  </select>
-                                </div>
-                                <div className="md:col-span-3 space-y-1">
-                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Evidências</label>
-                                  <input 
-                                    type="text"
-                                    value={item.evidence || ''}
-                                    onChange={(e) => updateActionPlan(idx, { evidence: e.target.value })}
-                                    placeholder="Link ou descrição..."
-                                    className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
-                                  />
-                                </div>
-                                <div className="space-y-1">
-                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Impacto de ganho</label>
-                                  <input 
-                                    type="number"
-                                    value={item.gainImpact || 0}
-                                    onFocus={(e) => e.target.select()}
-                                    onChange={(e) => updateActionPlan(idx, { gainImpact: parseFloat(e.target.value) || 0 })}
-                                    placeholder="Informe o custo atual após o plano de ação"
-                                    className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
-                                  />
-                                </div>
+                                {/* Accordion Content */}
+                                <AnimatePresence>
+                                  {isExpanded && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      transition={{ duration: 0.3, ease: 'easeInOut' }}
+                                      className="overflow-hidden"
+                                    >
+                                      <div className="px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-1 duration-300 pt-4 border-t border-slate-50">
+                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                          <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Modo de Acompanhamento</label>
+                                            <select 
+                                              value={item.monitoringMode || 'Dias'}
+                                              onChange={(e) => updateActionPlan(idx, { monitoringMode: e.target.value as any })}
+                                              className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                            >
+                                              <option value="Dias">Dias</option>
+                                              <option value="Semanas">Semanas</option>
+                                              <option value="Meses">Meses</option>
+                                            </select>
+                                          </div>
+                                          <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Período</label>
+                                            <input 
+                                              type="number"
+                                              value={item.monitoringPeriod || 0}
+                                              onFocus={(e) => e.target.select()}
+                                              onChange={(e) => updateActionPlan(idx, { monitoringPeriod: parseInt(e.target.value) || 0 })}
+                                              className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                            />
+                                          </div>
+                                          <div className="md:col-span-2 space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Como está sendo feito o acompanhamento?</label>
+                                            <input 
+                                              type="text"
+                                              value={item.monitoringTool || ''}
+                                              onChange={(e) => updateActionPlan(idx, { monitoringTool: e.target.value })}
+                                              placeholder="Ex: Power BI, Excel, E-mail, WhatsApp..."
+                                              className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                            />
+                                          </div>
+                                          <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Funcionou?</label>
+                                            <select 
+                                              value={item.worked || 'Sim'}
+                                              onChange={(e) => updateActionPlan(idx, { worked: e.target.value as any })}
+                                              className={cn(
+                                                "w-full px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all",
+                                                item.worked === 'Sim' ? "bg-emerald-100 text-emerald-700" :
+                                                item.worked === 'Não' ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                                              )}
+                                            >
+                                              <option value="Sim">Sim</option>
+                                              <option value="Não">Não</option>
+                                              <option value="Parcial">Parcial</option>
+                                            </select>
+                                          </div>
+                                          <div className="md:col-span-3 space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Evidências (Links ou Observações)</label>
+                                            <input 
+                                              type="text"
+                                              value={item.evidence || ''}
+                                              onChange={(e) => updateActionPlan(idx, { evidence: e.target.value })}
+                                              placeholder="Link ou descrição detalhada das evidências..."
+                                              className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                            />
+                                          </div>
+                                          <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Impacto de ganho</label>
+                                            <input 
+                                              type="number"
+                                              value={item.gainImpact || 0}
+                                              onFocus={(e) => e.target.select()}
+                                              onChange={(e) => updateActionPlan(idx, { gainImpact: parseFloat(e.target.value) || 0 })}
+                                              placeholder="Informe o custo atual"
+                                              className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                            />
+                                          </div>
+                                        </div>
+
+                                        {item.worked === 'Sim' && (
+                                          <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 flex items-center gap-4 animate-in zoom-in-95 duration-300">
+                                            <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center shrink-0">
+                                              <CheckCircle2 size={24} />
+                                            </div>
+                                            <div>
+                                              <p className="text-xs font-black text-emerald-800 uppercase tracking-widest">Resultado Positivo!</p>
+                                              <p className="text-[10px] text-emerald-600 font-medium leading-tight">A ação foi eficaz. Siga para a etapa <strong>ACT</strong> para padronizar este novo processo.</p>
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </motion.div>
+                                  )}
+                                </AnimatePresence>
                               </div>
-                            </div>
-                          ))
+                            );
+                          })
                         )}
                       </div>
                     </div>
@@ -1332,87 +1520,145 @@ export default function PDCAEditor({
                             Nenhuma ação planejada no PLAN.
                           </div>
                         ) : (
-                          activeCycle.plan.actionPlan.map((item, idx) => (
-                            <div key={item.id} className="p-8 space-y-6 hover:bg-slate-50/50 transition-all">
-                              <div className="flex items-center gap-3">
-                                <span className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-xs shrink-0">
-                                  {idx + 1}
-                                </span>
-                                <h5 className="font-bold text-slate-800 text-lg">{item.what || 'Ação sem descrição'}</h5>
-                              </div>
-
-                              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                <div className="space-y-4">
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Status Final do Problema</label>
-                                    <select 
-                                      value={item.finalProblemStatus || 'Resolvido'}
-                                      onChange={(e) => updateActionPlan(idx, { finalProblemStatus: e.target.value as any })}
-                                      className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
-                                    >
-                                      <option value="Resolvido">Resolvido</option>
-                                      <option value="Não resolvido">Não resolvido</option>
-                                    </select>
-                                  </div>
-                                  <div className="space-y-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Ação Final</label>
-                                    <select 
-                                      value={item.finalAction || 'Padronizar processo'}
-                                      onChange={(e) => updateActionPlan(idx, { finalAction: e.target.value as any })}
-                                      className="w-full bg-slate-100 px-4 py-2 rounded-xl text-xs font-bold outline-none border-none"
-                                    >
-                                      <option value="Padronizar processo">Padronizar processo</option>
-                                      <option value="Fazer nova análise">Fazer nova análise</option>
-                                    </select>
-                                  </div>
-                                </div>
-
-                                <div className="space-y-4">
-                                  {item.finalAction === 'Padronizar processo' && (
-                                    <div className="space-y-2">
-                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Modelo de Padronização</label>
-                                      <div className="flex flex-wrap gap-2">
-                                        {['POP', 'ITO', 'Painel de controle'].map(model => (
-                                          <button 
-                                            key={model}
-                                            onClick={() => {
-                                              const current = item.standardizationModels || [];
-                                              const next = current.includes(model as any)
-                                                ? current.filter(m => m !== model)
-                                                : [...current, model as any];
-                                              updateActionPlan(idx, { standardizationModels: next });
-                                            }}
-                                            className={cn(
-                                              "px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
-                                              item.standardizationModels?.includes(model as any)
-                                                ? "bg-indigo-600 border-indigo-600 text-white shadow-md"
-                                                : "bg-white border-slate-200 text-slate-400 hover:border-indigo-300"
-                                            )}
-                                          >
-                                            {model}
-                                          </button>
-                                        ))}
+                          activeCycle.plan.actionPlan.map((item, idx) => {
+                            const isExpanded = expandedActionId === item.id;
+                            
+                            return (
+                              <div key={item.id} className={cn(
+                                "border-b border-slate-100 last:border-0 transition-all",
+                                isExpanded ? "bg-white" : "hover:bg-slate-50/50"
+                              )}>
+                                {/* Accordion Header */}
+                                <button 
+                                  onClick={() => setExpandedActionId(isExpanded ? null : item.id)}
+                                  className="w-full p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left group"
+                                >
+                                  <div className="flex items-center gap-4 flex-1">
+                                    <span className={cn(
+                                      "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
+                                      isExpanded ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100"
+                                    )}>
+                                      {idx + 1}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <h5 className="font-bold text-slate-800 text-lg truncate group-hover:text-indigo-600 transition-colors">
+                                        {item.what || 'Ação sem descrição'}
+                                      </h5>
+                                      <div className="flex items-center gap-3 mt-1">
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                          <CheckCircle2 size={12} className="text-slate-400" />
+                                          Status Final: <span className="text-slate-600 font-black">{item.finalProblemStatus || 'Resolvido'}</span>
+                                        </p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                          <Target size={12} className="text-slate-400" />
+                                          Ação Final: <span className="text-slate-600 font-black">{item.finalAction || 'Padronizar'}</span>
+                                        </p>
                                       </div>
                                     </div>
-                                  )}
-
-                                  {item.finalProblemStatus === 'Não resolvido' && item.finalAction === 'Fazer nova análise' && (
-                                    <div className="pt-4">
-                                      <button 
-                                        onClick={() => {
-                                          createNewCycle(activeCycle.taskId, activeCycle.plan.problemDescription);
-                                        }}
-                                        className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
-                                      >
-                                        <RefreshCw size={16} />
-                                        Refazer PDCA
-                                      </button>
+                                  </div>
+                                  
+                                  <div className="flex items-center gap-2">
+                                    <div className={cn(
+                                      "w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 transition-transform duration-300 group-hover:border-indigo-200 group-hover:text-indigo-500",
+                                      isExpanded && "rotate-180 bg-indigo-50 border-indigo-200 text-indigo-600"
+                                    )}>
+                                      <ChevronDown size={18} />
                                     </div>
+                                  </div>
+                                </button>
+
+                                {/* Accordion Content */}
+                                <AnimatePresence>
+                                  {isExpanded && (
+                                    <motion.div
+                                      initial={{ height: 0, opacity: 0 }}
+                                      animate={{ height: 'auto', opacity: 1 }}
+                                      exit={{ height: 0, opacity: 0 }}
+                                      transition={{ duration: 0.3, ease: 'easeInOut' }}
+                                      className="overflow-hidden"
+                                    >
+                                      <div className="px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-1 duration-300 pt-4 border-t border-slate-50">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                          <div className="space-y-4">
+                                            <div className="space-y-1">
+                                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Status Final do Problema</label>
+                                              <select 
+                                                value={item.finalProblemStatus || 'Resolvido'}
+                                                onChange={(e) => updateActionPlan(idx, { finalProblemStatus: e.target.value as any })}
+                                                className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                              >
+                                                <option value="Resolvido">Resolvido</option>
+                                                <option value="Não resolvido">Não resolvido</option>
+                                              </select>
+                                            </div>
+                                            <div className="space-y-1">
+                                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Ação Final</label>
+                                              <select 
+                                                value={item.finalAction || 'Padronizar processo'}
+                                                onChange={(e) => updateActionPlan(idx, { finalAction: e.target.value as any })}
+                                                className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                              >
+                                                <option value="Padronizar processo">Padronizar processo</option>
+                                                <option value="Fazer nova análise">Fazer nova análise</option>
+                                              </select>
+                                            </div>
+                                          </div>
+
+                                          <div className="space-y-4">
+                                            {item.finalAction === 'Padronizar processo' && (
+                                              <div className="space-y-3">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Modelo de Padronização Sugerido</label>
+                                                <div className="flex flex-wrap gap-2">
+                                                  {['POP', 'ITO', 'Painel de controle'].map(model => (
+                                                    <button 
+                                                      key={model}
+                                                      onClick={() => {
+                                                        const current = item.standardizationModels || [];
+                                                        const next = current.includes(model as any)
+                                                          ? current.filter(m => m !== model)
+                                                          : [...current, model as any];
+                                                        updateActionPlan(idx, { standardizationModels: next });
+                                                      }}
+                                                      className={cn(
+                                                        "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
+                                                        item.standardizationModels?.includes(model as any)
+                                                          ? "bg-indigo-600 border-indigo-600 text-white shadow-lg"
+                                                          : "bg-white border-slate-200 text-slate-400 hover:border-indigo-300"
+                                                      )}
+                                                    >
+                                                      {model}
+                                                    </button>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {item.finalProblemStatus === 'Não resolvido' && item.finalAction === 'Fazer nova análise' && (
+                                              <div className="pt-2">
+                                                <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex items-center gap-3 mb-4">
+                                                  <AlertCircle size={20} className="text-amber-500 shrink-0" />
+                                                  <p className="text-[10px] text-amber-700 font-medium leading-tight">O problema persiste. Recomendamos iniciar um novo ciclo PDCA para aprofundar a análise.</p>
+                                                </div>
+                                                <button 
+                                                  onClick={() => {
+                                                    createNewCycle(activeCycle.taskId, activeCycle.plan.problemDescription);
+                                                  }}
+                                                  className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-95"
+                                                >
+                                                  <RefreshCw size={18} />
+                                                  Refazer Ciclo PDCA
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </motion.div>
                                   )}
-                                </div>
+                                </AnimatePresence>
                               </div>
-                            </div>
-                          ))
+                            );
+                          })
                         )}
                       </div>
                     </div>
@@ -1614,6 +1860,54 @@ export default function PDCAEditor({
           </div>
         )}
       </div>
+
+      <AnimatePresence>
+        {confirmingLog && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-white rounded-[2.5rem] max-w-md w-full p-10 shadow-2xl space-y-8 border border-slate-100"
+            >
+              <div className="w-20 h-20 bg-rose-100 text-rose-600 rounded-[2rem] flex items-center justify-center mx-auto shadow-inner">
+                <AlertCircle size={40} />
+              </div>
+              <div className="text-center space-y-3">
+                <h3 className="text-2xl font-black text-slate-800 tracking-tight">Finalizar Plano de Ação?</h3>
+                <p className="text-slate-500 font-medium leading-relaxed">
+                  Tem certeza que deseja marcar este plano de ação como concluído? 
+                  <span className="block mt-2 font-bold text-rose-500 italic">Após essa ação, não será mais possível editar este registro no histórico.</span>
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-4 pt-4">
+                <button 
+                  onClick={() => setConfirmingLog(null)}
+                  className="py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-slate-400 bg-slate-50 hover:bg-slate-100 transition-all active:scale-95"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={() => {
+                    updateActionPlan(confirmingLog.idx, confirmingLog.updates);
+                    const obsInput = document.getElementById(confirmingLog.obsInputId) as HTMLInputElement;
+                    if (obsInput) obsInput.value = '';
+                    setConfirmingLog(null);
+                  }}
+                  className="py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all active:scale-95"
+                >
+                  Confirmar e Salvar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 

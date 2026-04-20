@@ -61,7 +61,7 @@ import {
 } from './firebase';
 import type { FirebaseUser } from './firebase';
 import { Project, ProjectStatus, ProjectPriority, User, Subtask, OperationalAction, SavedColor } from './types';
-import { cn } from './lib/utils';
+import { cn, isValidUrl, formatUrl } from './lib/utils';
 import MappingTab from './components/MappingTab';
 import PDCAEditor from './components/PDCAEditor';
 import DashboardView from './components/DashboardView';
@@ -1575,9 +1575,9 @@ function ScopeTab({
                 placeholder="Cole aqui o link da apresentação do projeto"
                 onChange={(v) => updateScope('presentationLink', v)}
               />
-              {project.scope.presentationLink && (
+              {project.scope.presentationLink && isValidUrl(project.scope.presentationLink) && (
                 <a 
-                  href={project.scope.presentationLink} 
+                  href={formatUrl(project.scope.presentationLink)} 
                   target="_blank" 
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors ml-1"

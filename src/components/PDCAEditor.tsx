@@ -16,7 +16,8 @@ import {
   Save,
   Search,
   Clock,
-  Download
+  Download,
+  ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -25,7 +26,7 @@ import html2pdf from 'html2pdf.js';
 
 import { Project, Subtask, PDCACycle, ParetoItem, ActionPlanItem, PDCAStatus, PDCAPriority } from '../types';
 import ParetoDiagram from './ParetoDiagram';
-import { cn } from '../lib/utils';
+import { cn, isValidUrl, formatUrl } from '../lib/utils';
 
 export default function PDCAEditor({ 
   project, 
@@ -1456,13 +1457,26 @@ export default function PDCAEditor({
                                           </div>
                                           <div className="space-y-1">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Link evidência do acompanhamento</label>
-                                            <input 
-                                              type="text"
-                                              value={item.evidence || ''}
-                                              onChange={(e) => updateActionPlan(idx, { evidence: e.target.value })}
-                                              placeholder="Link das evidências..."
-                                              className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                                            />
+                                            <div className="space-y-2">
+                                              <input 
+                                                type="text"
+                                                value={item.evidence || ''}
+                                                onChange={(e) => updateActionPlan(idx, { evidence: e.target.value })}
+                                                placeholder="Link das evidências..."
+                                                className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                              />
+                                              {item.evidence && isValidUrl(item.evidence) && (
+                                                <a 
+                                                  href={formatUrl(item.evidence)} 
+                                                  target="_blank" 
+                                                  rel="noopener noreferrer"
+                                                  className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors ml-1"
+                                                >
+                                                  <ExternalLink size={14} />
+                                                  Abrir link
+                                                </a>
+                                              )}
+                                            </div>
                                           </div>
 
                                           {/* Linha 3 */}
@@ -2021,10 +2035,24 @@ function ReportSection({ title, color, children }: { title: string, color: strin
 }
 
 function ReportField({ label, value }: { label: string, value: any }) {
+  const isLink = value && typeof value === 'string' && isValidUrl(value);
+  
   return (
     <div className="space-y-1">
       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</p>
-      <p className="text-sm font-bold text-slate-700">{value || 'N/A'}</p>
+      {isLink ? (
+        <a 
+          href={formatUrl(value)} 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="text-sm font-bold text-indigo-600 hover:text-indigo-700 underline flex items-center gap-1.5 transition-colors"
+        >
+          {value}
+          <ExternalLink size={12} />
+        </a>
+      ) : (
+        <p className="text-sm font-bold text-slate-700">{value || 'N/A'}</p>
+      )}
     </div>
   );
 }

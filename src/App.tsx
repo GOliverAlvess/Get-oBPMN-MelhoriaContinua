@@ -1323,7 +1323,6 @@ function ProjectDetailView({
                 setSelectedSubtaskId(null);
                 setActiveTab('scope');
               }}
-              defaultTaskId={selectedSubtaskId} 
             />
           )}
         </div>

@@ -119,6 +119,17 @@ export default function PDCAEditor({
       }
     }
     
+    if (activePhase === 'CHECK' && (newPhase === 'ACT' || newPhase === 'PLAN') && activeCycle) {
+      const hasInvalidAction = activeCycle.plan.actionPlan.some(item => 
+        (item.worked === 'Não' || item.worked === 'Parcial') && !item.failureReason?.trim()
+      );
+      if (hasInvalidAction) {
+        setShowValidationErrors(true);
+        setSaveFeedback("Informe o motivo para as ações que não funcionaram ou funcionaram parcialmente.");
+        return;
+      }
+    }
+    
     setShowValidationErrors(false);
     setActivePhase(newPhase);
   };
@@ -192,6 +203,7 @@ export default function PDCAEditor({
       'CHECK - Periodo',
       'CHECK - Como Acompanha',
       'CHECK - Funcionou',
+      'CHECK - Motivo',
       'CHECK - Evidencias',
       'CHECK - Impacto de Ganho',
       'ACT - Status Final',
@@ -222,6 +234,7 @@ export default function PDCAEditor({
           item.monitoringPeriod,
           `"${(item.monitoringTool || '').replace(/"/g, '""')}"`,
           item.worked,
+          `"${(item.failureReason || '').replace(/"/g, '""')}"`,
           `"${(item.evidence || '').replace(/"/g, '""')}"`,
           item.gainImpact || 0,
           item.finalProblemStatus,
@@ -1405,7 +1418,8 @@ export default function PDCAEditor({
                                       className="overflow-hidden"
                                     >
                                       <div className="px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-1 duration-300 pt-4 border-t border-slate-50">
-                                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                          {/* Linha 1 */}
                                           <div className="space-y-1">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Modo de Acompanhamento</label>
                                             <select 
@@ -1428,7 +1442,9 @@ export default function PDCAEditor({
                                               className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                             />
                                           </div>
-                                          <div className="md:col-span-2 space-y-1">
+
+                                          {/* Linha 2 */}
+                                          <div className="space-y-1">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Como está sendo feito o acompanhamento?</label>
                                             <input 
                                               type="text"
@@ -1438,6 +1454,18 @@ export default function PDCAEditor({
                                               className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                             />
                                           </div>
+                                          <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Link evidência do acompanhamento</label>
+                                            <input 
+                                              type="text"
+                                              value={item.evidence || ''}
+                                              onChange={(e) => updateActionPlan(idx, { evidence: e.target.value })}
+                                              placeholder="Link das evidências..."
+                                              className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                            />
+                                          </div>
+
+                                          {/* Linha 3 */}
                                           <div className="space-y-1">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Funcionou?</label>
                                             <select 
@@ -1454,16 +1482,6 @@ export default function PDCAEditor({
                                               <option value="Parcial">Parcial</option>
                                             </select>
                                           </div>
-                                          <div className="md:col-span-3 space-y-1">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Evidências (Links ou Observações)</label>
-                                            <input 
-                                              type="text"
-                                              value={item.evidence || ''}
-                                              onChange={(e) => updateActionPlan(idx, { evidence: e.target.value })}
-                                              placeholder="Link ou descrição detalhada das evidências..."
-                                              className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                                            />
-                                          </div>
                                           <div className="space-y-1">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Impacto de ganho</label>
                                             <input 
@@ -1471,10 +1489,28 @@ export default function PDCAEditor({
                                               value={item.gainImpact || 0}
                                               onFocus={(e) => e.target.select()}
                                               onChange={(e) => updateActionPlan(idx, { gainImpact: parseFloat(e.target.value) || 0 })}
-                                              placeholder="Informe o custo atual"
+                                              placeholder="Impacto financeiro ou de tempo"
                                               className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                             />
                                           </div>
+
+                                          {/* Campo Condicional: Motivo */}
+                                          {(item.worked === 'Não' || item.worked === 'Parcial') && (
+                                            <div className="md:col-span-2 space-y-1 block animate-in slide-in-from-top-2 duration-300">
+                                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block flex items-center gap-2">
+                                                Motivo <span className="text-rose-500 font-bold">(Obrigatório)</span>
+                                              </label>
+                                              <textarea 
+                                                value={item.failureReason || ''}
+                                                onChange={(e) => updateActionPlan(idx, { failureReason: e.target.value })}
+                                                placeholder={item.worked === 'Não' ? "Descreva detalhadamente por que a ação não funcionou..." : "Descreva por que a ação funcionou apenas parcialmente..."}
+                                                className={cn(
+                                                  "w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all min-h-[100px] resize-none",
+                                                  showValidationErrors && !item.failureReason && "ring-2 ring-rose-500 bg-rose-50"
+                                                )}
+                                              />
+                                            </div>
+                                          )}
                                         </div>
 
                                         {item.worked === 'Sim' && (
@@ -1807,12 +1843,18 @@ export default function PDCAEditor({
                                       <p className="font-black text-slate-400 uppercase">Funcionou?</p>
                                       <p className={cn("font-bold", item.worked === 'Sim' ? "text-emerald-600" : "text-rose-600")}>{item.worked}</p>
                                     </div>
+                                    {(item.worked === 'Não' || item.worked === 'Parcial') && (
+                                      <div className="col-span-2">
+                                        <p className="font-black text-slate-400 uppercase">Motivo</p>
+                                        <p className="font-bold text-slate-600">{item.failureReason || 'N/A'}</p>
+                                      </div>
+                                    )}
                                     <div>
                                       <p className="font-black text-slate-400 uppercase">Impacto de Ganho</p>
                                       <p className="font-bold text-emerald-600">R$ {item.gainImpact || 0}</p>
                                     </div>
                                   </div>
-                                  <ReportField label="Evidências" value={item.evidence || 'N/A'} />
+                                  <ReportField label="Link evidência do acompanhamento" value={item.evidence || 'N/A'} />
                                 </div>
                               ))}
                             </div>

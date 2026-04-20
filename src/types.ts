@@ -132,6 +132,7 @@ export interface ActionPlanItem {
   monitoringPeriod?: number;
   monitoringTool?: string; // New field
   worked?: 'Sim' | 'Não' | 'Parcial';
+  failureReason?: string; // Motivo da falha ou resultado parcial
   evidence?: string;
   gainImpact?: number; // New field
   

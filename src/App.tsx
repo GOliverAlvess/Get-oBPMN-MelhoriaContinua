@@ -422,10 +422,20 @@ export default function App() {
     };
 
     try {
+      console.log("⏳ Criando novo projeto no Firestore:", newId);
       await setDoc(doc(db, 'projects', newId), newProject);
+      
+      // Atualização otimista do estado local para exibição imediata
+      setProjects(prev => {
+        const alreadyExists = prev.some(p => p.id === newId);
+        if (alreadyExists) return prev;
+        return [...prev, newProject];
+      });
+
       setIsCreateModalOpen(false);
       setSelectedProjectId(newId);
       setActiveTab('scope');
+      console.log("✅ Projeto criado e selecionado.");
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, `projects/${newId}`);
     }
@@ -702,19 +712,13 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
   key?: string
 }) {
   const [groupBy, setGroupBy] = useState<'status' | 'collaborator'>('status');
-  const [visibleStatuses, setVisibleStatuses] = useState<ProjectStatus[]>(['Planejamento', 'Em andamento', 'Em melhoria', 'Concluído']);
-  const [visibleCollaborators, setVisibleCollaborators] = useState<string[]>(users.map(u => u.id));
+  const [visibleStatuses, setVisibleStatuses] = useState<ProjectStatus[]>([]);
+  const [visibleCollaborators, setVisibleCollaborators] = useState<string[]>([]);
+  const [visibleParticipants, setVisibleParticipants] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
   const statuses: ProjectStatus[] = ['Planejamento', 'Em andamento', 'Em melhoria', 'Concluído'];
-
-  // Update visible collaborators when users list changes
-  useEffect(() => {
-    if (visibleCollaborators.length === 0 && users.length > 0) {
-      setVisibleCollaborators(users.map(u => u.id));
-    }
-  }, [users]);
 
   const toggleStatus = (status: ProjectStatus) => {
     setVisibleStatuses(prev => 
@@ -728,18 +732,30 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
     );
   };
 
-  const filteredProjects = projects.map(p => ({ ...p, progress: calculateProjectProgress(p) })).filter(p => 
-    visibleStatuses.includes(p.status) && 
-    visibleCollaborators.includes(p.assignedTo) &&
-    (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-     p.scope.responsible.toLowerCase().includes(searchTerm.toLowerCase()))
-  );
+  const toggleParticipant = (userId: string) => {
+    setVisibleParticipants(prev => 
+      prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
+    );
+  };
 
-  const activeFiltersCount = (statuses.length - visibleStatuses.length) + (users.length - visibleCollaborators.length);
+  const filteredProjects = projects.map(p => ({ ...p, progress: calculateProjectProgress(p) })).filter(p => {
+    const projectParticipants = Array.from(new Set(p.subtasks?.map(s => s.responsibleId).filter(Boolean) || [])) as string[];
+    
+    const matchesStatus = visibleStatuses.length === 0 || visibleStatuses.includes(p.status);
+    const matchesResponsible = visibleCollaborators.length === 0 || visibleCollaborators.includes(p.assignedTo);
+    const matchesParticipant = visibleParticipants.length === 0 || visibleParticipants.some(id => projectParticipants.includes(id));
+    
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         p.scope.responsible.toLowerCase().includes(searchTerm.toLowerCase());
+
+    return matchesStatus && matchesResponsible && matchesParticipant && matchesSearch;
+  });
+
+  const activeFiltersCount = visibleStatuses.length + visibleCollaborators.length + visibleParticipants.length;
 
   const columns = groupBy === 'status' 
-    ? statuses.filter(s => visibleStatuses.includes(s))
-    : users.filter(u => visibleCollaborators.includes(u.id));
+    ? (visibleStatuses.length === 0 ? statuses : statuses.filter(s => visibleStatuses.includes(s)))
+    : (visibleCollaborators.length === 0 ? users : users.filter(u => visibleCollaborators.includes(u.id)));
 
   return (
     <motion.div 
@@ -878,11 +894,47 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
                     </div>
                   </div>
 
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Filtrar Participantes</h4>
+                      <div className="flex gap-2">
+                        <button onClick={() => setVisibleParticipants(users.map(u => u.id))} className="text-[9px] font-bold text-indigo-600 hover:underline">Todos</button>
+                        <button onClick={() => setVisibleParticipants([])} className="text-[9px] font-bold text-slate-400 hover:underline">Nenhum</button>
+                      </div>
+                    </div>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                      {users.map(u => (
+                        <button 
+                          key={u.id}
+                          onClick={() => toggleParticipant(u.id)}
+                          className={cn(
+                            "w-full flex items-center gap-3 p-2 rounded-xl border transition-all text-left",
+                            visibleParticipants.includes(u.id)
+                              ? "bg-indigo-50 border-indigo-200"
+                              : "bg-white border-slate-100 hover:border-slate-200"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold uppercase",
+                            visibleParticipants.includes(u.id) ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-400"
+                          )}>
+                            {u.name.split(' ').map(n => n[0]).join('')}
+                          </div>
+                          <span className={cn(
+                            "text-xs font-bold truncate",
+                            visibleParticipants.includes(u.id) ? "text-indigo-600" : "text-slate-500"
+                          )}>{u.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="pt-2 border-t border-slate-100 flex justify-between">
                     <button 
                       onClick={() => {
-                        setVisibleStatuses(statuses);
-                        setVisibleCollaborators(users.map(u => u.id));
+                        setVisibleStatuses([]);
+                        setVisibleCollaborators([]);
+                        setVisibleParticipants([]);
                       }}
                       className="text-[10px] font-bold text-indigo-600 hover:underline"
                     >
@@ -1091,6 +1143,24 @@ function ProjectCard({ project, users, onClick, onDelete }: { project: Project, 
       </h4>
 
       <div className="space-y-4">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-[10px] bg-slate-50 p-2 rounded-lg border border-slate-100">
+            <span className="font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Responsável:</span>
+            <span className="font-bold text-slate-700 truncate">{assignedUser?.name || 'Não atribuído'}</span>
+          </div>
+          
+          <div className="flex items-center gap-2 text-[10px] bg-slate-50 p-2 rounded-lg border border-slate-100">
+            <span className="font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Participantes:</span>
+            <span className="font-bold text-slate-700 truncate">
+              {(() => {
+                const participantIds = Array.from(new Set(project.subtasks?.map(s => s.responsibleId).filter(Boolean) || []));
+                const participantNames = participantIds.map(id => users.find(u => u.id === id)?.name).filter(Boolean);
+                return participantNames.length > 0 ? participantNames.join(', ') : 'Sem participantes';
+              })()}
+            </span>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-2 text-[10px] text-slate-500">
           <div className="flex items-center gap-1.5">
             <Calendar size={12} className="text-indigo-500" />

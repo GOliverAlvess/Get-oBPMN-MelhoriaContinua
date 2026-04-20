@@ -137,8 +137,16 @@ export default function DashboardView({ projects, users, actions, onProjectClick
     const projectProgressList = filteredProjects.map(p => ({
       id: p.id,
       name: p.name,
+      priority: p.priority || 'Baixa',
       progress: calculateProjectProgress(p)
-    })).sort((a, b) => b.progress - a.progress);
+    })).sort((a, b) => {
+      const priorityOrder = { 'Alta': 0, 'Média': 1, 'Baixa': 2 };
+      const valA = priorityOrder[a.priority] ?? 3;
+      const valB = priorityOrder[b.priority] ?? 3;
+      
+      if (valA !== valB) return valA - valB;
+      return b.progress - a.progress;
+    });
 
     const avgProgress = total > 0 
       ? Math.round(projectProgressList.reduce((sum, p) => sum + p.progress, 0) / total) 

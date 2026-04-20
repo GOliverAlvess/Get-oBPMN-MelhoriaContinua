@@ -20,42 +20,76 @@ export const calculateProjectStatus = (project: Project): ProjectStatus => {
 };
 
 export const calculateProjectProgress = (project: Project) => {
+  // 1. ESCOPO (5%)
+  // Só considera completo se os campos principais estiverem preenchidos
+  const scope = project.scope;
+  const isScopeComplete = 
+    scope.title?.trim() !== '' &&
+    scope.responsible?.trim() !== '' &&
+    scope.problemDescription?.trim() !== '' &&
+    scope.measurableObjective?.trim() !== '' &&
+    scope.startDate?.trim() !== '' &&
+    scope.forecastCompletion?.trim() !== '' &&
+    (scope.involvedSectors?.length || 0) > 0 &&
+    (scope.toolsUsed?.length || 0) > 0;
+
+  const scopeProgress = isScopeComplete ? 5 : 0;
+
+  // 2. SUBTAREFAS (95%)
   const subtasks = project.subtasks || [];
   if (subtasks.length === 0) {
-    let progress = 0;
-    if (project.scope.problemDescription) progress += 5;
-    if (project.scope.measurableObjective) progress += 5;
-    return Math.min(progress, 100);
+    return scopeProgress;
   }
 
-  const completedSubtasks = subtasks.filter(subtask => {
-    // A subtask is completed if its status is 'Concluído'
-    // We also verify if all its internal PDCA cycles are resolved
-    const problemTasks = Object.entries(subtask.mapping.customData || {})
-      .filter(([_, data]) => data.isProblemStep);
-    
-    if (problemTasks.length === 0) {
-      return subtask.status === 'Concluído';
+  const weightPerSubtask = 95 / subtasks.length;
+  let totalSubtasksProgress = 0;
+
+  subtasks.forEach(subtask => {
+    let stagesCompleted = 0;
+    const mapping = subtask.mapping;
+    const pdca = subtask.pdcaCycles || [];
+
+    // Estágio 1: Início do mapeamento
+    if (mapping && (mapping.nodes?.length > 0 || mapping.xml)) {
+      stagesCompleted++;
     }
 
-    const cyclesByTask = subtask.pdcaCycles.reduce((acc, cycle) => {
-      if (!acc[cycle.taskId]) acc[cycle.taskId] = [];
-      acc[cycle.taskId].push(cycle);
-      return acc;
-    }, {} as Record<string, any[]>);
+    // Estágio 2: Mapeamento concluído
+    // Definimos como concluído se o usuário marcou o status ou se o XML existe e tem nodes substanciais
+    const isMappingFinished = subtask.status !== 'Pendente' && mapping?.xml;
+    if (isMappingFinished) {
+      stagesCompleted++;
+    }
 
-    const allProblemsResolved = problemTasks.every(([taskId, _]) => {
-      const taskCycles = cyclesByTask[taskId] || [];
-      return taskCycles.length > 0 && taskCycles.every(cycle => {
-        const isConcluded = cycle.status === 'Concluído';
-        const allActionsResolved = cycle.plan.actionPlan.length > 0 && 
-                                  cycle.plan.actionPlan.every(action => action.finalProblemStatus === 'Resolvido');
-        return isConcluded && allActionsResolved;
-      });
-    });
+    // Verificamos se existem problemas identificados que exigem PDCA
+    const problemSteps = Object.values(mapping?.customData || {}).filter(data => data?.isProblemStep);
+    const requiresPDCA = problemSteps.length > 0;
 
-    return allProblemsResolved && subtask.status === 'Concluído';
-  }).length;
+    if (!requiresPDCA) {
+      // Se não há problemas, os estágios de PDCA são concedidos automaticamente ao concluir o mapeamento
+      if (isMappingFinished) {
+        stagesCompleted += 4;
+      }
+    } else {
+      // Estágio 3: PDCA - PLAN preenchido (Pelo menos um ciclo com plano de ação)
+      const hasPlan = pdca.some(c => c.plan.actionPlan.length > 0);
+      if (hasPlan) stagesCompleted++;
 
-  return Math.min(Math.round((completedSubtasks / subtasks.length) * 100), 100);
+      // Estágio 4: PDCA - DO preenchido (Pelo menos uma ação iniciada ou concluída)
+      const hasDo = pdca.some(c => c.plan.actionPlan.some(a => a.status === 'Concluído' || a.status === 'Em andamento'));
+      if (hasDo) stagesCompleted++;
+
+      // Estágio 5: PDCA - CHECK preenchido (Pelo menos uma ação com status de 'worked' / funcionou)
+      const hasCheck = pdca.some(c => c.plan.actionPlan.some(a => a.worked && a.worked !== undefined));
+      if (hasCheck) stagesCompleted++;
+
+      // Estágio 6: PDCA - ACT concluído (Ciclo finalizado ou ação com status final)
+      const hasAct = pdca.some(c => c.status === 'Concluído' || c.plan.actionPlan.some(a => a.finalProblemStatus));
+      if (hasAct) stagesCompleted++;
+    }
+
+    totalSubtasksProgress += (stagesCompleted / 6) * weightPerSubtask;
+  });
+
+  return Math.min(Math.round(scopeProgress + totalSubtasksProgress), 100);
 };

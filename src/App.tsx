@@ -2189,75 +2189,84 @@ function SettingsView({ users, globalConfig, projects, actions }: {
 }) {
   const [activeSubTab, setActiveSubTab] = useState<'perfil' | 'cadastros' | 'setores-ferramentas' | 'relatorios'>('cadastros');
 
+  const menuItems = [
+    { id: 'cadastros', label: 'Cadastros', icon: <Users size={18} /> },
+    { id: 'setores-ferramentas', label: 'Setores e Ferramentas', icon: <Settings size={18} /> },
+    { id: 'relatorios', label: 'Relatórios', icon: <FileText size={18} /> },
+    { id: 'perfil', label: 'Meu Perfil', icon: <UserIcon size={18} /> },
+  ] as const;
+
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
-      className="space-y-8 max-w-5xl mx-auto"
-    >
-      <div>
-        <h2 className="text-3xl font-bold text-slate-900">Configurações</h2>
-        <p className="text-slate-500 mt-1">Gerencie as preferências do sistema e cadastros.</p>
-      </div>
-
-      <div className="flex bg-white p-1 rounded-2xl border border-slate-200 shadow-sm w-fit overflow-x-auto max-w-full">
-        <button 
-          onClick={() => setActiveSubTab('cadastros')}
-          className={cn(
-            "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2 shrink-0",
-            activeSubTab === 'cadastros' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
-          )}
-        >
-          <Users size={18} />
-          <span>Cadastros</span>
-        </button>
-        <button 
-          onClick={() => setActiveSubTab('setores-ferramentas')}
-          className={cn(
-            "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2 shrink-0",
-            activeSubTab === 'setores-ferramentas' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
-          )}
-        >
-          <Settings size={18} />
-          <span>Setores e Ferramentas</span>
-        </button>
-        <button 
-          onClick={() => setActiveSubTab('relatorios')}
-          className={cn(
-            "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2 shrink-0",
-            activeSubTab === 'relatorios' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
-          )}
-        >
-          <FileText size={18} />
-          <span>Relatórios</span>
-        </button>
-        <button 
-          onClick={() => setActiveSubTab('perfil')}
-          className={cn(
-            "px-6 py-2.5 rounded-xl transition-all font-medium text-sm flex items-center gap-2 shrink-0",
-            activeSubTab === 'perfil' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
-          )}
-        >
-          <UserIcon size={18} />
-          <span>Meu Perfil</span>
-        </button>
-      </div>
-
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden min-h-[500px]">
-        {activeSubTab === 'cadastros' && <UserRegistrationTab users={users} />}
-        {activeSubTab === 'setores-ferramentas' && <GlobalConfigTab config={globalConfig} />}
-        {activeSubTab === 'relatorios' && <ReportsTab projects={projects} users={users} actions={actions} />}
-        {activeSubTab === 'perfil' && (
-          <div className="p-12 text-center space-y-4">
-            <div className="w-20 h-20 bg-slate-100 rounded-full mx-auto flex items-center justify-center text-slate-400">
-              <Users size={40} />
-            </div>
-            <p className="text-slate-500">Configurações de perfil em desenvolvimento.</p>
+    <div className="flex flex-col lg:flex-row gap-8 max-w-7xl mx-auto min-h-[600px]">
+      {/* Sidebar Fixa */}
+      <div className="w-full lg:w-72 shrink-0">
+        <div className="sticky top-8 space-y-6">
+          <div>
+            <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Configurações</h2>
+            <p className="text-slate-500 mt-1 text-sm">Gerencie as preferências do sistema e cadastros.</p>
           </div>
-        )}
+
+          <nav className="bg-white p-2 rounded-3xl border border-slate-200 shadow-sm flex flex-col gap-1">
+            {menuItems.map((item) => (
+              <button 
+                key={item.id}
+                onClick={() => setActiveSubTab(item.id)}
+                className={cn(
+                  "px-4 py-3 rounded-2xl transition-all font-bold text-sm flex items-center gap-3 w-full text-left",
+                  activeSubTab === item.id 
+                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100" 
+                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+                )}
+              >
+                <span className={cn("transition-colors", activeSubTab === item.id ? "text-white" : "text-slate-400 group-hover:text-slate-600")}>
+                  {item.icon}
+                </span>
+                <span>{item.label}</span>
+                {activeSubTab === item.id && (
+                  <motion.div 
+                    layoutId="active-pill"
+                    className="ml-auto w-1.5 h-1.5 rounded-full bg-white opacity-50"
+                  />
+                )}
+              </button>
+            ))}
+          </nav>
+        </div>
       </div>
-    </motion.div>
+
+      {/* Área de Conteúdo Dinâmico */}
+      <div className="flex-1 bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
+        <AnimatePresence mode="wait">
+          <motion.div 
+            key={activeSubTab}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.2 }}
+            className="flex-1 flex flex-col"
+          >
+            {activeSubTab === 'cadastros' && <UserRegistrationTab users={users} />}
+            {activeSubTab === 'setores-ferramentas' && <GlobalConfigTab config={globalConfig} />}
+            {activeSubTab === 'relatorios' && <ReportsTab projects={projects} users={users} actions={actions} />}
+            {activeSubTab === 'perfil' && (
+              <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-6">
+                <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 ring-8 ring-slate-50">
+                  <UserIcon size={48} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-slate-800">Meus Dados</h3>
+                  <p className="text-slate-500 mt-1 max-w-xs mx-auto">Em breve você poderá gerenciar sua senha e dados pessoais aqui.</p>
+                </div>
+                <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 rounded-full text-xs font-bold border border-amber-100">
+                  <Clock size={14} />
+                  <span>FUNCIONALIDADE EM DESENVOLVIMENTO</span>
+                </div>
+              </div>
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </div>
   );
 }
 

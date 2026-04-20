@@ -203,17 +203,17 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
           <p className="text-slate-500 text-sm mt-1">Selecione os filtros e gere relatórios em formato Excel.</p>
         </div>
 
-        <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="bg-slate-50/50 p-6 lg:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
             {/* Tipo de Relatório */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo de Relatório</label>
-              <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+            <div className="space-y-3">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">1. Tipo de Relatório</label>
+              <div className="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm h-[52px]">
                 <button 
                   onClick={() => setReportType('PDCA')}
                   className={cn(
-                    "flex-1 py-2 rounded-lg text-xs font-bold transition-all",
-                    reportType === 'PDCA' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"
+                    "flex-1 rounded-xl text-xs font-bold transition-all",
+                    reportType === 'PDCA' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
                   )}
                 >
                   PDCA
@@ -221,8 +221,8 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                 <button 
                   onClick={() => setReportType('Histórico de Ações')}
                   className={cn(
-                    "flex-1 py-2 rounded-lg text-xs font-bold transition-all",
-                    reportType === 'Histórico de Ações' ? "bg-indigo-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"
+                    "flex-1 rounded-xl text-xs font-bold transition-all",
+                    reportType === 'Histórico de Ações' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
                   )}
                 >
                   Histórico de Ações
@@ -231,84 +231,90 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
             </div>
 
             {/* Período */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Período</label>
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <div className="space-y-3 md:col-span-2 xl:col-span-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">2. Período de Análise</label>
+              <div className="grid grid-cols-[1fr,auto,1fr] items-center gap-3">
+                <div className="relative">
+                  <Calendar size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input 
                     type="date"
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-sm"
                   />
                 </div>
-                <span className="text-slate-400 text-xs font-bold">até</span>
-                <div className="relative flex-1">
-                  <Calendar size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <span className="text-slate-300 font-bold text-[10px] uppercase">até</span>
+                <div className="relative">
+                  <Calendar size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input 
                     type="date"
                     value={endDate}
                     onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-2xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all shadow-sm"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Projeto */}
-            <FilterDropdown
-              label="Projetos"
-              placeholder="Todos os projetos"
-              options={projects.map(p => ({ id: p.id, label: p.name }))}
-              selected={selectedProjectIds}
-              onToggle={(id) => toggleFilter(selectedProjectIds, id, setSelectedProjectIds)}
-              onClear={() => setSelectedProjectIds([])}
-              icon={<Briefcase size={16} />}
-              showSearch
-            />
+            {/* Projetos */}
+            <div className="space-y-3">
+              <FilterDropdown
+                label="3. Projetos"
+                placeholder="Todos os projetos"
+                options={projects.map(p => ({ id: p.id, label: p.name }))}
+                selected={selectedProjectIds}
+                onToggle={(id) => toggleFilter(selectedProjectIds, id, setSelectedProjectIds)}
+                onClear={() => setSelectedProjectIds([])}
+                icon={<Briefcase size={16} />}
+                showSearch
+              />
+            </div>
 
-            {/* Colaborador */}
-            <FilterDropdown
-              label="Colaboradores"
-              placeholder="Todos os colaboradores"
-              options={users.map(u => ({ id: u.id, label: u.name }))}
-              selected={selectedCollaborators}
-              onToggle={(id) => toggleFilter(selectedCollaborators, id, setSelectedCollaborators)}
-              onClear={() => setSelectedCollaborators([])}
-              icon={<Users size={16} />}
-              showSearch
-            />
+            {/* Colaboradores */}
+            <div className="space-y-3">
+              <FilterDropdown
+                label="4. Colaboradores"
+                placeholder="Todos os colaboradores"
+                options={users.map(u => ({ id: u.id, label: u.name }))}
+                selected={selectedCollaborators}
+                onToggle={(id) => toggleFilter(selectedCollaborators, id, setSelectedCollaborators)}
+                onClear={() => setSelectedCollaborators([])}
+                icon={<Users size={16} />}
+                showSearch
+              />
+            </div>
 
             {/* Status */}
-            <FilterDropdown
-              label="Status"
-              placeholder="Todos os status"
-              options={['Pendente', 'Em andamento', 'Concluído'].map(s => ({ id: s, label: s }))}
-              selected={selectedStatuses}
-              onToggle={(id) => toggleFilter(selectedStatuses, id, setSelectedStatuses)}
-              onClear={() => setSelectedStatuses([])}
-              icon={<Target size={16} />}
-            />
+            <div className="space-y-3">
+              <FilterDropdown
+                label="5. Status das Ações"
+                placeholder="Todos os status"
+                options={['Pendente', 'Em andamento', 'Concluído'].map(s => ({ id: s, label: s }))}
+                selected={selectedStatuses}
+                onToggle={(id) => toggleFilter(selectedStatuses, id, setSelectedStatuses)}
+                onClear={() => setSelectedStatuses([])}
+                icon={<Target size={16} />}
+              />
+            </div>
           </div>
 
-          <div className="pt-4 flex justify-end">
+          <div className="pt-8 flex justify-end border-t border-slate-100">
             <button 
               onClick={generateReport}
               disabled={isGenerating}
               className={cn(
-                "bg-indigo-600 text-white px-8 py-3 rounded-2xl font-black text-sm uppercase tracking-widest flex items-center gap-3 shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+                "group relative bg-indigo-600 text-white min-w-[200px] h-[58px] rounded-2xl font-black text-sm uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-indigo-100 hover:bg-indigo-700 hover:shadow-indigo-200 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed",
                 isGenerating && "animate-pulse"
               )}
             >
               {isGenerating ? (
                 <>
-                  <RefreshCw className="animate-spin" size={18} />
+                  <RefreshCw className="animate-spin" size={20} />
                   <span>Gerando...</span>
                 </>
               ) : (
                 <>
-                  <Download size={18} />
+                  <Download size={20} className="group-hover:-translate-y-0.5 transition-transform" />
                   <span>Gerar Relatório</span>
                 </>
               )}
@@ -322,8 +328,8 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
             <h4 className="text-sm font-black text-slate-800 uppercase tracking-widest">Histórico de Relatórios Gerados</h4>
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm">
-            <table className="w-full text-left border-collapse">
+          <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm overflow-x-auto custom-scrollbar">
+            <table className="w-full text-left border-collapse min-w-[600px]">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Usuário</th>

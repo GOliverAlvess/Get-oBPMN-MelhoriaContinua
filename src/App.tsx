@@ -60,7 +60,7 @@ import {
   getDoc
 } from './firebase';
 import type { FirebaseUser } from './firebase';
-import { Project, ProjectStatus, ProjectPriority, User, Subtask, OperationalAction, SavedColor } from './types';
+import { Project, ProjectStatus, ProjectPriority, User, Subtask, OperationalAction, SavedColor, UserProfile } from './types';
 import { cn, isValidUrl, formatUrl } from './lib/utils';
 import MappingTab from './components/MappingTab';
 import PDCAEditor from './components/PDCAEditor';
@@ -242,11 +242,34 @@ export default function App() {
   useEffect(() => {
     if (user) {
       const userDocRef = doc(db, 'users', user.uid);
-      setDoc(userDocRef, {
-        id: user.uid,
-        name: user.displayName || 'Usuário sem nome',
-        email: user.email || '',
-      }, { merge: true }).catch(error => handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`));
+      const isAdminEmail = user.email === 'bielalves201@gmail.com';
+      
+      // Check if user already exists to avoid overwriting profile
+      getDoc(userDocRef).then(docSnap => {
+        if (!docSnap.exists()) {
+          setDoc(userDocRef, {
+            id: user.uid,
+            name: user.displayName || 'Usuário sem nome',
+            email: user.email || '',
+            profile: isAdminEmail ? 'Usuário Master' : 'Usuário Analista'
+          }).catch(error => handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`));
+        } else {
+          const data = docSnap.data();
+          // If profile is missing or if it's the admin and not Master, upgrade it
+          if (!data?.profile || (isAdminEmail && data.profile !== 'Usuário Master')) {
+            setDoc(userDocRef, {
+              profile: isAdminEmail ? 'Usuário Master' : (data?.profile || 'Usuário Analista')
+            }, { merge: true }).catch(error => handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`));
+          }
+          
+          // Always keep name and email updated
+          setDoc(userDocRef, {
+            id: user.uid,
+            name: user.displayName || 'Usuário sem nome',
+            email: user.email || '',
+          }, { merge: true }).catch(error => handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`));
+        }
+      });
     }
   }, [user]);
 
@@ -2245,7 +2268,7 @@ function SettingsView({ users, globalConfig, projects, actions }: {
             transition={{ duration: 0.2 }}
             className="flex-1 flex flex-col"
           >
-            {activeSubTab === 'cadastros' && <UserRegistrationTab users={users} />}
+            {activeSubTab === 'cadastros' && <UserRegistrationTab users={users} currentUser={users.find(u => u.id === auth.currentUser?.uid)} />}
             {activeSubTab === 'setores-ferramentas' && <GlobalConfigTab config={globalConfig} />}
             {activeSubTab === 'relatorios' && <ReportsTab projects={projects} users={users} actions={actions} />}
             {activeSubTab === 'perfil' && (
@@ -2367,28 +2390,37 @@ function GlobalConfigTab({ config }: { config: { sectors: string[], tools: strin
   );
 }
 
-function UserRegistrationTab({ users }: { users: User[] }) {
+function UserRegistrationTab({ users, currentUser }: { users: User[], currentUser?: User }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [sector, setSector] = useState('');
+  const [profile, setProfile] = useState<UserProfile>('Usuário Analista');
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Fallback check for admin email just in case the profile isn't loaded yet in state
+  const isMaster = currentUser?.profile === 'Usuário Master' || auth.currentUser?.email === 'bielalves201@gmail.com';
 
   useEffect(() => {
     if (editingUser) {
       setName(editingUser.name);
       setEmail(editingUser.email || '');
       setSector(editingUser.sector || '');
+      setProfile(editingUser.profile || 'Usuário Analista');
     } else {
       setName('');
       setEmail('');
       setSector('');
+      setProfile('Usuário Analista');
     }
   }, [editingUser]);
 
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email || !sector) return;
+    if (!name || !email || !sector) {
+      alert('Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
     
     setIsSubmitting(true);
     try {
@@ -2397,7 +2429,8 @@ function UserRegistrationTab({ users }: { users: User[] }) {
         id: userId,
         name,
         email,
-        sector
+        sector,
+        profile
       };
 
       await setDoc(doc(db, 'users', userId), userData, { merge: true });
@@ -2405,6 +2438,7 @@ function UserRegistrationTab({ users }: { users: User[] }) {
       setName('');
       setEmail('');
       setSector('');
+      setProfile('Usuário Analista');
       setEditingUser(null);
       alert(editingUser ? 'Usuário atualizado com sucesso!' : 'Usuário cadastrado com sucesso!');
     } catch (error) {
@@ -2414,13 +2448,45 @@ function UserRegistrationTab({ users }: { users: User[] }) {
     }
   };
 
-  const handleDeleteUser = async (id: string) => {
-    if (!window.confirm('Tem certeza que deseja excluir este usuário?')) return;
+  const handleDeleteUser = async (user: User) => {
+    if (!user) return;
+
+    if (!isMaster) {
+      window.alert('Você não tem permissão para excluir usuários.');
+      return;
+    }
+
+    if (user.profile === 'Usuário Master') {
+      window.alert('Usuários Master não podem ser excluídos');
+      return;
+    }
+
+    const confirmacao = window.confirm("Deseja realmente excluir este usuário?");
+    if (!confirmacao) return;
+    
     try {
-      await deleteDoc(doc(db, 'users', id));
-      alert('Usuário excluído com sucesso!');
+      await deleteDoc(doc(db, 'users', user.id));
+      window.alert('Usuário excluído com sucesso!');
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `users/${id}`);
+      console.error("Erro ao excluir usuário:", error);
+      window.alert('Erro ao excluir usuário');
+    }
+  };
+
+  const handleChangeProfile = async (userId: string, newProfile: UserProfile) => {
+    if (!isMaster) {
+      window.alert('Você não tem permissão para alterar perfis.');
+      return;
+    }
+
+    try {
+      await setDoc(doc(db, 'users', userId), { profile: newProfile }, { merge: true });
+      // Se estiver editando este usuário, atualize o estado local do formulário também
+      if (editingUser?.id === userId) {
+        setProfile(newProfile);
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `users/${userId}`);
     }
   };
 
@@ -2466,6 +2532,18 @@ function UserRegistrationTab({ users }: { users: User[] }) {
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
               />
             </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-700 ml-1">Perfil</label>
+              <select 
+                value={profile}
+                onChange={(e) => setProfile(e.target.value as UserProfile)}
+                disabled={!isMaster}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <option value="Usuário Analista">Usuário Analista</option>
+                <option value="Usuário Master">Usuário Master</option>
+              </select>
+            </div>
             <div className="flex gap-3">
               <button 
                 type="submit"
@@ -2499,11 +2577,19 @@ function UserRegistrationTab({ users }: { users: User[] }) {
             ) : (
               users.map(u => (
                 <div key={u.id} className="flex items-center gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50/50 group">
-                  <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs">
-                    {u.name.split(' ').map(n => n[0]).join('')}
+                  <div className="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-xs ring-4 ring-white">
+                    {u.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-slate-800 truncate">{u.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold text-slate-800 truncate">{u.name}</p>
+                      <span className={cn(
+                        "text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider",
+                        (u.profile || 'Usuário Analista') === 'Usuário Master' ? "bg-indigo-100 text-indigo-700" : "bg-slate-200 text-slate-600"
+                      )}>
+                        {u.profile || 'Usuário Analista'}
+                      </span>
+                    </div>
                     <p className="text-[10px] text-slate-500 truncate uppercase tracking-wider font-medium">{u.sector || 'Setor não informado'}</p>
                   </div>
                   <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -2515,11 +2601,17 @@ function UserRegistrationTab({ users }: { users: User[] }) {
                       <Edit size={16} />
                     </button>
                     <button 
-                      onClick={() => handleDeleteUser(u.id)}
-                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('Botão excluir clicado para:', u.id);
+                        handleDeleteUser(u);
+                      }}
+                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all relative z-10"
                       title="Excluir"
                     >
-                      <Trash2 size={16} />
+                      <Trash2 size={16} pointerEvents="none" />
                     </button>
                   </div>
                 </div>

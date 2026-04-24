@@ -199,12 +199,15 @@ export interface Project {
   subtasks: Subtask[];
 }
 
+export type UserProfile = 'Usuário Analista' | 'Usuário Master';
+
 export interface User {
   id: string;
   name: string;
   email?: string;
   sector?: string;
   avatar?: string;
+  profile?: UserProfile;
 }
 
 export interface OperationalAction {

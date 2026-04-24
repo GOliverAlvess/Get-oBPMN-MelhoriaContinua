@@ -55,7 +55,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() &&
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.profile == 'Usuário Master' ||
           (request.auth.token.email == "bielalves201@gmail.com" && request.auth.token.email_verified == true));
     }
 
@@ -87,7 +87,8 @@ service cloud.firestore {
              data.id is string && data.id.size() > 0 && data.id.size() < 100 &&
              data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
              (!('email' in data) || isValidEmail(data.email)) &&
-             (!('sector' in data) || (data.sector is string && data.sector.size() > 0 && data.sector.size() < 100));
+             (!('sector' in data) || (data.sector is string && data.sector.size() > 0 && data.sector.size() < 100)) &&
+             (!('profile' in data) || (data.profile in ['Usuário Analista', 'Usuário Master']));
     }
 
     function isValidProject(data) {
@@ -149,8 +150,11 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create, update: if isAuthenticated() && isValidUser(request.resource.data);
-      allow delete: if isAdmin();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data);
+      allow update: if isAuthenticated() &&
+                    isValidUser(request.resource.data) &&
+                    (isOwner(userId) || (isAdmin() && (resource.data.profile != 'Usuário Master' || request.resource.data.profile == 'Usuário Master')));
+      allow delete: if isAdmin() && resource.data.profile != 'Usuário Master';
     }
 
     match /projects/{projectId} {

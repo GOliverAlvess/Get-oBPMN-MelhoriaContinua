@@ -8,7 +8,8 @@
         "id": { "type": "string" },
         "name": { "type": "string" },
         "email": { "type": "string", "format": "email" },
-        "sector": { "type": "string" }
+        "sector": { "type": "string" },
+        "profile": { "type": "string", "enum": ["Usuário Analista", "Usuário Master"] }
       },
       "required": ["id", "name"]
     },

@@ -2197,10 +2197,10 @@ function SettingsView({ users, globalConfig, projects, actions }: {
   ] as const;
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8 max-w-7xl mx-auto min-h-[600px]">
+    <div className="flex flex-col lg:flex-row gap-6 w-full min-h-[600px]">
       {/* Sidebar Fixa */}
-      <div className="w-full lg:w-72 shrink-0">
-        <div className="sticky top-8 space-y-6">
+      <div className="w-full lg:w-[260px] lg:min-w-[260px] shrink-0">
+        <div className="sticky top-0 lg:top-8 space-y-6">
           <div>
             <h2 className="text-3xl font-bold text-slate-900 tracking-tight">Configurações</h2>
             <p className="text-slate-500 mt-1 text-sm">Gerencie as preferências do sistema e cadastros.</p>
@@ -2249,13 +2249,13 @@ function SettingsView({ users, globalConfig, projects, actions }: {
             {activeSubTab === 'setores-ferramentas' && <GlobalConfigTab config={globalConfig} />}
             {activeSubTab === 'relatorios' && <ReportsTab projects={projects} users={users} actions={actions} />}
             {activeSubTab === 'perfil' && (
-              <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-6">
+              <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-6 w-full">
                 <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 ring-8 ring-slate-50">
                   <UserIcon size={48} />
                 </div>
                 <div>
                   <h3 className="text-xl font-bold text-slate-800">Meus Dados</h3>
-                  <p className="text-slate-500 mt-1 max-w-xs mx-auto">Em breve você poderá gerenciar sua senha e dados pessoais aqui.</p>
+                  <p className="text-slate-500 mt-1 mx-auto">Em breve você poderá gerenciar sua senha e dados pessoais aqui.</p>
                 </div>
                 <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 rounded-full text-xs font-bold border border-amber-100">
                   <Clock size={14} />
@@ -2283,8 +2283,8 @@ function GlobalConfigTab({ config }: { config: { sectors: string[], tools: strin
   };
 
   return (
-    <div className="p-8 lg:p-12 space-y-12">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+    <div className="p-6 space-y-12 w-full">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-8">
           <div>
             <h3 className="text-xl font-bold text-slate-900">Setores</h3>
@@ -2425,8 +2425,8 @@ function UserRegistrationTab({ users }: { users: User[] }) {
   };
 
   return (
-    <div className="p-8 lg:p-12 space-y-12">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+    <div className="p-6 space-y-12 w-full">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="space-y-8">
           <div>
             <h3 className="text-xl font-bold text-slate-900">

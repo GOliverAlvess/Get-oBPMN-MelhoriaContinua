@@ -26,7 +26,15 @@ import html2pdf from 'html2pdf.js';
 
 import { Project, Subtask, PDCACycle, ParetoItem, ActionPlanItem, PDCAStatus, PDCAPriority } from '../types';
 import ParetoDiagram from './ParetoDiagram';
-import { cn, isValidUrl, formatUrl } from '../lib/utils';
+import { cn, isValidUrl, formatUrl, exportarCSVPadrao } from '../lib/utils';
+
+const STATUS_MAP: Record<string, string> = {
+  'pending': 'Pendente',
+  'in_progress': 'Em andamento',
+  'done': 'Concluído'
+};
+
+const translateStatus = (status: string) => STATUS_MAP[status] || status;
 
 export default function PDCAEditor({ 
   project, 
@@ -186,75 +194,63 @@ export default function PDCAEditor({
     if (relatedCycles.length === 0) return;
     
     const headers = [
-      'Ciclo',
-      'ID do Processo',
-      'Nome do Problema',
-      'Descricao do Problema',
-      'PLAN - Causa Raiz',
-      'PLAN - Impacto Descricao',
-      'PLAN - Impacto Valor Atual',
-      'PLAN - Meta (%)',
-      'DO - Acao (What)',
-      'DO - Responsavel',
-      'DO - Setor',
-      'DO - Status',
-      'DO - Data Inicio',
-      'DO - Data Conclusao',
-      'CHECK - Modo Acompanhamento',
-      'CHECK - Periodo',
-      'CHECK - Como Acompanha',
-      'CHECK - Funcionou',
-      'CHECK - Motivo',
-      'CHECK - Evidencias',
-      'CHECK - Impacto de Ganho',
-      'ACT - Status Final',
-      'ACT - Acao Final',
-      'ACT - Padronizacao'
+      "ID do Processo",
+      "Nome do Problema",
+      "Descrição do Problema",
+      "PLAN - Causa Raiz",
+      "PLAN - Impacto Descrição",
+      "PLAN - Impacto Valor Atual",
+      "PLAN - Meta (%)",
+      "DO - Ação (What)",
+      "DO - Responsável",
+      "DO - Setor",
+      "DO - Status",
+      "DO - Data Início",
+      "DO - Data Conclusão",
+      "CHECK - Modo Acompanhamento",
+      "CHECK - Período",
+      "CHECK - Como Acompanha",
+      "CHECK - Funcionou",
+      "CHECK - Link evidência do acompanhamento",
+      "CHECK - Impacto de ganho",
+      "ACT - Status Final",
+      "ACT - Ação Final",
+      "ACT - Padronização"
     ];
 
-    const csvRows = [headers.join(',')];
+    const rows: any[][] = [];
 
-    relatedCycles.forEach((cycle, cycleIdx) => {
+    relatedCycles.forEach((cycle) => {
       cycle.plan.actionPlan.forEach((item) => {
-        const row = [
-          cycleIdx + 1,
+        rows.push([
           cycle.id,
-          `"${cycle.title.replace(/"/g, '""')}"`,
-          `"${cycle.plan.problemDescription.replace(/"/g, '""')}"`,
-          `"${(cycle.plan.rootCauseAnalysis.identifiedRootCause || '').replace(/"/g, '""')}"`,
-          `"${cycle.plan.impact.description.replace(/"/g, '""')}"`,
-          cycle.plan.impact.value,
-          cycle.plan.impact.goal,
-          `"${item.what.replace(/"/g, '""')}"`,
-          `"${item.who.replace(/"/g, '""')}"`,
-          `"${(item.sector || '').replace(/"/g, '""')}"`,
-          item.status,
+          cycle.title,
+          cycle.plan.problemDescription,
+          cycle.plan.rootCauseAnalysis.identifiedRootCause || '',
+          cycle.plan.impact.description,
+          cycle.plan.impact.value || '',
+          cycle.plan.impact.goal || '',
+          item.what,
+          item.who,
+          item.sector || '',
+          translateStatus(item.status),
           item.startDate ? format(new Date(item.startDate), 'dd/MM/yyyy') : 'N/A',
           item.endDate ? format(new Date(item.endDate), 'dd/MM/yyyy') : 'N/A',
-          item.monitoringMode,
-          item.monitoringPeriod,
-          `"${(item.monitoringTool || '').replace(/"/g, '""')}"`,
-          item.worked,
-          `"${(item.failureReason || '').replace(/"/g, '""')}"`,
-          `"${(item.evidence || '').replace(/"/g, '""')}"`,
-          item.gainImpact || 0,
-          item.finalProblemStatus,
-          item.finalAction,
-          `"${(item.standardizationModels || []).join('; ')}"`
-        ];
-        csvRows.push(row.join(','));
+          item.monitoringMode || '',
+          item.monitoringPeriod || '',
+          item.monitoringTool || '',
+          item.worked || '',
+          item.evidence || '',
+          item.gainImpact || '0',
+          item.finalProblemStatus || '',
+          item.finalAction || '',
+          (item.standardizationModels || []).join('; ')
+        ]);
       });
     });
 
-    const csvString = csvRows.join('\n');
-    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.setAttribute('href', url);
-    link.setAttribute('download', `pdca_historico_export_${activeCycle?.taskId}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const fileName = `Relatorio_PDCA_${activeCycle?.title.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
+    exportarCSVPadrao(headers, rows, fileName);
   };
 
   const normalizeColors = (element: HTMLElement) => {

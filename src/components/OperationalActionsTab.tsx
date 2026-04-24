@@ -19,7 +19,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Project, User, OperationalAction, ProjectPriority } from '../types';
-import { cn } from '../lib/utils';
+import { cn, exportarCSVPadrao } from '../lib/utils';
 import { db, setDoc, doc, deleteDoc, handleFirestoreError, OperationType } from '../firebase';
 
 interface OperationalActionsTabProps {
@@ -99,20 +99,8 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
       a.feedback || ''
     ]);
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(r => r.map(cell => `"${cell.toString().replace(/"/g, '""')}"`).join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `historico_acoes_${format(new Date(), 'yyyy-MM-dd')}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const fileName = `historico_acoes_${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    exportarCSVPadrao(headers, rows, fileName);
   };
 
   return (

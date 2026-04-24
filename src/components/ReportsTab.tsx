@@ -16,7 +16,6 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { format, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import * as XLSX from 'xlsx';
 import { v4 as uuidv4 } from 'uuid';
 import { 
   db, 
@@ -31,8 +30,53 @@ import {
   OperationType 
 } from '../firebase';
 import { Project, User, OperationalAction, ReportLog } from '../types';
-import { cn } from '../lib/utils';
+import { cn, exportarCSVPadrao } from '../lib/utils';
 import FilterDropdown from './FilterDropdown';
+
+const STATUS_MAP: Record<string, string> = {
+  'pending': 'Pendente',
+  'in_progress': 'Em andamento',
+  'done': 'Concluído'
+};
+
+const translateStatus = (status: string) => STATUS_MAP[status] || status;
+
+const HEADERS_PDCA = [
+  "ID do Processo",
+  "Nome do Problema",
+  "Descrição do Problema",
+  "PLAN - Causa Raiz",
+  "PLAN - Impacto Descrição",
+  "PLAN - Impacto Valor Atual",
+  "PLAN - Meta (%)",
+  "DO - Ação (What)",
+  "DO - Responsável",
+  "DO - Setor",
+  "DO - Status",
+  "DO - Data Início",
+  "DO - Data Conclusão",
+  "CHECK - Modo Acompanhamento",
+  "CHECK - Período",
+  "CHECK - Como Acompanha",
+  "CHECK - Funcionou",
+  "CHECK - Link evidência do acompanhamento",
+  "CHECK - Impacto de ganho",
+  "ACT - Status Final",
+  "ACT - Ação Final",
+  "ACT - Padronização"
+];
+
+const HEADERS_ACTIONS = [
+  "Projeto",
+  "Subtarefa",
+  "Responsável",
+  "Ação",
+  "Prioridade",
+  "Status",
+  "Previsão",
+  "Retorno da tratativa",
+  "Data de conclusão"
+];
 
 interface ReportsTabProps {
   projects: Project[];
@@ -93,13 +137,11 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
       };
 
       if (reportType === 'PDCA') {
-        fileName = `Relatorio_PDCA_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
+        fileName = `Relatorio_PDCA_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
         
         projects.forEach(project => {
           project.subtasks.forEach(subtask => {
             subtask.pdcaCycles.forEach(cycle => {
-              // PDCA doesn't have a single "responsible" or "status" in the same way as actions, 
-              // but we can filter by project and date of creation
               const dateMatch = (!startDate || !endDate) || isWithinInterval(parseISO(cycle.createdAt), {
                 start: startOfDay(parseISO(startDate)),
                 end: endOfDay(parseISO(endDate))
@@ -108,35 +150,33 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
               
               if (dateMatch && projectMatch) {
                 cycle.plan.actionPlan.forEach(action => {
-                  // Further filter by action responsible and status if selected
                   const collabMatch = selectedCollaborators.length === 0 || selectedCollaborators.includes(action.who);
-                  const statusMatch = selectedStatuses.length === 0 || selectedStatuses.includes(action.status);
+                  const statusMatch = selectedStatuses.length === 0 || selectedStatuses.includes(translateStatus(action.status));
 
                   if (collabMatch && statusMatch) {
                     data.push({
-                      'Ciclo': cycle.title,
-                      'ID do Processo': subtask.id,
-                      'Nome do Problema': cycle.title,
-                      'Descrição do Problema': cycle.plan.problemDescription,
-                      'PLAN - Causa Raiz': cycle.plan.rootCauseAnalysis.identifiedRootCause || 'N/A',
-                      'PLAN - Impacto Descrição': cycle.plan.impact.description,
-                      'PLAN - Impacto Valor Atual': cycle.plan.impact.value,
-                      'PLAN - Meta (%)': cycle.plan.impact.goal,
-                      'DO - Ação (What)': action.what,
-                      'DO - Responsável': users.find(u => u.id === action.who)?.name || action.who,
-                      'DO - Setor': action.sector || 'N/A',
-                      'DO - Status': action.status,
-                      'DO - Data Inicio': action.startDate || 'N/A',
-                      'DO - Data Conclusão': action.endDate || 'N/A',
-                      'CHECK - Modo Acompanhamento': action.monitoringMode || 'N/A',
-                      'CHECK - Período': action.monitoringPeriod || 'N/A',
-                      'CHECK - Como Acompanha': action.monitoringTool || 'N/A',
-                      'CHECK - Funcionou': action.worked || 'N/A',
-                      'CHECK - Evidencias': action.evidence || 'N/A',
-                      'CHECK - Impacto de Ganho': action.gainImpact || 'N/A',
-                      'ACT - Status Final': action.finalProblemStatus || 'N/A',
-                      'ACT - Ação Final': action.finalAction || 'N/A',
-                      'ACT - Padronização': action.standardizationModels?.join(', ') || 'N/A'
+                      "ID do Processo": subtask.id,
+                      "Nome do Problema": cycle.title,
+                      "Descrição do Problema": cycle.plan.problemDescription,
+                      "PLAN - Causa Raiz": cycle.plan.rootCauseAnalysis.identifiedRootCause || 'N/A',
+                      "PLAN - Impacto Descrição": cycle.plan.impact.description,
+                      "PLAN - Impacto Valor Atual": cycle.plan.impact.value,
+                      "PLAN - Meta (%)": cycle.plan.impact.goal,
+                      "DO - Ação (What)": action.what,
+                      "DO - Responsável": users.find(u => u.id === action.who)?.name || action.who,
+                      "DO - Setor": action.sector || 'N/A',
+                      "DO - Status": translateStatus(action.status),
+                      "DO - Data Início": action.startDate || 'N/A',
+                      "DO - Data Conclusão": action.endDate || 'N/A',
+                      "CHECK - Modo Acompanhamento": action.monitoringMode || 'N/A',
+                      "CHECK - Período": action.monitoringPeriod || 'N/A',
+                      "CHECK - Como Acompanha": action.monitoringTool || 'N/A',
+                      "CHECK - Funcionou": action.worked || 'N/A',
+                      "CHECK - Link evidência do acompanhamento": action.evidence || 'N/A',
+                      "CHECK - Impacto de ganho": action.gainImpact || 'N/A',
+                      "ACT - Status Final": action.finalProblemStatus || 'N/A',
+                      "ACT - Ação Final": action.finalAction || 'N/A',
+                      "ACT - Padronização": action.standardizationModels?.join(', ') || 'N/A'
                     });
                   }
                 });
@@ -145,20 +185,20 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
           });
         });
       } else {
-        fileName = `Historico_Acoes_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`;
+        fileName = `Historico_Acoes_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
         
         actions.forEach(action => {
-          if (filterByCommon(action.createdAt, action.projectId, action.responsibleId, action.status)) {
+          if (filterByCommon(action.createdAt, action.projectId, action.responsibleId, translateStatus(action.status))) {
             data.push({
-              'Projeto': action.projectName,
-              'Subtarefa': action.subtaskTitle,
-              'Responsável': action.responsibleName,
-              'Ação': action.action,
-              'Prioridade': action.priority,
-              'Status': action.status,
-              'Previsão': action.forecastDate,
-              'Retorno da tratativa': action.feedback || 'N/A',
-              'Data de conclusão': action.completionDate || 'N/A'
+              "Projeto": action.projectName,
+              "Subtarefa": action.subtaskTitle,
+              "Responsável": action.responsibleName,
+              "Ação": action.action,
+              "Prioridade": action.priority,
+              "Status": translateStatus(action.status),
+              "Previsão": action.forecastDate,
+              "Retorno da tratativa": action.feedback || 'N/A',
+              "Data de conclusão": action.completionDate || 'N/A'
             });
           }
         });
@@ -169,11 +209,10 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
         return;
       }
 
-      // Generate Excel
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Relatório");
-      XLSX.writeFile(wb, fileName);
+      const headers = reportType === 'PDCA' ? HEADERS_PDCA : HEADERS_ACTIONS;
+      const csvRows = data.map(item => headers.map(header => item[header] || ''));
+
+      exportarCSVPadrao(headers, csvRows, fileName);
 
       // Log the generation
       const logId = uuidv4();
@@ -196,7 +235,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
   };
 
   return (
-    <div className="p-8 lg:p-12 space-y-12">
+    <div className="p-6 space-y-12 w-full">
       <div className="space-y-8">
         <div>
           <h3 className="text-xl font-bold text-slate-900">Gerador de Relatórios</h3>
@@ -204,7 +243,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
         </div>
 
         <div className="bg-slate-50/50 p-6 lg:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Tipo de Relatório */}
             <div className="space-y-3">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">1. Tipo de Relatório</label>
@@ -231,7 +270,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
             </div>
 
             {/* Período */}
-            <div className="space-y-3 md:col-span-2 xl:col-span-1">
+            <div className="space-y-3">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">2. Período de Análise</label>
               <div className="grid grid-cols-[1fr,auto,1fr] items-center gap-3">
                 <div className="relative">
@@ -285,7 +324,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
             </div>
 
             {/* Status */}
-            <div className="space-y-3">
+            <div className="space-y-3 md:col-span-2">
               <FilterDropdown
                 label="5. Status das Ações"
                 placeholder="Todos os status"

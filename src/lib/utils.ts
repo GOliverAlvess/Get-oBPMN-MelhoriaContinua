@@ -28,3 +28,32 @@ export function formatUrl(url: string) {
   }
   return `https://${url}`;
 }
+
+export function exportarCSVPadrao(headers: string[], linhas: any[][], nomeArquivo: string = "relatorio.csv") {
+  const BOM = "\uFEFF";
+  const separator = ";";
+
+  const csvConteudo =
+    headers.map(h => `"${(h || '').toString().replace(/"/g, '""')}"`).join(separator) + "\r\n" +
+    linhas.map(linha =>
+      linha.map(campo => {
+        const str = (campo ?? "").toString();
+        return `"${str.replace(/"/g, '""')}"`;
+      }).join(separator)
+    ).join("\r\n");
+
+  const csvFinal = BOM + csvConteudo;
+
+  const blob = new Blob([csvFinal], {
+    type: "text/csv;charset=utf-8;"
+  });
+
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = nomeArquivo;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(link.href);
+}

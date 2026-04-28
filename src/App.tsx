@@ -61,7 +61,7 @@ import {
 } from './firebase';
 import type { FirebaseUser } from './firebase';
 import { Project, ProjectStatus, ProjectPriority, User, Subtask, OperationalAction, SavedColor, UserProfile } from './types';
-import { cn, isValidUrl, formatUrl } from './lib/utils';
+import { cn, isValidUrl, formatUrl, cleanObject } from './lib/utils';
 import MappingTab from './components/MappingTab';
 import PDCAEditor from './components/PDCAEditor';
 import DashboardView from './components/DashboardView';
@@ -322,7 +322,7 @@ export default function App() {
     // Persist to Firestore
     try {
       const projectRef = doc(db, 'projects', updatedProject.id);
-      await setDoc(projectRef, updatedProject);
+      await setDoc(projectRef, cleanObject(updatedProject));
     } catch (error) {
       console.error("Auto-save failed:", error);
     }
@@ -353,7 +353,7 @@ export default function App() {
         }
       };
 
-      await setDoc(projectRef, finalProject);
+      await setDoc(projectRef, cleanObject(finalProject));
       console.log("✅ Projeto salvo com sucesso!");
     } catch (error: any) {
       console.error("❌ Erro ao salvar no Firestore:", error);
@@ -446,7 +446,7 @@ export default function App() {
 
     try {
       console.log("⏳ Criando novo projeto no Firestore:", newId);
-      await setDoc(doc(db, 'projects', newId), newProject);
+      await setDoc(doc(db, 'projects', newId), cleanObject(newProject));
       
       // Atualização otimista do estado local para exibição imediata
       setProjects(prev => {
@@ -2396,6 +2396,7 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
   const [sector, setSector] = useState('');
   const [profile, setProfile] = useState<UserProfile>('Usuário Analista');
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fallback check for admin email just in case the profile isn't loaded yet in state
@@ -2461,11 +2462,15 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
       return;
     }
 
-    const confirmacao = window.confirm("Deseja realmente excluir este usuário?");
-    if (!confirmacao) return;
+    setUserToDelete(user);
+  };
+
+  const confirmDelete = async () => {
+    if (!userToDelete) return;
     
     try {
-      await deleteDoc(doc(db, 'users', user.id));
+      await deleteDoc(doc(db, 'users', userToDelete.id));
+      setUserToDelete(null);
       window.alert('Usuário excluído com sucesso!');
     } catch (error) {
       console.error("Erro ao excluir usuário:", error);
@@ -2592,9 +2597,12 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
                     </div>
                     <p className="text-[10px] text-slate-500 truncate uppercase tracking-wider font-medium">{u.sector || 'Setor não informado'}</p>
                   </div>
-                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center gap-2">
                     <button 
-                      onClick={() => setEditingUser(u)}
+                      onClick={() => {
+                        console.log('Botão editar clicado:', u.id);
+                        setEditingUser(u);
+                      }}
                       className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
                       title="Editar"
                     >
@@ -2603,15 +2611,15 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
                     <button 
                       type="button"
                       onClick={(e) => {
-                        e.preventDefault();
                         e.stopPropagation();
-                        console.log('Botão excluir clicado para:', u.id);
+                        console.log('CLIQUE NO BOTÃO EXCLUIR OK - ID:', u.id);
                         handleDeleteUser(u);
                       }}
-                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all relative z-10"
+                      className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all relative z-[9999] pointer-events-auto cursor-pointer"
+                      style={{ isolation: 'isolate' }}
                       title="Excluir"
                     >
-                      <Trash2 size={16} pointerEvents="none" />
+                      <Trash2 size={16} style={{ pointerEvents: 'none' }} />
                     </button>
                   </div>
                 </div>
@@ -2620,6 +2628,50 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
           </div>
         </div>
       </div>
+
+      <AnimatePresence>
+        {userToDelete && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setUserToDelete(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-8">
+                <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+                  <Trash2 size={32} />
+                </div>
+                <h4 className="text-xl font-bold text-slate-900 text-center mb-2">Excluir Usuário</h4>
+                <p className="text-slate-500 text-center mb-8">
+                  Deseja realmente excluir o usuário <span className="font-bold text-slate-700">{userToDelete.name}</span>? Esta ação não pode ser desfeita.
+                </p>
+                <div className="flex gap-4">
+                  <button 
+                    onClick={() => setUserToDelete(null)}
+                    className="flex-1 px-6 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={confirmDelete}
+                    className="flex-1 px-6 py-4 bg-rose-600 text-white rounded-2xl font-bold hover:bg-rose-700 transition-all shadow-lg shadow-rose-100"
+                  >
+                    Sim, Excluir
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -57,3 +57,22 @@ export function exportarCSVPadrao(headers: string[], linhas: any[][], nomeArquiv
   document.body.removeChild(link);
   URL.revokeObjectURL(link.href);
 }
+
+export function cleanObject(obj: any) {
+  if (!obj || typeof obj !== 'object') return obj;
+  
+  const newObj: any = Array.isArray(obj) ? [] : {};
+  
+  Object.keys(obj).forEach(key => {
+    const value = obj[key];
+    if (value === undefined) return;
+    
+    if (value !== null && typeof value === 'object') {
+      newObj[key] = cleanObject(value);
+    } else {
+      newObj[key] = value;
+    }
+  });
+  
+  return newObj;
+}

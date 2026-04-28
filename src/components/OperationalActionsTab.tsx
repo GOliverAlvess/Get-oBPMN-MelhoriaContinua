@@ -19,7 +19,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Project, User, OperationalAction, ProjectPriority } from '../types';
-import { cn, exportarCSVPadrao } from '../lib/utils';
+import { cn, exportarCSVPadrao, cleanObject } from '../lib/utils';
 import { db, setDoc, doc, deleteDoc, handleFirestoreError, OperationType } from '../firebase';
 
 interface OperationalActionsTabProps {
@@ -38,6 +38,10 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
   const [filterResponsible, setFilterResponsible] = useState<string>('');
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterPriority, setFilterPriority] = useState<string>('');
+  const [editingActionId, setEditingActionId] = useState<string | null>(null);
+  const [tempUpdates, setTempUpdates] = useState<Partial<OperationalAction>>({});
+  const [actionToSave, setActionToSave] = useState<OperationalAction | null>(null);
+  const [updatesToSave, setUpdatesToSave] = useState<Partial<OperationalAction>>({});
 
   const filteredActions = useMemo(() => {
     return actions.filter(a => {
@@ -58,11 +62,42 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
       const actionRef = doc(db, 'operationalActions', id);
       const action = actions.find(a => a.id === id);
       if (action) {
-        await setDoc(actionRef, { ...action, ...updates });
+        const finalAction = cleanObject({ ...action, ...updates });
+        await setDoc(actionRef, finalAction);
+        setEditingActionId(null);
+        setTempUpdates({});
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `operationalActions/${id}`);
     }
+  };
+
+  const handleConfirmSave = (id: string, updates: Partial<OperationalAction>) => {
+    const action = actions.find(a => a.id === id);
+    if (action) {
+      setActionToSave(action);
+      setUpdatesToSave(updates);
+    }
+  };
+
+  const onConfirmSave = async () => {
+    if (!actionToSave) return;
+    await handleUpdateAction(actionToSave.id, updatesToSave);
+    setActionToSave(null);
+    setUpdatesToSave({});
+  };
+
+  const startEditing = (action: OperationalAction) => {
+    if (action.status === 'Concluído') {
+      alert('Ações concluídas não podem ser editadas.');
+      return;
+    }
+    setEditingActionId(action.id);
+    setTempUpdates({
+      status: action.status,
+      feedback: action.feedback || '',
+      completionDate: action.completionDate || ''
+    });
   };
 
   const handleConfirmDelete = async () => {
@@ -194,103 +229,151 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-separate border-spacing-0 min-w-[1600px]">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-100">
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 min-w-[200px]">Projeto</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 min-w-[180px]">Subtarefa</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 min-w-[180px]">Responsável</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 min-w-[350px]">Ação</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 min-w-[120px]">Prioridade</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 min-w-[160px]">Status</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 min-w-[120px]">Previsão</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 min-w-[300px]">Retorno da Tratativa</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 min-w-[160px]">Data de Conclusão</th>
-                <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 w-16 text-right"></th>
+              <tr className="bg-[#003489]">
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[200px]">Projeto</th>
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px]">Subtarefa</th>
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px]">Responsável</th>
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[350px]">Ação</th>
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[120px]">Prioridade</th>
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[160px]">Status</th>
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[120px]">Previsão</th>
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[300px]">Retorno da Tratativa</th>
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[160px]">Data de Conclusão</th>
+                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest w-32 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filteredActions.map((action) => (
-                <tr key={action.id} className="group hover:bg-slate-50/50 transition-colors">
-                  <td className="px-8 py-6 min-w-0">
-                    <span className="font-bold text-slate-700 text-sm break-words line-clamp-2" title={action.projectName}>{action.projectName}</span>
-                  </td>
-                  <td className="px-8 py-6 min-w-0">
-                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider break-words line-clamp-2" title={action.subtaskTitle}>{action.subtaskTitle}</span>
-                  </td>
-                  <td className="px-8 py-6 min-w-0">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-black shrink-0">
-                        {action.responsibleName.charAt(0)}
-                      </div>
-                      <span className="text-sm font-bold text-slate-600 truncate">{action.responsibleName}</span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 group-hover:bg-white transition-colors">
-                      <p className="text-sm text-slate-600 leading-relaxed min-h-[40px]">{action.action}</p>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6">
-                    <span className={cn(
-                      "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider inline-block",
-                      action.priority === 'Alta' ? "bg-rose-100 text-rose-600" :
-                      action.priority === 'Média' ? "bg-indigo-100 text-indigo-600" :
-                      "bg-slate-200 text-slate-600"
+              {filteredActions.map((action) => {
+                const isEditing = editingActionId === action.id;
+                const currentStatus = isEditing ? (tempUpdates.status || action.status) : action.status;
+                const currentFeedback = isEditing ? (tempUpdates.feedback || action.feedback) : action.feedback;
+                const currentCompletionDate = isEditing ? (tempUpdates.completionDate || action.completionDate) : action.completionDate;
+
+                return (
+                  <tr key={action.id} className={cn(
+                    "group transition-all duration-300",
+                    isEditing ? "bg-indigo-50" : "hover:bg-slate-50/50"
+                  )}>
+                    <td className={cn(
+                      "px-6 py-4 min-w-0 transition-all",
+                      isEditing && "border-l-4 border-[#003489]"
                     )}>
-                      {action.priority}
-                    </span>
-                  </td>
-                  <td className="px-8 py-6">
-                    <select 
-                      value={action.status}
-                      onChange={(e) => handleUpdateAction(action.id, { status: e.target.value as any })}
-                      className={cn(
-                        "w-full px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider outline-none border border-transparent focus:border-indigo-300 cursor-pointer transition-all",
-                        action.status === 'Concluído' ? "bg-emerald-50 text-emerald-600" :
-                        action.status === 'Em andamento' ? "bg-amber-50 text-amber-600" :
-                        "bg-slate-100 text-slate-500"
-                      )}
-                    >
-                      <option value="Pendente">Pendente</option>
-                      <option value="Em andamento">Em andamento</option>
-                      <option value="Concluído">Concluído</option>
-                    </select>
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className="flex items-center gap-2 text-slate-500 whitespace-nowrap">
-                      <Clock size={14} className="text-slate-400" />
-                      <span className="text-xs font-bold">
-                        {format(new Date(action.forecastDate), 'dd/MM/yyyy')}
+                      <span className="font-bold text-slate-700 text-[13px] break-words line-clamp-2" title={action.projectName}>{action.projectName}</span>
+                    </td>
+                    <td className="px-6 py-4 min-w-0">
+                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider break-words line-clamp-2" title={action.subtaskTitle}>{action.subtaskTitle}</span>
+                    </td>
+                    <td className="px-6 py-4 min-w-0">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">
+                          {action.responsibleName.charAt(0)}
+                        </div>
+                        <span className="text-[13px] font-bold text-slate-600 truncate">{action.responsibleName}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 group-hover:bg-white transition-colors">
+                        <p className="text-[13px] text-slate-600 leading-relaxed min-h-[40px]">{action.action}</p>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={cn(
+                        "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider inline-block",
+                        action.priority === 'Alta' ? "bg-rose-100 text-rose-600" :
+                        action.priority === 'Média' ? "bg-indigo-100 text-indigo-600" :
+                        "bg-slate-200 text-slate-600"
+                      )}>
+                        {action.priority}
                       </span>
-                    </div>
-                  </td>
-                  <td className="px-8 py-6">
-                    <textarea 
-                      value={action.feedback || ''}
-                      onChange={(e) => handleUpdateAction(action.id, { feedback: e.target.value })}
-                      placeholder="Descreva o retorno da tratativa..."
-                      className="w-full bg-slate-50/50 p-3 rounded-xl text-xs text-slate-600 outline-none border border-slate-100 focus:border-indigo-300 focus:bg-white transition-all resize-none min-h-[80px] leading-relaxed"
-                    />
-                  </td>
-                  <td className="px-8 py-6">
-                    <div className="relative">
-                      <input 
-                        type="date"
-                        value={action.completionDate || ''}
-                        onChange={(e) => handleUpdateAction(action.id, { completionDate: e.target.value })}
-                        className="w-full bg-slate-50/50 px-3 py-2 rounded-xl text-xs font-bold text-slate-500 outline-none border border-slate-100 focus:border-indigo-300 focus:bg-white transition-all cursor-pointer"
+                    </td>
+                    <td className="px-6 py-4">
+                      <select 
+                        disabled={!isEditing}
+                        value={currentStatus}
+                        onChange={(e) => setTempUpdates(prev => ({ ...prev, status: e.target.value as any }))}
+                        className={cn(
+                          "w-full px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider outline-none border border-transparent focus:border-indigo-300 disabled:cursor-not-allowed transition-all",
+                          currentStatus === 'Concluído' ? "bg-emerald-50 text-emerald-600" :
+                          currentStatus === 'Em andamento' ? "bg-amber-50 text-amber-600" :
+                          "bg-slate-100 text-slate-500"
+                        )}
+                      >
+                        <option value="Pendente">Pendente</option>
+                        <option value="Em andamento">Em andamento</option>
+                        <option value="Concluído">Concluído</option>
+                      </select>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2 text-slate-500 whitespace-nowrap">
+                        <Clock size={14} className="text-slate-400" />
+                        <span className="text-[11px] font-bold">
+                          {format(new Date(action.forecastDate), 'dd/MM/yyyy')}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <textarea 
+                        disabled={!isEditing}
+                        value={currentFeedback || ''}
+                        onChange={(e) => setTempUpdates(prev => ({ ...prev, feedback: e.target.value }))}
+                        placeholder="Descreva o retorno da tratativa..."
+                        className="w-full bg-slate-50/50 p-3 rounded-xl text-[13px] text-slate-600 outline-none border border-slate-100 focus:border-indigo-300 focus:bg-white transition-all resize-none min-h-[80px] leading-relaxed disabled:opacity-75 disabled:cursor-not-allowed"
                       />
-                    </div>
-                  </td>
-                  <td className="px-8 py-6 text-right">
-                    <button 
-                      onClick={() => handleDeleteClick(action)}
-                      className="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all shadow-sm border border-transparent hover:border-rose-100"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="relative">
+                        <input 
+                          disabled={!isEditing}
+                          type="date"
+                          value={currentCompletionDate || ''}
+                          onChange={(e) => setTempUpdates(prev => ({ ...prev, completionDate: e.target.value }))}
+                          className="w-full bg-slate-50/50 px-3 py-2 rounded-xl text-[13px] font-bold text-slate-500 outline-none border border-slate-100 focus:border-indigo-300 focus:bg-white transition-all disabled:opacity-75 disabled:cursor-not-allowed"
+                        />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {isEditing ? (
+                          <>
+                            <button 
+                              onClick={() => handleConfirmSave(action.id, tempUpdates)}
+                              className="p-2.5 text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all shadow-sm border border-emerald-100"
+                              title="Salvar"
+                            >
+                              <Save size={18} />
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setEditingActionId(null);
+                                setTempUpdates({});
+                              }}
+                              className="p-2.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all shadow-sm border border-transparent hover:border-rose-100"
+                              title="Cancelar"
+                            >
+                              <X size={18} />
+                            </button>
+                          </>
+                        ) : (
+                          <button 
+                            onClick={() => startEditing(action)}
+                            disabled={action.status === 'Concluído'}
+                            className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm border border-transparent hover:border-indigo-100 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:hover:border-transparent"
+                            title="Editar"
+                          >
+                            <MoreVertical size={18} />
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => handleDeleteClick(action)}
+                          className="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all shadow-sm border border-transparent hover:border-rose-100"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {filteredActions.length === 0 && (
                 <tr>
                   <td colSpan={9} className="px-6 py-20 text-center">
@@ -369,6 +452,49 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
                   className="flex-1 px-6 py-3 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-all shadow-lg shadow-rose-100"
                 >
                   Sim, excluir
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal de Confirmação de Salvamento */}
+      <AnimatePresence>
+        {actionToSave && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setActionToSave(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative bg-white w-full max-w-sm rounded-[2rem] shadow-2xl p-8 text-center"
+            >
+              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <Save size={32} />
+              </div>
+              <h3 className="text-xl font-black text-slate-900 mb-2">Salvar Alterações</h3>
+              <p className="text-slate-500 text-sm leading-relaxed mb-8">
+                Deseja realmente salvar as alterações feitas nesta ação?
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setActionToSave(null)}
+                  className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={onConfirmSave}
+                  className="flex-1 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+                >
+                  Confirmar
                 </button>
               </div>
             </motion.div>

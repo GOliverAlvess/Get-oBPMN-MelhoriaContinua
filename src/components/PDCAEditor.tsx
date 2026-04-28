@@ -23,6 +23,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
 import { format } from 'date-fns';
 import html2pdf from 'html2pdf.js';
+import pdfMake from 'pdfmake/build/pdfmake';
+import * as pdfFonts from 'pdfmake/build/vfs_fonts';
 
 import { Project, Subtask, PDCACycle, ParetoItem, ActionPlanItem, PDCAStatus, PDCAPriority } from '../types';
 import ParetoDiagram from './ParetoDiagram';
@@ -34,7 +36,17 @@ const STATUS_MAP: Record<string, string> = {
   'done': 'Concluído'
 };
 
+
+const SYSTEM_LOGO = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAwIiBoZWlnaHQ9IjUwMCIgdmlld0JveD0iMCAwIDUwMCA1MDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI1MDAiIGhlaWdodD0iNTAwIiByeD0iMTI1IiBmaWxsPSIjMDAzNDg5Ii8+CjxwYXRoIGQ9Ik0zNTAgMTUwSDI1MFYyMDBIMzAwQzI5NSAyMzAgMjgwIDI1MCAyNTAgMjUwQzIxNi44NjMgMjUwIDE5MCAyMjMuMTM3IDE5MCAxOTBDMTkwIDE1Ni44NjMgMjE2Ljg2MyAxMzAgMjUwIDEzMEMyNzAgMTMwIDI5MCAxNDAgMzAwIDE1NUwzNDAgMTE1QzMxNSA5MCAyODUgNzUgMjUwIDc1QzE4Ni40ODcgNzUgMTM1IDEyNi40ODcgMTM1IDE5MEMxMzUgMjUzLjUxMyAxODYuNDg3IDMwNSAyNTAgMzA1QzMxMy41MTMgMzA1IDM2NSAyNTMuNTEzIDM2NSAxOTBDMzY1IDE3Ni40ODcgMzU5LjUxMyAxNjMuNTEzIDM1MCAxNTBaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K";
+
 const translateStatus = (status: string) => STATUS_MAP[status] || status;
+
+// Set up pdfMake fonts
+if (pdfFonts && (pdfFonts as any).pdfMake) {
+  (pdfMake as any).vfs = (pdfFonts as any).pdfMake.vfs;
+} else if ((pdfFonts as any).vfs) {
+  (pdfMake as any).vfs = (pdfFonts as any).vfs;
+}
 
 export default function PDCAEditor({ 
   project, 
@@ -57,8 +69,9 @@ export default function PDCAEditor({
   const [showDashboard, setShowDashboard] = useState(true);
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [showActConfirmation, setShowActConfirmation] = useState(false);
 
-  const [confirmingLog, setConfirmingLog] = useState<{ idx: number, updates: any, obsInputId: string } | null>(null);
+  const [confirmingLog, setConfirmingLog] = useState<{ id: string, updates: any, obsInputId: string } | null>(null);
 
   // Filter cycles if defaultTaskId is provided
   const cycles = useMemo(() => {
@@ -69,6 +82,18 @@ export default function PDCAEditor({
   }, [subtask.pdcaCycles, defaultTaskId]);
 
   const activeCycle = subtask.pdcaCycles.find(c => c.id === activeCycleId);
+
+  const isCheckPhaseValid = useMemo(() => {
+    if (!activeCycle || activeCycle.plan.actionPlan.length === 0) return false;
+    return activeCycle.plan.actionPlan.every(item => {
+      const hasMonitoring = !!item.monitoringTool?.trim();
+      const hasEvidence = !!item.evidence?.trim();
+      const hasWorked = !!item.worked;
+      const hasFailureReason = (item.worked === 'Sim' || !item.worked) || !!item.failureReason?.trim();
+      
+      return hasMonitoring && hasEvidence && hasWorked && hasFailureReason;
+    });
+  }, [activeCycle]);
 
   const ishikawaDefaultCategories = useMemo(() => [
     { id: uuidv4(), name: 'Método' as const, description: 'Procedimentos, fluxos e formas de trabalho.', entries: [] },
@@ -107,7 +132,24 @@ export default function PDCAEditor({
   }, [subtask.pdcaCycles, activeCycle?.taskId]);
 
   const handlePhaseChange = (newPhase: typeof activePhase) => {
-    if (activePhase === 'PLAN' && newPhase !== 'PLAN' && activeCycle) {
+    const phases: (typeof activePhase)[] = ['PLAN', 'DO', 'CHECK', 'ACT', 'REPORT'];
+    const currentIdx = phases.indexOf(activePhase);
+    const newIdx = phases.indexOf(newPhase);
+
+    // Permite voltar a qualquer etapa anterior ou permanecer na mesma
+    if (newIdx <= currentIdx) {
+      setShowValidationErrors(false);
+      setActivePhase(newPhase);
+      return;
+    }
+
+    // Impede pular etapas (ex: PLAN direto para CHECK)
+    if (newIdx > currentIdx + 1 && newPhase !== 'REPORT') {
+      setSaveFeedback("Complete as etapas na ordem correta. Não é permitido pular etapas.");
+      return;
+    }
+
+    if (activePhase === 'PLAN' && newPhase === 'DO' && activeCycle) {
       const { rootCauseAnalysis } = activeCycle.plan;
       let isValid = true;
 
@@ -128,19 +170,16 @@ export default function PDCAEditor({
       }
     }
     
-    if (activePhase === 'CHECK' && (newPhase === 'ACT' || newPhase === 'PLAN') && activeCycle) {
-      const hasInvalidAction = activeCycle.plan.actionPlan.some(item => 
-        (item.worked === 'Não' || item.worked === 'Parcial') && !item.failureReason?.trim()
-      );
-      if (hasInvalidAction) {
-        setShowValidationErrors(true);
-        setSaveFeedback("Informe o motivo para as ações que não funcionaram ou funcionaram parcialmente.");
-        return;
-      }
-    }
+    // Independent cycle evolution: allow navigation between DO, CHECK, and ACT tabs freely
+    // Navigation doesn't change the cycle's overall phase, just what tab is visible.
+    // Transitioning from PLAN to DO still requires basic PLAN completion.
     
     setShowValidationErrors(false);
     setActivePhase(newPhase);
+    // Update cycle's own phase state if it exists
+    if (activeCycle) {
+      updateCycle({ etapaAtual: newPhase });
+    }
   };
 
   const createNewCycle = (taskId: string, taskLabel: string) => {
@@ -151,6 +190,7 @@ export default function PDCAEditor({
       title: cycleCount > 0 ? `Ciclo PDCA ${cycleCount + 1} - ${taskLabel}` : `Ciclo PDCA - ${taskLabel}`,
       createdAt: new Date().toISOString(),
       status: 'Ativo',
+      etapaAtual: 'PLAN',
       plan: {
         problemDescription: taskLabel,
         rootCauseAnalysis: {
@@ -254,66 +294,181 @@ export default function PDCAEditor({
   };
 
   const normalizeColors = (element: HTMLElement) => {
+    // Force a temporary class for PDF specific overrides
+    element.classList.add('pdf-mode');
+    
     const all = element.querySelectorAll("*");
     all.forEach(el => {
       const htmlEl = el as HTMLElement;
       const style = window.getComputedStyle(htmlEl);
       
-      // Check for oklab or oklch in color, backgroundColor or borderColor
-      // These are not supported by html2canvas/jsPDF
-      if (style.color.includes("oklab") || style.color.includes("oklch")) {
-        htmlEl.style.color = "#1e293b"; // slate-800 fallback
-      }
-      
-      const bg = style.backgroundColor;
-      if (bg.includes("oklab") || bg.includes("oklch")) {
-        htmlEl.style.backgroundColor = "#ffffff"; // white fallback
-      }
+      // Extensive list of properties to check
+      ['color', 'backgroundColor', 'borderColor', 'outlineColor', 'fill', 'stroke'].forEach(prop => {
+        const val = (style as any)[prop];
+        if (val && (val.includes("oklab") || val.includes("oklch"))) {
+          // Robust fallback strategy
+          if (prop === 'backgroundColor') htmlEl.style.backgroundColor = "rgb(255, 255, 255)";
+          else if (prop === 'borderColor') htmlEl.style.borderColor = "rgb(226, 232, 240)";
+          else htmlEl.style.setProperty(prop, "rgb(30, 41, 59)", "important");
+        }
+      });
 
-      const bc = style.borderColor;
-      if (bc.includes("oklab") || bc.includes("oklch")) {
-        htmlEl.style.borderColor = "#e2e8f0"; // slate-200 fallback
+      // Force simple colors for specific classes
+      if (htmlEl.classList.contains('bg-indigo-600')) htmlEl.style.backgroundColor = "rgb(79, 70, 229)";
+      if (htmlEl.classList.contains('text-indigo-600')) htmlEl.style.color = "rgb(79, 70, 229)";
+      
+      const shadow = style.boxShadow;
+      if (shadow && (shadow.includes("oklab") || shadow.includes("oklch"))) {
+        htmlEl.style.boxShadow = "none";
       }
     });
   };
 
+  const PDFHeader = ({ projectName, cycleTitle }: { projectName: string, cycleTitle?: string }) => (
+    <div className="flex justify-between items-end border-b border-slate-100 pb-4 mb-8">
+      <div className="flex items-center gap-3">
+        <img src={SYSTEM_LOGO} alt="Logo" className="w-8 h-8 rounded-lg" referrerPolicy="no-referrer" />
+        <div className="flex flex-col">
+          <span className="text-[10px] font-black text-indigo-600 tracking-wider">GESTÃO PRO</span>
+          <span className="text-[8px] text-slate-400 font-bold uppercase">PDCA Expert Analysis</span>
+        </div>
+      </div>
+      <div className="text-right">
+        <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight truncate max-w-[300px]">{projectName}</p>
+        <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">{cycleTitle || 'Relatório PDCA'}</p>
+      </div>
+    </div>
+  );
+
   const exportToPDF = async () => {
-    if (isExportingPDF) return;
+    if (!activeCycle) return;
+    setIsExportingPDF(true);
     
-    const element = document.getElementById('pdca-report-content');
-    if (!element) {
-      console.error('Elemento do relatório não encontrado');
-      return;
-    }
-
     try {
-      setIsExportingPDF(true);
-      
-      // Normalizar cores para evitar erro de oklab/oklch no html2canvas
-      normalizeColors(element);
-      
-      // Pequeno delay para garantir que o DOM está estável
-      await new Promise(resolve => setTimeout(resolve, 300));
-
-      const opt = {
-        margin: 10,
-        filename: `relatorio_pdca_${activeCycle?.taskId || 'export'}.pdf`,
-        image: { type: 'jpeg' as const, quality: 0.98 },
-        html2canvas: { 
-          scale: 2, 
-          useCORS: true, 
-          logging: false,
-          letterRendering: true,
-          allowTaint: false
-        },
-        jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] as any }
+      const docDefinition: any = {
+        pageSize: 'A4',
+        pageMargins: [40, 60, 40, 60],
+        footer: (currentPage: number, pageCount: number) => ({
+          columns: [
+            { text: `Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, style: 'footerText', margin: [40, 10, 0, 0] },
+            { text: `Página ${currentPage} de ${pageCount}`, alignment: 'right', style: 'footerText', margin: [0, 10, 40, 0] }
+          ]
+        }),
+        content: [
+          {
+            columns: [
+              {
+                svg: `<svg width="500" height="500" viewBox="0 0 500 500" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="500" height="500" rx="125" fill="#003489"/><path d="M350 150H250V200H300C295 230 280 250 250 250C216.863 250 190 223.137 190 190C190 156.863 216.863 130 250 130C270 130 290 140 300 155L340 115C315 90 285 75 250 75C186.487 75 135 126.487 135 190C135 253.513 186.487 305 250 305C313.513 305 365 253.513 365 190C365 176.487 359.513 163.513 350 150Z" fill="white"/></svg>`,
+                width: 30
+              },
+              {
+                stack: [
+                  { text: 'RELATÓRIO DE CICLO PDCA', style: 'headerLabel' },
+                  { text: activeCycle.title.toUpperCase(), style: 'mainTitle' }
+                ],
+                margin: [10, 0, 0, 0]
+              }
+            ],
+            margin: [0, 0, 0, 30]
+          },
+          {
+            columns: [
+              {
+                stack: [
+                  { text: 'PROJETO', style: 'label' },
+                  { text: project.name, style: 'value' }
+                ]
+              },
+              {
+                stack: [
+                  { text: 'ETAPA', style: 'label' },
+                  { text: subtask.title, style: 'value' }
+                ]
+              }
+            ],
+            margin: [0, 0, 0, 20]
+          },
+          // PLAN
+          { text: 'PLAN - Planejamento', style: 'sectionHeading', color: '#4f46e9' },
+          { text: 'Descrição do Problema', style: 'label', margin: [0, 10, 0, 2] },
+          { text: activeCycle.plan.problemDescription, style: 'bodyText', margin: [0, 0, 0, 15] },
+          {
+            columns: [
+              {
+                stack: [
+                  { text: 'Análise de Causa Raiz', style: 'label' },
+                  { text: activeCycle.plan.rootCauseAnalysis.identifiedRootCause || 'Não definida', style: 'bodyText' }
+                ]
+              },
+              {
+                stack: [
+                  { text: 'Meta Esperada', style: 'label' },
+                  { text: `${activeCycle.plan.impact.goal}% de melhoria`, style: 'bodyText' }
+                ]
+              }
+            ],
+            margin: [0, 0, 0, 20]
+          },
+          // DO
+          { text: 'DO - Execução das Ações', style: 'sectionHeading', color: '#d97706' },
+          {
+            table: {
+              headerRows: 1,
+              widths: ['*', 'auto', 'auto'],
+              body: [
+                [
+                  { text: 'O QUE (Ação)', style: 'tableHeader' },
+                  { text: 'QUEM', style: 'tableHeader' },
+                  { text: 'STATUS', style: 'tableHeader' }
+                ],
+                ...(activeCycle.plan.actionPlan || []).map(action => [
+                  { text: action.what, style: 'tableCell' },
+                  { text: action.who, style: 'tableCell' },
+                  { text: translateStatus(action.status), style: 'tableCell' }
+                ])
+              ]
+            },
+            layout: 'lightHorizontalLines',
+            margin: [0, 10, 0, 20]
+          },
+          // CHECK & ACT
+          {
+            columns: [
+              {
+                stack: [
+                  { text: 'CHECK - Verificação', style: 'sectionHeading', color: '#059669' },
+                  { text: 'Resultados e Evidências', style: 'label', margin: [0, 10, 0, 2] },
+                  { text: activeCycle.plan.actionPlan?.[0]?.evidence || 'Em análise', style: 'bodyText' }
+                ]
+              },
+              {
+                stack: [
+                  { text: 'ACT - Padronização', style: 'sectionHeading', color: '#e11d48' },
+                  { text: 'Ações Finais', style: 'label', margin: [0, 10, 0, 2] },
+                  { text: activeCycle.plan.actionPlan?.[0]?.finalAction || 'Em análise', style: 'bodyText' }
+                ]
+              }
+            ]
+          }
+        ],
+        styles: {
+          mainTitle: { fontSize: 18, bold: true, color: '#0f172a' },
+          headerLabel: { fontSize: 8, bold: true, color: '#94a3b8', letterSpacing: 1 },
+          sectionHeading: { fontSize: 14, bold: true, margin: [0, 15, 0, 5] },
+          label: { fontSize: 8, bold: true, color: '#94a3b8', margin: [0, 0, 0, 2] },
+          value: { fontSize: 10, bold: true, color: '#1e293b' },
+          bodyText: { fontSize: 10, color: '#475569', lineHeight: 1.4 },
+          tableHeader: { fontSize: 9, bold: true, color: '#64748b', fillColor: '#f8fafc' },
+          tableCell: { fontSize: 8, color: '#475569' },
+          footerText: { fontSize: 8, color: '#94a3b8' }
+        }
       };
 
-      await html2pdf().set(opt).from(element).save();
+      pdfMake.createPdf(docDefinition).download(`PDCA_${activeCycle.title.replace(/\s+/g, '_')}.pdf`);
+      setSaveFeedback("PDF gerado com sucesso!");
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);
-      alert('Ocorreu um erro ao gerar o PDF. Por favor, tente novamente.');
+      setSaveFeedback("Erro na geração do PDF.");
     } finally {
       setIsExportingPDF(false);
     }
@@ -395,6 +550,7 @@ export default function PDCAEditor({
                     key={cycle.id}
                     onClick={() => {
                       setActiveCycleId(cycle.id);
+                      setActivePhase(cycle.etapaAtual || 'PLAN');
                       setShowDashboard(false);
                     }}
                     className={cn(
@@ -502,6 +658,7 @@ export default function PDCAEditor({
                                 const activeCycle = subtask.pdcaCycles.find(c => c.taskId === p.id && c.status === 'Ativo');
                                 if (activeCycle) {
                                   setActiveCycleId(activeCycle.id);
+                                  setActivePhase(activeCycle.etapaAtual || 'PLAN');
                                   setShowDashboard(false);
                                   setShowProblemsModal(false);
                                 }
@@ -893,10 +1050,10 @@ export default function PDCAEditor({
                         <section className="space-y-6">
                           <SectionHeader number="4" title="Plano de Ação (5W2H)" />
                           <div className="space-y-6">
-                            {activeCycle.plan.actionPlan.map((item, idx) => (
+                            {activeCycle.plan.actionPlan.map((item) => (
                               <div key={item.id} className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm space-y-6 relative group">
                                 <button 
-                                  onClick={() => removeActionPlanItem(idx)}
+                                  onClick={() => removeActionPlanItem(item.id)}
                                   className="absolute top-6 right-6 text-slate-300 hover:text-rose-500 transition-colors"
                                 >
                                   <Trash2 size={20} />
@@ -908,7 +1065,7 @@ export default function PDCAEditor({
                                     <input 
                                       value={item.what || ''} 
                                       placeholder="O que será feito?"
-                                      onChange={(e) => updateActionPlan(idx, { what: e.target.value })}
+                                      onChange={(e) => updateActionPlan(item.id, { what: e.target.value })}
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                     />
                                   </div>
@@ -917,7 +1074,7 @@ export default function PDCAEditor({
                                     <input 
                                       value={item.why || ''} 
                                       placeholder="Por que essa ação é necessária?"
-                                      onChange={(e) => updateActionPlan(idx, { why: e.target.value })}
+                                      onChange={(e) => updateActionPlan(item.id, { why: e.target.value })}
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                     />
                                   </div>
@@ -926,7 +1083,7 @@ export default function PDCAEditor({
                                     <input 
                                       value={item.where || ''} 
                                       placeholder="Onde será executada?"
-                                      onChange={(e) => updateActionPlan(idx, { where: e.target.value })}
+                                      onChange={(e) => updateActionPlan(item.id, { where: e.target.value })}
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                     />
                                   </div>
@@ -937,7 +1094,7 @@ export default function PDCAEditor({
                                         type="date"
                                         value={item.when || ''} 
                                         placeholder="Quando será realizada?"
-                                        onChange={(e) => updateActionPlan(idx, { when: e.target.value })}
+                                        onChange={(e) => updateActionPlan(item.id, { when: e.target.value })}
                                         className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                       />
                                     </div>
@@ -946,7 +1103,7 @@ export default function PDCAEditor({
                                       <input 
                                         value={item.who || ''} 
                                         placeholder="Quem é o responsável?"
-                                        onChange={(e) => updateActionPlan(idx, { who: e.target.value })}
+                                        onChange={(e) => updateActionPlan(item.id, { who: e.target.value })}
                                         className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                       />
                                     </div>
@@ -955,7 +1112,7 @@ export default function PDCAEditor({
                                       <input 
                                         value={item.sector || ''} 
                                         placeholder="Qual o setor?"
-                                        onChange={(e) => updateActionPlan(idx, { sector: e.target.value })}
+                                        onChange={(e) => updateActionPlan(item.id, { sector: e.target.value })}
                                         className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                       />
                                     </div>
@@ -965,7 +1122,7 @@ export default function PDCAEditor({
                                     <input 
                                       value={item.how || ''} 
                                       placeholder="Como será executada?"
-                                      onChange={(e) => updateActionPlan(idx, { how: e.target.value })}
+                                      onChange={(e) => updateActionPlan(item.id, { how: e.target.value })}
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                     />
                                   </div>
@@ -974,7 +1131,7 @@ export default function PDCAEditor({
                                     <input 
                                       value={item.howMuch || ''} 
                                       placeholder="Qual o custo ou esforço estimado?"
-                                      onChange={(e) => updateActionPlan(idx, { howMuch: e.target.value })}
+                                      onChange={(e) => updateActionPlan(item.id, { howMuch: e.target.value })}
                                       className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
                                     />
                                   </div>
@@ -1073,11 +1230,14 @@ export default function PDCAEditor({
                       <div className="divide-y divide-slate-100">
                         {activeCycle.plan.actionPlan.length === 0 ? (
                           <div className="p-20 text-center text-slate-400 italic">
-                            Nenhuma ação planejada no PLAN.
+                            Nenhuma ação planejada (PLAN).
                           </div>
                         ) : (
-                          activeCycle.plan.actionPlan.map((item, idx) => {
-                            const isExpanded = expandedActionId === item.id;
+                          activeCycle.plan.actionPlan
+                            .map((item) => {
+                              const isExpanded = expandedActionId === item.id;
+                              
+                              const idx = activeCycle.plan.actionPlan.findIndex(i => i.id === item.id);
                             
                             return (
                               <div key={item.id} className={cn(
@@ -1264,7 +1424,7 @@ export default function PDCAEditor({
                                                           updates.startDate = new Date().toISOString();
                                                         }
                                                         
-                                                        setConfirmingLog({ idx, updates, obsInputId: `obs-${item.id}` });
+                                                        setConfirmingLog({ id: item.id, updates, obsInputId: `obs-${item.id}` });
                                                         return;
                                                       }
 
@@ -1288,7 +1448,7 @@ export default function PDCAEditor({
                                                         updates.startDate = new Date().toISOString();
                                                       }
 
-                                                      updateActionPlan(idx, updates);
+                                                      updateActionPlan(item.id, updates);
                                                       obsInput.value = '';
                                                     }}
                                                     className="bg-indigo-600 text-white px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-500/20"
@@ -1345,11 +1505,14 @@ export default function PDCAEditor({
                       <div className="divide-y divide-slate-100">
                         {activeCycle.plan.actionPlan.length === 0 ? (
                           <div className="p-20 text-center text-slate-400 italic">
-                            Nenhuma ação planejada no PLAN.
+                            Nenhuma ação para verificação (CHECK).
                           </div>
                         ) : (
-                          activeCycle.plan.actionPlan.map((item, idx) => {
-                            const isExpanded = expandedActionId === item.id;
+                          activeCycle.plan.actionPlan
+                            .map((item) => {
+                              const isExpanded = expandedActionId === item.id;
+                              
+                              const idx = activeCycle.plan.actionPlan.findIndex(i => i.id === item.id);
                             
                             return (
                               <div key={item.id} className={cn(
@@ -1421,7 +1584,7 @@ export default function PDCAEditor({
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Modo de Acompanhamento</label>
                                             <select 
                                               value={item.monitoringMode || 'Dias'}
-                                              onChange={(e) => updateActionPlan(idx, { monitoringMode: e.target.value as any })}
+                                              onChange={(e) => updateActionPlan(item.id, { monitoringMode: e.target.value as any })}
                                               className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                             >
                                               <option value="Dias">Dias</option>
@@ -1435,7 +1598,7 @@ export default function PDCAEditor({
                                               type="number"
                                               value={item.monitoringPeriod || 0}
                                               onFocus={(e) => e.target.select()}
-                                              onChange={(e) => updateActionPlan(idx, { monitoringPeriod: parseInt(e.target.value) || 0 })}
+                                              onChange={(e) => updateActionPlan(item.id, { monitoringPeriod: parseInt(e.target.value) || 0 })}
                                               className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                             />
                                           </div>
@@ -1446,7 +1609,7 @@ export default function PDCAEditor({
                                             <input 
                                               type="text"
                                               value={item.monitoringTool || ''}
-                                              onChange={(e) => updateActionPlan(idx, { monitoringTool: e.target.value })}
+                                              onChange={(e) => updateActionPlan(item.id, { monitoringTool: e.target.value })}
                                               placeholder="Ex: Power BI, Excel, E-mail, WhatsApp..."
                                               className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                             />
@@ -1457,7 +1620,7 @@ export default function PDCAEditor({
                                               <input 
                                                 type="text"
                                                 value={item.evidence || ''}
-                                                onChange={(e) => updateActionPlan(idx, { evidence: e.target.value })}
+                                                onChange={(e) => updateActionPlan(item.id, { evidence: e.target.value })}
                                                 placeholder="Link das evidências..."
                                                 className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                               />
@@ -1480,7 +1643,7 @@ export default function PDCAEditor({
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Funcionou?</label>
                                             <select 
                                               value={item.worked || 'Sim'}
-                                              onChange={(e) => updateActionPlan(idx, { worked: e.target.value as any })}
+                                              onChange={(e) => updateActionPlan(item.id, { worked: e.target.value as any })}
                                               className={cn(
                                                 "w-full px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all",
                                                 item.worked === 'Sim' ? "bg-emerald-100 text-emerald-700" :
@@ -1498,7 +1661,7 @@ export default function PDCAEditor({
                                               type="number"
                                               value={item.gainImpact || 0}
                                               onFocus={(e) => e.target.select()}
-                                              onChange={(e) => updateActionPlan(idx, { gainImpact: parseFloat(e.target.value) || 0 })}
+                                              onChange={(e) => updateActionPlan(item.id, { gainImpact: parseFloat(e.target.value) || 0 })}
                                               placeholder="Impacto financeiro ou de tempo"
                                               className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                             />
@@ -1512,7 +1675,7 @@ export default function PDCAEditor({
                                               </label>
                                               <textarea 
                                                 value={item.failureReason || ''}
-                                                onChange={(e) => updateActionPlan(idx, { failureReason: e.target.value })}
+                                                onChange={(e) => updateActionPlan(item.id, { failureReason: e.target.value })}
                                                 placeholder={item.worked === 'Não' ? "Descreva detalhadamente por que a ação não funcionou..." : "Descreva por que a ação funcionou apenas parcialmente..."}
                                                 className={cn(
                                                   "w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all min-h-[100px] resize-none",
@@ -1534,6 +1697,48 @@ export default function PDCAEditor({
                                             </div>
                                           </div>
                                         )}
+
+                                        {/* Botão Avançar para ACT Individual */}
+                                        <div className="flex justify-end pt-4 border-t border-slate-100">
+                                          {(() => {
+                                            const isItemValid = !!item.monitoringTool?.trim() && 
+                                                              !!item.evidence?.trim() && 
+                                                              !!item.worked && 
+                                                              (item.worked === 'Sim' || !!item.failureReason?.trim());
+                                            return (
+                                              <button
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  if (!isItemValid) {
+                                                    setSaveFeedback("Preencha todos os campos obrigatórios (Verificação, Evidência e Resultado) antes de avançar.");
+                                                    setShowValidationErrors(true);
+                                                    return;
+                                                  }
+                                                  
+                                                  const newActionPlan = [...activeCycle.plan.actionPlan];
+                                                  const itemIdx = newActionPlan.findIndex(i => i.id === item.id);
+                                                  if (itemIdx !== -1) {
+                                                    newActionPlan[itemIdx] = { ...newActionPlan[itemIdx], currentPhase: 'ACT' };
+                                                    updateCycle({ 
+                                                      plan: { ...activeCycle.plan, actionPlan: newActionPlan },
+                                                      etapaAtual: 'ACT'
+                                                    });
+                                                    setActivePhase('ACT');
+                                                  }
+                                                }}
+                                                className={cn(
+                                                  "flex items-center gap-2 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg",
+                                                  isItemValid 
+                                                    ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100" 
+                                                    : "bg-slate-200 text-slate-500 hover:bg-slate-300"
+                                                )}
+                                              >
+                                                Avançar para ACT
+                                                <ArrowRight size={14} />
+                                              </button>
+                                            );
+                                          })()}
+                                        </div>
                                       </div>
                                     </motion.div>
                                   )}
@@ -1563,11 +1768,14 @@ export default function PDCAEditor({
                       <div className="divide-y divide-slate-100">
                         {activeCycle.plan.actionPlan.length === 0 ? (
                           <div className="p-20 text-center text-slate-400 italic">
-                            Nenhuma ação planejada no PLAN.
+                            Nenhuma ação para agir (ACT).
                           </div>
                         ) : (
-                          activeCycle.plan.actionPlan.map((item, idx) => {
-                            const isExpanded = expandedActionId === item.id;
+                          activeCycle.plan.actionPlan
+                            .map((item) => {
+                              const isExpanded = expandedActionId === item.id;
+                              
+                              const idx = activeCycle.plan.actionPlan.findIndex(i => i.id === item.id);
                             
                             return (
                               <div key={item.id} className={cn(
@@ -1630,7 +1838,7 @@ export default function PDCAEditor({
                                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Status Final do Problema</label>
                                               <select 
                                                 value={item.finalProblemStatus || 'Resolvido'}
-                                                onChange={(e) => updateActionPlan(idx, { finalProblemStatus: e.target.value as any })}
+                                                onChange={(e) => updateActionPlan(item.id, { finalProblemStatus: e.target.value as any })}
                                                 className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                               >
                                                 <option value="Resolvido">Resolvido</option>
@@ -1641,7 +1849,7 @@ export default function PDCAEditor({
                                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Ação Final</label>
                                               <select 
                                                 value={item.finalAction || 'Padronizar processo'}
-                                                onChange={(e) => updateActionPlan(idx, { finalAction: e.target.value as any })}
+                                                onChange={(e) => updateActionPlan(item.id, { finalAction: e.target.value as any })}
                                                 className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                               >
                                                 <option value="Padronizar processo">Padronizar processo</option>
@@ -1663,7 +1871,7 @@ export default function PDCAEditor({
                                                         const next = current.includes(model as any)
                                                           ? current.filter(m => m !== model)
                                                           : [...current, model as any];
-                                                        updateActionPlan(idx, { standardizationModels: next });
+                                                        updateActionPlan(item.id, { standardizationModels: next });
                                                       }}
                                                       className={cn(
                                                         "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
@@ -1759,7 +1967,8 @@ export default function PDCAEditor({
 
                     <div id="pdca-report-content" className="space-y-12 pb-12 print-container bg-white p-8 rounded-[2.5rem]">
                       {relatedCycles.map((cycle, cycleIdx) => (
-                        <div key={cycle.id} className="space-y-8 border-b-4 border-slate-100 pb-12 last:border-0 last:pb-0">
+                        <div key={cycle.id} className="space-y-8 border-b-4 border-slate-100 pb-12 last:border-0 last:pb-0 min-h-[260mm]">
+                          <PDFHeader projectName={project.name} cycleTitle={cycle.title} />
                           <div className="flex items-center gap-4 bg-slate-900 p-6 rounded-[2rem] text-white shadow-xl">
                             <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center font-black text-2xl shadow-lg shadow-indigo-900/20">
                               {cycleIdx + 1}
@@ -1774,19 +1983,19 @@ export default function PDCAEditor({
 
                           {/* PLAN */}
                           <ReportSection title="PLAN (Planejar)" color="indigo">
-                            <ReportField label="Descrição do Problema" value={cycle.plan.problemDescription} />
-                            <ReportField label="Causa Raiz Identificada" value={cycle.plan.rootCauseAnalysis.identifiedRootCause || 'Não informada'} />
+                            <ReportField label="Descrição do Problema" value={cycle.plan?.problemDescription} />
+                            <ReportField label="Causa Raiz Identificada" value={cycle.plan?.rootCauseAnalysis?.identifiedRootCause || 'Não informada'} />
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              <ReportField label="Impacto: Descrição" value={cycle.plan.impact.description} />
-                              <ReportField label="Impacto: Valor Atual" value={`R$ ${cycle.plan.impact.value}`} />
-                              <ReportField label="Impacto: Meta (%)" value={`${cycle.plan.impact.goal}%`} />
+                              <ReportField label="Impacto: Descrição" value={cycle.plan?.impact?.description} />
+                              <ReportField label="Impacto: Valor Atual" value={`R$ ${cycle.plan?.impact?.value || 0}`} />
+                              <ReportField label="Impacto: Meta (%)" value={`${cycle.plan?.impact?.goal || 0}%`} />
                             </div>
-                            <ReportField label="Método Utilizado" value={cycle.plan.rootCauseAnalysis.type.toUpperCase()} />
+                            <ReportField label="Método Utilizado" value={cycle.plan?.rootCauseAnalysis?.type?.toUpperCase() || 'N/A'} />
                             
                             <div className="mt-6 pt-6 border-t border-slate-100">
                               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Plano de Ação (5W2H)</p>
                               <div className="space-y-4">
-                                {cycle.plan.actionPlan.map((item) => (
+                                {(cycle.plan?.actionPlan || []).map((item) => (
                                   <div key={item.id} className="grid grid-cols-2 md:grid-cols-6 gap-4 text-[10px] p-3 bg-slate-50 rounded-xl">
                                     <div><p className="font-black text-slate-400 uppercase">O que</p><p className="font-bold text-slate-700">{item.what}</p></div>
                                     <div><p className="font-black text-slate-400 uppercase">Por que</p><p className="font-bold text-slate-700">{item.why}</p></div>
@@ -1803,7 +2012,7 @@ export default function PDCAEditor({
                           {/* DO */}
                           <ReportSection title="DO (Executar)" color="amber">
                             <div className="space-y-4">
-                              {cycle.plan.actionPlan.map((item, idx) => (
+                              {(cycle.plan?.actionPlan || []).map((item, idx) => (
                                 <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
                                   <div className="flex justify-between items-start">
                                     <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
@@ -1841,7 +2050,7 @@ export default function PDCAEditor({
                           {/* CHECK */}
                           <ReportSection title="CHECK (Verificar)" color="emerald">
                             <div className="space-y-4">
-                              {cycle.plan.actionPlan.map((item, idx) => (
+                              {(cycle.plan?.actionPlan || []).map((item, idx) => (
                                 <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
                                   <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
                                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-[10px]">
@@ -1873,7 +2082,7 @@ export default function PDCAEditor({
                           {/* ACT */}
                           <ReportSection title="ACT (Agir)" color="rose">
                             <div className="space-y-4">
-                              {cycle.plan.actionPlan.map((item, idx) => (
+                              {(cycle.plan?.actionPlan || []).map((item, idx) => (
                                 <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
                                   <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
                                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[10px]">
@@ -1946,10 +2155,12 @@ export default function PDCAEditor({
                 </button>
                 <button 
                   onClick={() => {
-                    updateActionPlan(confirmingLog.idx, confirmingLog.updates);
-                    const obsInput = document.getElementById(confirmingLog.obsInputId) as HTMLInputElement;
-                    if (obsInput) obsInput.value = '';
-                    setConfirmingLog(null);
+                    if (confirmingLog) {
+                      updateActionPlan(confirmingLog.id, confirmingLog.updates);
+                      const obsInput = document.getElementById(confirmingLog.obsInputId) as HTMLInputElement;
+                      if (obsInput) obsInput.value = '';
+                      setConfirmingLog(null);
+                    }
                   }}
                   className="py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all active:scale-95"
                 >
@@ -1960,13 +2171,25 @@ export default function PDCAEditor({
           </motion.div>
         )}
       </AnimatePresence>
+
     </div>
   );
 
-  function updateActionPlan(idx: number, data: Partial<ActionPlanItem>) {
+  function updateActionPlan(id: string, data: Partial<ActionPlanItem>) {
     if (!activeCycle) return;
     const newPlan = [...activeCycle.plan.actionPlan];
-    newPlan[idx] = { ...newPlan[idx], ...data };
+    const idx = newPlan.findIndex(i => i.id === id);
+    if (idx === -1) return;
+    
+    const oldItem = newPlan[idx];
+    let newItem = { ...oldItem, ...data };
+
+    // Auto-transition from DO to CHECK when status is Concluído
+    if (data.status === 'Concluído' && (!oldItem.currentPhase || oldItem.currentPhase === 'DO')) {
+      newItem.currentPhase = 'CHECK';
+    }
+
+    newPlan[idx] = newItem;
     updatePlan({ actionPlan: newPlan });
   }
 
@@ -1983,6 +2206,7 @@ export default function PDCAEditor({
       how: '',
       howMuch: '',
       status: 'Pendente',
+      currentPhase: 'DO',
       executionLogs: [],
       monitoringMode: 'Dias',
       monitoringPeriod: 1,
@@ -1994,9 +2218,9 @@ export default function PDCAEditor({
     updatePlan({ actionPlan: [...activeCycle.plan.actionPlan, newItem] });
   }
 
-  function removeActionPlanItem(idx: number) {
+  function removeActionPlanItem(id: string) {
     if (!activeCycle) return;
-    const newPlan = activeCycle.plan.actionPlan.filter((_, i) => i !== idx);
+    const newPlan = activeCycle.plan.actionPlan.filter(i => i.id !== id);
     updatePlan({ actionPlan: newPlan });
   }
 

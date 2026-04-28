@@ -126,6 +126,7 @@ export interface ActionPlanItem {
   endDate?: string;
   observations?: string;
   executionLogs: ExecutionLog[];
+  currentPhase?: 'DO' | 'CHECK' | 'ACT' | 'REPORT';
   
   // CHECK
   monitoringMode?: 'Dias' | 'Semanas' | 'Meses';
@@ -151,6 +152,7 @@ export interface PDCACycle {
   title: string;
   createdAt: string;
   status: PDCAStatus;
+  etapaAtual?: 'PLAN' | 'DO' | 'CHECK' | 'ACT' | 'REPORT';
   plan: {
     problemDescription: string;
     rootCauseAnalysis: {
@@ -175,6 +177,8 @@ export interface Subtask {
   priority: ProjectPriority;
   status: 'Pendente' | 'Em andamento' | 'Concluído';
   responsibleId?: string;
+  startDate?: string;
+  endDate?: string;
   mapping: {
     xml?: string;
     customData?: Record<string, Partial<BPMNTaskData>>;
@@ -190,6 +194,7 @@ export interface Subtask {
 export interface Project {
   id: string;
   name: string;
+  description?: string;
   createdAt: string;
   progress: number;
   status: ProjectStatus;
@@ -232,5 +237,5 @@ export interface ReportLog {
   userId: string;
   userName: string;
   timestamp: string;
-  reportType: 'PDCA' | 'Histórico de Ações';
+  reportType: 'PDCA' | 'Histórico de Ações' | 'Relatório Completo';
 }

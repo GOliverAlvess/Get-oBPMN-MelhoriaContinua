@@ -286,4 +286,19 @@
       display: none !important;
     }
   }
+
+  /* PDF Generation Compatibility Mode */
+  .pdf-mode, .pdf-mode * {
+    color-scheme: light !important;
+    /* Force simple colors for common properties */
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Prevent browser from using modern color formats that html2canvas/jsPDF can't parse */
+  .pdf-oklab-fix {
+    color: rgb(71, 85, 105) !important; /* fallback to slate-600 */
+    border-color: rgb(226, 232, 240) !important; /* fallback to slate-200 */
+    background-color: transparent !important;
+  }
 }

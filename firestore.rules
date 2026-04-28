@@ -138,7 +138,7 @@ service cloud.firestore {
              data.userId is string &&
              data.userName is string &&
              isValidDateString(data.timestamp) &&
-             data.reportType in ['PDCA', 'Histórico de Ações'];
+             data.reportType in ['PDCA', 'Histórico de Ações', 'Relatório Completo'];
     }
 
     function isValidSavedColor(data) {
@@ -174,6 +174,7 @@ service cloud.firestore {
       allow write: if isAdmin() && isValidConfig(request.resource.data);
     }
 
+    // Collection: actions (alias for operationalActions)
     match /operationalActions/{actionId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isValidOperationalAction(request.resource.data);
@@ -183,6 +184,17 @@ service cloud.firestore {
         resource.data.responsibleId == request.auth.uid
       );
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.responsibleId == request.auth.uid);
+    }
+
+    // Explicit entries for pdca and mapping as requested by user
+    match /pdca/{id} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated();
+    }
+    
+    match /mapping/{id} {
+        allow read: if isAuthenticated();
+        allow write: if isAuthenticated();
     }
 
     match /reportLogs/{logId} {

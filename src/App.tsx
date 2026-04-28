@@ -67,7 +67,7 @@ import PDCAEditor from './components/PDCAEditor';
 import DashboardView from './components/DashboardView';
 import OperationalActionsTab from './components/OperationalActionsTab';
 import ReportsTab from './components/ReportsTab';
-import { calculateProjectProgress, calculateProjectStatus } from './lib/projectUtils';
+import { calculateProjectProgress, calculateProjectStatus, calculateSubtaskStatus } from './lib/projectUtils';
 
 // Error Boundary Component
 interface ErrorBoundaryProps {
@@ -1266,7 +1266,12 @@ function ProjectDetailView({
   const selectedSubtask = project.subtasks?.find(s => s.id === selectedSubtaskId);
 
   const handleUpdateSubtask = (updatedSubtask: Subtask) => {
-    const updatedSubtasks = (project.subtasks || []).map(s => s.id === updatedSubtask.id ? updatedSubtask : s);
+    // Inject automatic status
+    const subtaskWithCalculatedStatus = {
+      ...updatedSubtask,
+      status: calculateSubtaskStatus(updatedSubtask)
+    };
+    const updatedSubtasks = (project.subtasks || []).map(s => s.id === subtaskWithCalculatedStatus.id ? subtaskWithCalculatedStatus : s);
     setProjects({ ...project, subtasks: updatedSubtasks });
   };
 
@@ -1497,6 +1502,10 @@ function ScopeTab({
     status: 'Pendente' as any,
     responsibleId: ''
   });
+  
+  const [subtaskToDelete, setSubtaskToDelete] = useState<string | null>(null);
+  const [editingSubtask, setEditingSubtask] = useState<string | null>(null);
+  const [tempSubtaskData, setTempSubtaskData] = useState<{title: string, priority: ProjectPriority, responsibleId: string} | null>(null);
 
   const updateScope = (field: string, value: any) => {
     const updatedProject = { ...project, scope: { ...project.scope, [field]: value } };
@@ -1527,7 +1536,7 @@ function ScopeTab({
       id: uuidv4(),
       title: newSubtaskData.title,
       priority: newSubtaskData.priority,
-      status: newSubtaskData.status,
+      status: 'Pendente',
       responsibleId: newSubtaskData.responsibleId,
       mapping: {
         nodes: [],
@@ -1838,88 +1847,166 @@ function ScopeTab({
             <tbody className="divide-y divide-slate-50">
               {(project.subtasks || []).map((subtask) => {
                 const isReadOnly = subtask.status === 'Concluído';
+                const isEditing = editingSubtask === subtask.id;
+                
+                // Status is now calculated automatically
+                const currentStatus = calculateSubtaskStatus(subtask);
+                
                 return (
-                  <tr key={subtask.id} className={cn("group hover:bg-slate-50/50 transition-colors", isReadOnly && "bg-slate-50/30")}>
-                    <td className="px-6 py-4">
-                      <input 
-                        value={subtask.title || ''}
-                        onChange={(e) => updateSubtask(subtask.id, 'title', e.target.value)}
-                        readOnly={isReadOnly}
-                        className={cn(
-                          "w-full bg-transparent font-bold text-slate-700 outline-none border-none p-0 transition-colors",
-                          isReadOnly ? "text-slate-400 cursor-not-allowed" : "focus:text-indigo-600"
-                        )}
-                        placeholder="Título da subtarefa..."
-                      />
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                          {subtask.pdcaCycles.length} Ciclos PDCA
-                        </span>
-                      </div>
+                  <tr key={subtask.id} className={cn(
+                    "group transition-all duration-300",
+                    isEditing ? "bg-indigo-50/50" : "hover:bg-slate-50/50",
+                    isReadOnly && !isEditing && "bg-slate-50/30"
+                  )}>
+                    <td className={cn(
+                      "px-6 py-4 transition-all",
+                      isEditing && "border-l-4 border-indigo-600"
+                    )}>
+                      {isEditing ? (
+                        <input 
+                          value={tempSubtaskData?.title || ''}
+                          onChange={(e) => setTempSubtaskData(prev => prev ? { ...prev, title: e.target.value } : null)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
+                          placeholder="Título da subtarefa..."
+                          autoFocus
+                        />
+                      ) : (
+                        <div>
+                          <span className={cn(
+                            "font-bold transition-colors",
+                            isReadOnly ? "text-slate-400" : "text-slate-700"
+                          )}>
+                            {subtask.title}
+                          </span>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                              {subtask.pdcaCycles.length} Ciclos PDCA
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
-                      <select 
-                        value={subtask.priority || 'Média'}
-                        onChange={(e) => updateSubtask(subtask.id, 'priority', e.target.value)}
-                        disabled={isReadOnly}
-                        className={cn(
-                          "w-full px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border-none cursor-pointer disabled:cursor-not-allowed",
+                      {isEditing ? (
+                        <select 
+                          value={tempSubtaskData?.priority || 'Média'}
+                          onChange={(e) => setTempSubtaskData(prev => prev ? { ...prev, priority: e.target.value as any } : null)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-[10px] font-black uppercase tracking-wider outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                        >
+                          <option value="Alta">Alta</option>
+                          <option value="Média">Média</option>
+                          <option value="Baixa">Baixa</option>
+                        </select>
+                      ) : (
+                        <span className={cn(
+                          "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider",
                           subtask.priority === 'Alta' ? "bg-rose-100 text-rose-600" :
                           subtask.priority === 'Média' ? "bg-indigo-100 text-indigo-600" :
                           "bg-slate-200 text-slate-600"
-                        )}
-                      >
-                        <option value="Alta">Alta</option>
-                        <option value="Média">Média</option>
-                        <option value="Baixa">Baixa</option>
-                      </select>
+                        )}>
+                          {subtask.priority}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
-                      <select 
-                        value={subtask.status || 'Pendente'}
-                        onChange={(e) => updateSubtask(subtask.id, 'status', e.target.value)}
-                        className={cn(
-                          "w-full px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border-none cursor-pointer",
-                          subtask.status === 'Concluído' ? "bg-emerald-100 text-emerald-600" :
-                          subtask.status === 'Em andamento' ? "bg-amber-100 text-amber-600" :
-                          "bg-slate-200 text-slate-500"
-                        )}
-                      >
-                        <option value="Pendente">Pendente</option>
-                        <option value="Em andamento">Em andamento</option>
-                        <option value="Concluído">Concluído</option>
-                      </select>
+                      <span className={cn(
+                        "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider whitespace-nowrap",
+                        currentStatus === 'Concluído' ? "bg-emerald-100 text-emerald-600" :
+                        currentStatus === 'Em andamento' ? "bg-amber-100 text-amber-600" :
+                        "bg-slate-200 text-slate-500"
+                      )}>
+                        {currentStatus}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
-                      <select 
-                        value={subtask.responsibleId || ''}
-                        onChange={(e) => updateSubtask(subtask.id, 'responsibleId', e.target.value)}
-                        disabled={isReadOnly}
-                        className={cn(
-                          "w-full px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider outline-none border border-slate-200 cursor-pointer disabled:cursor-not-allowed bg-white text-xs",
-                          isReadOnly ? "opacity-50" : ""
-                        )}
-                      >
-                        <option value="">Sem Responsável</option>
-                        {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-                      </select>
+                      {isEditing ? (
+                        <select 
+                          value={tempSubtaskData?.responsibleId || ''}
+                          onChange={(e) => setTempSubtaskData(prev => prev ? { ...prev, responsibleId: e.target.value } : null)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-medium outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                        >
+                          <option value="">Sem Responsável</option>
+                          {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                        </select>
+                      ) : (
+                        <span className="text-xs font-medium text-slate-600">
+                          {users.find(u => u.id === subtask.responsibleId)?.name || 'Sem Responsável'}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-end gap-2">
-                        <button 
-                          onClick={() => onSelectSubtask(subtask.id)}
-                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
-                          title="Executar Mapeamento e PDCA"
-                        >
-                          <ArrowRight size={18} />
-                        </button>
-                        <button 
-                          onClick={() => deleteSubtask(subtask.id)}
-                          className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
-                          title="Excluir Subtarefa"
-                        >
-                          <Trash2 size={18} />
-                        </button>
+                        {isEditing ? (
+                          <>
+                            <button 
+                              onClick={() => {
+                                if (tempSubtaskData) {
+                                  const updatedSubtasks = (project.subtasks || []).map(s => 
+                                    s.id === subtask.id ? { 
+                                      ...s, 
+                                      title: tempSubtaskData.title,
+                                      priority: tempSubtaskData.priority,
+                                      responsibleId: tempSubtaskData.responsibleId
+                                    } : s
+                                  );
+                                  setProjects({ ...project, subtasks: updatedSubtasks });
+                                }
+                                setEditingSubtask(null);
+                                setTempSubtaskData(null);
+                              }}
+                              className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                              title="Salvar"
+                            >
+                              <Save size={18} />
+                            </button>
+                            <button 
+                              onClick={() => {
+                                setEditingSubtask(null);
+                                setTempSubtaskData(null);
+                              }}
+                              className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                              title="Cancelar"
+                            >
+                              <X size={18} />
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={() => onSelectSubtask(subtask.id)}
+                              className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                              title="Executar Mapeamento e PDCA"
+                            >
+                              <ArrowRight size={18} />
+                            </button>
+                            
+                            {/* Edição permitida apenas para pendentes */}
+                            {currentStatus === 'Pendente' && (
+                              <button 
+                                onClick={() => {
+                                  setEditingSubtask(subtask.id);
+                                  setTempSubtaskData({
+                                    title: subtask.title,
+                                    priority: subtask.priority,
+                                    responsibleId: subtask.responsibleId
+                                  });
+                                }}
+                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                                title="Editar Subtarefa"
+                              >
+                                <Edit size={18} />
+                              </button>
+                            )}
+
+                            <button 
+                              onClick={() => setSubtaskToDelete(subtask.id)}
+                              className="p-2 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-lg transition-all"
+                              title="Excluir Subtarefa"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1955,6 +2042,52 @@ function ScopeTab({
           </table>
         </div>
       </section>
+
+      {/* MODAL PARA NOVA SUBTAREFA */}
+      <AnimatePresence>
+        {subtaskToDelete && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSubtaskToDelete(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative bg-white w-full max-w-sm rounded-[2rem] shadow-2xl p-8 text-center"
+            >
+              <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-black text-slate-900 mb-2">Excluir Subtarefa</h3>
+              <p className="text-slate-500 text-sm leading-relaxed mb-8">
+                Deseja realmente excluir esta subtarefa? Esta ação não pode ser desfeita.
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setSubtaskToDelete(null)}
+                  className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all font-sans"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={() => {
+                    deleteSubtask(subtaskToDelete);
+                    setSubtaskToDelete(null);
+                  }}
+                  className="flex-1 px-6 py-3 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-all shadow-lg shadow-rose-100 font-sans"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* MODAL PARA NOVA SUBTAREFA */}
       <AnimatePresence>
@@ -2000,7 +2133,7 @@ function ScopeTab({
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Prioridade</label>
                     <select 
@@ -2015,31 +2148,18 @@ function ScopeTab({
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Status Inicial</label>
+                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Responsável</label>
                     <select 
-                      value={newSubtaskData.status}
-                      onChange={(e) => setNewSubtaskData({ ...newSubtaskData, status: e.target.value as any })}
+                      value={newSubtaskData.responsibleId}
+                      onChange={(e) => setNewSubtaskData({ ...newSubtaskData, responsibleId: e.target.value })}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
                     >
-                      <option value="Pendente">Pendente</option>
-                      <option value="Em andamento">Em andamento</option>
-                      <option value="Concluído">Concluído</option>
+                      <option value="">Selecionar Responsável</option>
+                      {users.map(u => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
                     </select>
                   </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Responsável</label>
-                  <select 
-                    value={newSubtaskData.responsibleId}
-                    onChange={(e) => setNewSubtaskData({ ...newSubtaskData, responsibleId: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                  >
-                    <option value="">Selecionar Responsável</option>
-                    {users.map(u => (
-                      <option key={u.id} value={u.id}>{u.name}</option>
-                    ))}
-                  </select>
                 </div>
 
                 <div className="pt-4 flex gap-3">

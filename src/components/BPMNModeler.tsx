@@ -17,7 +17,10 @@ import {
   Redo2,
   GitBranch,
   Search,
-  AlertCircle
+  AlertCircle,
+  Plus,
+  Minus,
+  Move
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -80,8 +83,20 @@ export default function BPMNModeler({
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const container = containerRef.current;
+    
+    // Prevent mouse wheel from panning/zooming the diagram
+    // This allows the page to scroll normally when the mouse is over the flowchart
+    const handleWheel = (e: WheelEvent) => {
+      // If we want to allow zoom with Ctrl + Wheel, we could check e.ctrlKey
+      // But the request says "Scroll NÃO deve causar pan ou zoom"
+      e.stopImmediatePropagation();
+    };
+    
+    container.addEventListener('wheel', handleWheel, { capture: true });
+
     const modeler = new Modeler({
-      container: containerRef.current,
+      container: container,
       keyboard: {
         bindOn: window
       }
@@ -165,6 +180,7 @@ export default function BPMNModeler({
 
     return () => {
       isMounted = false;
+      container.removeEventListener('wheel', handleWheel, { capture: true });
       modeler.destroy();
     };
   }, []);
@@ -311,6 +327,26 @@ export default function BPMNModeler({
   const undo = () => modelerRef.current?.get('commandStack').undo();
   const redo = () => modelerRef.current?.get('commandStack').redo();
 
+  const zoomIn = () => {
+    const canvas = modelerRef.current?.get('canvas') as any;
+    if (canvas) canvas.zoom(canvas.zoom() * 1.2);
+  };
+
+  const zoomOut = () => {
+    const canvas = modelerRef.current?.get('canvas') as any;
+    if (canvas) canvas.zoom(canvas.zoom() * 0.8);
+  };
+
+  const zoomReset = () => {
+    const canvas = modelerRef.current?.get('canvas') as any;
+    if (canvas) canvas.zoom('fit-viewport');
+  };
+
+  const activateHandTool = () => {
+    const handTool = modelerRef.current?.get('handTool') as any;
+    if (handTool) handTool.activate();
+  };
+
   const currentElementData = selectedElement ? (customData[selectedElement.id] || {
     label: selectedElement.businessObject.name || '',
     description: '',
@@ -349,6 +385,28 @@ export default function BPMNModeler({
             </button>
             <button onClick={redo} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Refazer">
               <Redo2 size={16} />
+            </button>
+          </div>
+
+          <div className="h-6 w-px bg-slate-200" />
+
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+            <button onClick={zoomOut} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Diminuir Zoom">
+              <Minus size={16} />
+            </button>
+            <button onClick={zoomReset} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Ajustar Visualização">
+              <Maximize2 size={16} />
+            </button>
+            <button onClick={zoomIn} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Aumentar Zoom">
+              <Plus size={16} />
+            </button>
+          </div>
+
+          <div className="h-6 w-px bg-slate-200" />
+
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+            <button onClick={activateHandTool} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Mover Fluxograma (Arrastar)">
+              <Move size={16} />
             </button>
           </div>
 

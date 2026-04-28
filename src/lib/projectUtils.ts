@@ -93,3 +93,20 @@ export const calculateProjectProgress = (project: Project) => {
 
   return Math.min(Math.round(scopeProgress + totalSubtasksProgress), 100);
 };
+
+export const calculateSubtaskStatus = (subtask: any): any => {
+  const mapping = subtask.mapping;
+  const pdca = subtask.pdcaCycles || [];
+  
+  const hasMappingInteraction = mapping && (
+    (mapping.nodes && mapping.nodes.length > 0) || 
+    mapping.xml || 
+    (mapping.customData && Object.keys(mapping.customData).length > 0)
+  );
+  
+  const allPDCACompleted = pdca.length > 0 && pdca.every((cycle: any) => cycle.status === 'Concluído');
+
+  if (allPDCACompleted) return 'Concluído';
+  if (hasMappingInteraction) return 'Em andamento';
+  return 'Pendente';
+};

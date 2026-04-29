@@ -10,7 +10,9 @@ import {
   PieChart, 
   Pie, 
   Cell,
-  Legend
+  Legend,
+  LabelList,
+  Label
 } from 'recharts';
 import { 
   TrendingUp, 
@@ -192,6 +194,10 @@ export default function DashboardView({ projects, users, actions, onProjectClick
     }
   };
 
+  const renderCustomPieLabel = ({ name, value, percent }: any) => {
+    return `${(percent * 100).toFixed(0)}% (${value})`;
+  };
+
   return (
     <div className="space-y-8 pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 min-w-0">
@@ -339,7 +345,15 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                         formatter={(value: number) => [`R$ ${value.toLocaleString()}`, 'Ganho']}
                       />
-                      <Bar dataKey="gain" fill="#003489" radius={[0, 8, 8, 0]} barSize={20} />
+                      <Bar dataKey="gain" fill="#003489" radius={[0, 8, 8, 0]} barSize={20}>
+                        <LabelList 
+                          dataKey="gain" 
+                          position="right" 
+                          formatter={(value: number) => `R$ ${value.toLocaleString()}`}
+                          style={{ fontSize: 9, fontWeight: 800, fill: '#64748b' }}
+                          offset={10}
+                        />
+                      </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -359,10 +373,16 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                         outerRadius={100}
                         paddingAngle={5}
                         dataKey="value"
+                        label={renderCustomPieLabel}
                       >
                         {stats.processStatusData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
+                        <Label 
+                          value={stats.total} 
+                          position="center" 
+                          style={{ fontSize: '24px', fontWeight: 900, fill: '#0f172a' }} 
+                        />
                       </Pie>
                       <Tooltip 
                         contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}

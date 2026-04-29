@@ -10,7 +10,9 @@ import {
   PieChart, 
   Pie, 
   Cell,
-  Legend
+  Legend,
+  LabelList,
+  Label
 } from 'recharts';
 import { 
   CheckCircle2, 
@@ -111,6 +113,10 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
     }
   };
 
+  const renderCustomPieLabel = ({ name, value, percent }: any) => {
+    return `${(percent * 100).toFixed(0)}% (${value})`;
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {/* Filtros Dropdown */}
@@ -206,7 +212,14 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
                   cursor={{ fill: '#f8fafc' }}
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                 />
-                <Bar dataKey="count" fill="#6366f1" radius={[0, 8, 8, 0]} barSize={24} />
+                <Bar dataKey="count" fill="#6366f1" radius={[0, 8, 8, 0]} barSize={24}>
+                  <LabelList 
+                    dataKey="count" 
+                    position="right" 
+                    style={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }}
+                    offset={10}
+                  />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -233,7 +246,14 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
                   cursor={{ fill: '#f8fafc' }}
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
                 />
-                <Bar dataKey="count" fill="#003489" radius={[0, 8, 8, 0]} barSize={24} />
+                <Bar dataKey="count" fill="#003489" radius={[0, 8, 8, 0]} barSize={24}>
+                  <LabelList 
+                    dataKey="count" 
+                    position="right" 
+                    style={{ fontSize: 10, fontWeight: 800, fill: '#64748b' }}
+                    offset={10}
+                  />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -255,10 +275,16 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
                   outerRadius={100}
                   paddingAngle={5}
                   dataKey="value"
+                  label={renderCustomPieLabel}
                 >
                   {stats.statusData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
+                  <Label 
+                    value={stats.total} 
+                    position="center" 
+                    style={{ fontSize: '24px', fontWeight: 900, fill: '#0f172a' }} 
+                  />
                 </Pie>
                 <Tooltip 
                   contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}

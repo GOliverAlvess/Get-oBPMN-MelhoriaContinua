@@ -88,12 +88,43 @@ const HEADERS_ACTIONS = [
   "Data de conclusão"
 ];
 
-const SYSTEM_LOGO_SVG = `<svg width="500" height="500" viewBox="0 0 500 500" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="500" height="500" rx="125" fill="#003489"/>
-<path d="M350 150H250V200H300C295 230 280 250 250 250C216.863 250 190 223.137 190 190C190 156.863 216.863 130 250 130C270 130 290 140 300 155L340 115C315 90 285 75 250 75C186.487 75 135 126.487 135 190C135 253.513 186.487 305 250 305C313.513 305 365 253.513 365 190C365 176.487 359.513 163.513 350 150Z" fill="white"/>
-</svg>`;
+// FlowProcess Horizontal Logo SVG for PDF
+const SYSTEM_LOGO_SVG = `<svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="921" height="212" viewBox="0 0 921 212">
+<path d="M0 0 C6.85 4.55 10.97 12.5 14.92 19.47 C16.06 21.43 17.2 23.4 18.34 25.37 C18.91 26.34 19.48 27.32 20.07 28.33 C22.51 32.47 25.08 36.54 27.67 40.59 C32.1 47.52 36.41 54.5 40.67 61.53" fill="#003489"/><path d="M250 75C186.48 75 135 126.48 135 190C135 253.51 186.48 305 250 305" fill="#003489"/></svg>`;
 
-const SYSTEM_LOGO = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAwIiBoZWlnaHQ9IjUwMCIgdmlld0JveD0iMCAwIDUwMCA1MDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI1MDAiIGhlaWdodD0iNTAwIiByeD0iMTI1IiBmaWxsPSIjMDAzNDg5Ii8+CjxwYXRoIGQ9Ik0zNTAgMTUwSDI1MFYyMDBIMzAwQzI5NSAyMzAgMjgwIDI1MCAyNTAgMjUwQzIxNi44NjMgMjUwIDE5MCAyMjMuMTM3IDE5MCAxOTBDMTkwIDE1Ni44NjMgMjE2Ljg2MyAxMzAgMjUwIDEzMEMyNzAgMTMwIDI5MCAxNDAgMzAwIDE1NUwzNDAgMTE1QzMxNSA5MCAyODUgNzUgMjUwIDc1QzE4Ni40ODcgNzUgMTM1IDEyNi40ODcgMTM1IDE5MEMxMzUgMjUzLjUxMyAxODYuNDg3IDMwNSAyNTAgMzA1QzMxMy41MTMgMzA1IDM2NSAyNTMuNTEzIDM2NSAxOTBDMzY1IDE3Ni40ODcgMzU5LjUxMyAxNjMuNTEzIDM1MCAxNTBaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K";
+const SYSTEM_LOGO_PRIMARY_COLOR = '#003489';
+
+// Helper to convert SVG to PNG Base64 for pdfMake compatibility
+const svgToPngBase64 = (svgString: string): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+
+    img.onload = function () {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        const pngBase64 = canvas.toDataURL('image/png');
+        resolve(pngBase64);
+      } else {
+        // Fallback to a simple data URL if canvas fails
+        resolve("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==");
+      }
+      URL.revokeObjectURL(url);
+    };
+
+    img.onerror = () => {
+      resolve("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==");
+    };
+
+    img.src = url;
+  });
+};
 
 interface ReportsTabProps {
   projects: Project[];
@@ -163,7 +194,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
   const PDFHeader = ({ projectName }: { projectName: string }) => (
     <div className="flex justify-between items-end border-b border-slate-100 pb-4 mb-8">
       <div className="flex items-center gap-3">
-        <img src={SYSTEM_LOGO} alt="Logo" className="w-8 h-8 rounded-lg" referrerPolicy="no-referrer" />
+        <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-[10px]">FP</div>
         <div className="flex flex-col">
           <span className="text-[10px] font-black text-indigo-600 tracking-wider">GESTÃO PRO</span>
           <span className="text-[8px] text-slate-400 font-bold uppercase">Sistema de Melhoria Contínua</span>
@@ -186,6 +217,8 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
     setProgress(10);
     
     try {
+      const logoBase64 = await svgToPngBase64(SYSTEM_LOGO_SVG);
+      
       if (reportType === 'Relatório Completo') {
         const project = projects.find(p => p.id === selectedProjectId);
         if (!project) throw new Error('Projeto não encontrado');
@@ -194,51 +227,54 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
 
         const docDefinition: any = {
           pageSize: 'A4',
-          pageMargins: [40, 60, 40, 60],
+          pageMargins: [40, 80, 40, 60],
           header: (currentPage: number, pageCount: number) => {
             if (currentPage === 1) return null;
             return {
+              margin: [40, 20, 40, 0],
               columns: [
                 {
-                  svg: SYSTEM_LOGO_SVG,
-                  width: 20,
-                  margin: [40, 20, 0, 0]
+                  image: logoBase64,
+                  fit: [120, 40],
+                  alignment: 'left',
+                  margin: [0, 10, 0, 10]
                 },
                 {
-                  text: 'GESTÃO PRO - Sistema de Melhoria Contínua',
-                  style: 'headerSmall',
-                  margin: [10, 25, 0, 0]
+                  width: '*',
+                  stack: [
+                    { text: 'RELATÓRIO CORPORATIVO EXECUTIVO', style: 'headerLabel' },
+                    { text: project.name.toUpperCase(), style: 'headerValue' }
+                  ],
+                  margin: [10, 0, 0, 0]
                 },
                 {
-                  text: project.name,
-                  alignment: 'right',
-                  style: 'headerSmall',
-                  margin: [0, 25, 40, 0]
+                  width: 'auto',
+                  stack: [
+                    { text: 'EMISSÃO', style: 'headerLabel', alignment: 'right' },
+                    { text: format(new Date(), "dd/MM/yyyy"), style: 'headerValue', alignment: 'right' }
+                  ]
                 }
               ]
             };
           },
           footer: (currentPage: number, pageCount: number) => {
             return {
-              columns: [
+              margin: [40, 0, 40, 0],
+              stack: [
                 {
-                  text: `Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`,
-                  style: 'footerText',
-                  margin: [40, 10, 0, 0]
+                  canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#cbd5e1' }]
                 },
                 {
-                  text: `Página ${currentPage} de ${pageCount}`,
-                  alignment: 'right',
-                  style: 'footerText',
-                  margin: [0, 10, 40, 0]
-                }
-              ],
-              canvas: [
-                {
-                  type: 'line',
-                  x1: 40, y1: 5, x2: 555, y2: 5,
-                  lineWidth: 0.5,
-                  lineColor: '#f1f5f9'
+                  columns: [
+                    {
+                      image: logoBase64,
+                      fit: [100, 30],
+                      alignment: 'center',
+                      margin: [0, 10, 0, 0]
+                    },
+                    { width: '*', text: `FLOWPROCESS - Melhoria Contínua`, style: 'footerText', margin: [10, 10, 0, 0] },
+                    { width: 'auto', text: `Página ${currentPage} de ${pageCount}`, alignment: 'right', style: 'footerText', margin: [0, 10, 0, 0] }
+                  ]
                 }
               ]
             };
@@ -248,108 +284,95 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
             {
               stack: [
                 {
-                  svg: SYSTEM_LOGO_SVG,
-                  width: 80,
+                  image: logoBase64,
+                  fit: [300, 120],
                   alignment: 'center',
-                  margin: [0, 100, 0, 20]
+                  margin: [0, 40, 0, 20]
                 },
                 {
-                  text: 'RELATÓRIO EXECUTIVO',
-                  style: 'subtitle',
-                  color: '#4f46e9',
+                  text: 'RELATÓRIO TÉCNICO DE MELHORIA',
+                  style: 'capaSubtitle',
                   alignment: 'center'
                 },
                 {
                   text: project.name.toUpperCase(),
-                  style: 'mainTitle',
-                  margin: [0, 10, 0, 40],
-                  alignment: 'center'
-                },
-                {
-                  canvas: [
-                    {
-                      type: 'line',
-                      x1: 100, y1: 0, x2: 400, y2: 0,
-                      lineWidth: 2,
-                      lineColor: '#4f46e9'
-                    }
-                  ],
-                  margin: [0, 0, 0, 40]
+                  style: 'capaTitle',
+                  alignment: 'center',
+                  margin: [0, 10, 0, 80]
                 },
                 {
                   columns: [
                     {
+                      width: '*',
                       stack: [
-                        { text: 'RESPONSÁVEL', style: 'label' },
-                        { text: users.find(u => u.id === project.assignedTo)?.name || 'Não atribuído', style: 'value' }
+                        { text: 'RESPONSÁVEL ESTRATÉGICO', style: 'label' },
+                        { text: users.find(u => u.id === project.assignedTo)?.name || 'NÃO ATRIBUÍDO', style: 'capaValue' },
+                        { text: 'DURAÇÃO ESTIMADA', style: 'label', margin: [0, 20, 0, 2] },
+                        { text: `${project.scope?.startDate ? format(parseISO(project.scope.startDate), 'dd/MM/yyyy') : 'N/A'} - ${project.scope?.forecastCompletion ? format(parseISO(project.scope.forecastCompletion), 'dd/MM/yyyy') : 'N/A'}`, style: 'capaValue' }
                       ]
                     },
                     {
+                      width: '*',
                       stack: [
-                        { text: 'STATUS DO PROJETO', style: 'label' },
-                        { text: project.status.toUpperCase(), style: 'value', color: project.status === 'Concluído' ? '#059669' : '#d97706' }
+                        { text: 'SETOR(ES) ENVOLVIDO(S)', style: 'label' },
+                        { text: project.scope?.involvedSectors?.map(s => s.name).join(', ').toUpperCase() || 'GERAL / TRANSVERSAL', style: 'capaValue' },
+                        { text: 'STATUS ATUAL', style: 'label', margin: [0, 20, 0, 2] },
+                        { text: project.status.toUpperCase(), style: 'capaValue', color: project.status === 'Concluído' ? '#059669' : '#003489' }
                       ]
                     }
                   ],
-                  margin: [0, 0, 0, 30]
-                },
-                {
-                  columns: [
-                    {
-                      stack: [
-                        { text: 'DATA DE INÍCIO', style: 'label' },
-                        { text: project.scope?.startDate ? format(parseISO(project.scope.startDate), 'dd/MM/yyyy') : 'N/A', style: 'value' }
-                      ]
-                    },
-                    {
-                      stack: [
-                        { text: 'DATA DE GERAÇÃO', style: 'label' },
-                        { text: format(new Date(), "dd/MM/yyyy"), style: 'value' }
-                      ]
-                    }
-                  ]
+                  margin: [40, 0, 40, 0]
                 }
               ],
               pageBreak: 'after'
             },
             // ESCOPO
+            { text: '01. RESUMO EXECUTIVO E ESCOPO', style: 'sectionHeading' },
             {
-              text: '01. ESCOPO DO PROJETO',
-              style: 'sectionHeading',
+              canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 2, lineColor: '#003489' }],
               margin: [0, 0, 0, 20]
-            },
-            {
-              stack: [
-                { text: 'DESCRIÇÃO COMPLETA', style: 'label' },
-                {
-                  text: project.description || project.scope?.problemDescription || 'Nenhuma descrição fornecida.',
-                  style: 'bodyText',
-                  margin: [0, 5, 0, 20]
-                }
-              ]
             },
             {
               columns: [
                 {
+                  width: '60%',
                   stack: [
-                    { text: 'OBJETIVO MENSURÁVEL', style: 'label' },
-                    { text: project.scope?.measurableObjective || 'Não definido', style: 'bodyText' }
+                    { text: 'DESCRIÇÃO DO PROBLEMA / PROJETO', style: 'label' },
+                    { text: project.description || project.scope?.problemDescription || 'Nenhum detalhe adicional fornecido.', style: 'bodyText', margin: [0, 5, 0, 15] },
+                    { text: 'OBJETIVO MENSURÁVEL (META)', style: 'label' },
+                    { text: project.scope?.measurableObjective || 'Não definido', style: 'bodyText', margin: [0, 5, 0, 15] }
                   ]
                 },
                 {
+                  width: '40%',
                   stack: [
-                    { text: 'SETORES ENVOLVIDOS', style: 'label' },
-                    { text: project.scope?.involvedSectors?.map(s => s.name).join(', ') || 'Nenhum', style: 'bodyText' }
+                    {
+                      canvas: [{ type: 'rect', x: 0, y: 0, w: 180, h: 80, r: 10, color: '#f8fafc', lineColor: '#e2e8f0' }]
+                    },
+                    {
+                      stack: [
+                        { text: 'GANHO PROJETADO', style: 'label', margin: [15, -70, 0, 2] },
+                        { text: project.scope?.financial?.gainProjection?.value ? `R$ ${project.scope.financial.gainProjection.value.toLocaleString()}` : 'Não estimado', style: 'value', margin: [15, 0, 0, 10] },
+                        { text: 'IMPACTO ATUAL', style: 'label', margin: [15, 0, 0, 2] },
+                        { text: project.scope?.financial?.currentImpact?.value ? `R$ ${project.scope.financial.currentImpact.value.toLocaleString()}` : 'Não definido', style: 'bodyText', margin: [15, 0, 0, 0], bold: true, color: '#e11d48' }
+                      ]
+                    }
                   ]
                 }
               ],
-              margin: [0, 0, 0, 30]
+              margin: [0, 0, 0, 40]
+            },
+            {
+              stack: [
+                { text: 'SETOR(ES) IMPACTADO(S)', style: 'label' },
+                { text: project.scope?.involvedSectors?.map(s => s.name).join(', ') || 'Geral / Transversal', style: 'bodyText', margin: [0, 5, 0, 15] }
+              ]
             },
             // MAPEAMENTO
+            { text: '02. MAPEAMENTO DE PROCESSOS', style: 'sectionHeading', pageBreak: 'before' },
             {
-              text: '02. MAPEAMENTO DE ETAPAS',
-              style: 'sectionHeading',
-              margin: [0, 20, 0, 20]
+              canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 2, lineColor: '#003489' }],
+              margin: [0, 0, 0, 20]
             },
             {
               table: {
@@ -357,66 +380,184 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                 widths: ['*', 'auto', 'auto', 'auto'],
                 body: [
                   [
-                    { text: 'TÍTULO DA ETAPA', style: 'tableHeader' },
+                    { text: 'ETAPA DO PROCESSO', style: 'tableHeader' },
                     { text: 'RESPONSÁVEL', style: 'tableHeader' },
-                    { text: 'PERÍODO', style: 'tableHeader' },
+                    { text: 'PRAZO', style: 'tableHeader' },
                     { text: 'STATUS', style: 'tableHeader' }
                   ],
                   ...(project.subtasks || []).map(sub => [
-                    { text: sub.title, style: 'tableCell' },
+                    { text: sub.title.toUpperCase(), style: 'tableCell', bold: true },
                     { text: users.find(u => u.id === sub.responsibleId)?.name || 'N/A', style: 'tableCell' },
-                    { text: `${sub.startDate ? format(parseISO(sub.startDate), 'dd/MM/yyyy') : '?'} - ${sub.endDate ? format(parseISO(sub.endDate), 'dd/MM/yyyy') : '?'}`, style: 'tableCell' },
-                    { text: sub.status, style: 'tableCell', color: sub.status === 'Concluído' ? '#059669' : '#d97706' }
+                    { text: `${sub.startDate ? format(parseISO(sub.startDate), 'dd/MM/yyyy') : '--'} a ${sub.endDate ? format(parseISO(sub.endDate), 'dd/MM/yyyy') : '--'}`, style: 'tableCell' },
+                    { text: sub.status.toUpperCase(), style: 'tableCell', color: sub.status === 'Concluído' ? '#059669' : '#d97706', bold: true }
                   ])
                 ]
               },
-              layout: 'lightHorizontalLines'
+              layout: 'headerLineOnly'
             },
-            // PDCA
             {
-              text: '03. CICLOS PDCA',
-              style: 'sectionHeading',
-              margin: [0, 40, 0, 20],
-              pageBreak: 'before'
+              stack: [
+                { text: 'GARGALOS E PONTOS DE MELHORIA IDENTIFICADOS', style: 'label', margin: [0, 15, 0, 5] },
+                ...( (project.subtasks || []).flatMap(sub => 
+                  (sub.mapping?.nodes || []).filter((n: any) => n.data?.isProblemStep).map((node: any) => ({
+                    columns: [
+                      { text: `• ${sub.title.toUpperCase()}:`, width: '30%', style: 'bodyTextSmall', bold: true },
+                      { text: node.data?.label || 'Ponto de atenção', width: '70%', style: 'bodyTextSmall', color: '#e11d48' }
+                    ],
+                    margin: [0, 2, 0, 0]
+                  }))
+                ).length > 0 ? (project.subtasks || []).flatMap(sub => 
+                  (sub.mapping?.nodes || []).filter((n: any) => n.data?.isProblemStep).map((node: any) => ({
+                    columns: [
+                      { text: `• ${sub.title.toUpperCase()}:`, width: '30%', style: 'bodyTextSmall', bold: true },
+                      { text: node.data?.label || 'Ponto de atenção', width: '70%', style: 'bodyTextSmall', color: '#e11d48' }
+                    ],
+                    margin: [0, 2, 0, 0]
+                  }))
+                ) : [{ text: 'Nenhum gargalo crítico identificado no mapeamento atual.', style: 'bodyTextSmall', italic: true }] )
+              ]
             },
-            ...(project.subtasks?.flatMap(s => s.pdcaCycles) || []).map((cycle, idx) => ({
+            // ANALISES
+            { text: '03. ANÁLISES DE CAUSA RAIZ', style: 'sectionHeading', pageBreak: 'before' },
+            {
+              canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 2, lineColor: '#003489' }],
+              margin: [0, 0, 0, 20]
+            },
+            ...(project.subtasks?.flatMap(s => s.pdcaCycles) || []).map((cycle, idx) => {
+              const rca = cycle.plan.rootCauseAnalysis;
+              const analysisContent = [];
+
+              if (rca.type === '5whys') {
+                analysisContent.push({ text: `5 PORQUÊS - ${cycle.title}`, style: 'stepHeading', color: '#4f46e9', margin: [0, 10, 0, 5] });
+                analysisContent.push({
+                  ul: rca.entries.map((entry, i) => `${i + 1}º Porquê: ${entry.text}`),
+                  style: 'bodyTextSmall',
+                  margin: [0, 0, 0, 15]
+                });
+              } else if (rca.type === 'ishikawa' && rca.ishikawa) {
+                analysisContent.push({ text: `ISHIKAWA - ${cycle.title}`, style: 'stepHeading', color: '#4f46e9', margin: [0, 10, 0, 5] });
+                const ishikawaTable = {
+                  table: {
+                    widths: ['30%', '70%'],
+                    body: [
+                      [{ text: 'CATEGORIA', style: 'tableHeader' }, { text: 'CAUSAS IDENTIFICADAS', style: 'tableHeader' }],
+                      ...rca.ishikawa.map(cat => [
+                        { text: cat.name, style: 'tableCell', bold: true },
+                        { text: cat.entries.map(e => e.text).join(', ') || 'Nenhuma registrada', style: 'tableCell' }
+                      ])
+                    ]
+                  },
+                  layout: 'lightHorizontalLines',
+                  margin: [0, 0, 0, 15]
+                };
+                analysisContent.push(ishikawaTable);
+              }
+
+              analysisContent.push({ text: 'CAUSA RAIZ IDENTIFICADA:', style: 'labelTiny' });
+              analysisContent.push({ text: rca.identifiedRootCause || 'Não definida', style: 'bodyText', bold: true, color: '#e11d48', margin: [0, 0, 0, 20] });
+
+              // 5W2H Table
+              if (cycle.plan.actionPlan && cycle.plan.actionPlan.length > 0) {
+                analysisContent.push({ text: 'PLANO DE AÇÃO (5W2H)', style: 'stepHeading', color: '#059669', margin: [0, 10, 0, 5] });
+                const table5w2h = {
+                  table: {
+                    headerRows: 1,
+                    widths: ['auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
+                    body: [
+                      [
+                        { text: 'O QUE', style: 'tableHeaderSmall' },
+                        { text: 'POR QUE', style: 'tableHeaderSmall' },
+                        { text: 'ONDE', style: 'tableHeaderSmall' },
+                        { text: 'QUANDO', style: 'tableHeaderSmall' },
+                        { text: 'QUEM', style: 'tableHeaderSmall' },
+                        { text: 'COMO', style: 'tableHeaderSmall' },
+                        { text: 'QUANTO', style: 'tableHeaderSmall' }
+                      ],
+                      ...cycle.plan.actionPlan.map(item => [
+                        { text: item.what, style: 'tableCellTiny' },
+                        { text: item.why, style: 'tableCellTiny' },
+                        { text: item.where, style: 'tableCellTiny' },
+                        { text: item.when, style: 'tableCellTiny' },
+                        { text: item.who, style: 'tableCellTiny' },
+                        { text: item.how, style: 'tableCellTiny' },
+                        { text: item.howMuch, style: 'tableCellTiny' }
+                      ])
+                    ]
+                  },
+                  layout: 'lightHorizontalLines',
+                  margin: [0, 0, 0, 20]
+                };
+                analysisContent.push(table5w2h);
+              }
+
+              return analysisContent;
+            }),
+
+            // PDCA
+            { text: '04. CICLOS DE MELHORIA (PDCA)', style: 'sectionHeading', pageBreak: 'before' },
+            {
+              canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 2, lineColor: '#003489' }],
+              margin: [0, 0, 0, 20]
+            },
+            ...( (project.subtasks?.flatMap(s => s.pdcaCycles) || []).length > 0 
+              ? (project.subtasks?.flatMap(s => s.pdcaCycles) || []).map((cycle, idx) => ({
               stack: [
                 {
                   text: `CICLO ${idx + 1}: ${cycle.title.toUpperCase()}`,
                   style: 'subSectionHeading',
-                  margin: [0, 10, 0, 10]
+                  margin: [0, 10, 0, 15]
                 },
                 {
                   columns: [
+                    // PLAN & DO
                     {
+                      width: '50%',
                       stack: [
-                        { text: 'PLAN (Planejamento)', style: 'stepHeading', color: '#4f46e9' },
-                        { text: cycle.plan.problemDescription, style: 'bodyTextSmall' },
-                        { text: 'CAUSA RAIZ', style: 'labelSmall', margin: [0, 5, 0, 2] },
-                        { text: cycle.plan.rootCauseAnalysis.identifiedRootCause || 'Não definida', style: 'bodyTextSmall' }
-                      ]
-                    },
-                    {
-                      stack: [
-                        { text: 'DO (Execução)', style: 'stepHeading', color: '#d97706' },
+                        { text: 'PLAN - Planejamento', style: 'stepHeading', color: '#4f46e9' },
+                        { text: 'Problema:', style: 'labelTiny' },
+                        { text: cycle.plan.problemDescription, style: 'bodyTextSmall', margin: [0, 0, 0, 5] },
+                        { text: 'Causa Raiz:', style: 'labelTiny' },
+                        { text: cycle.plan.rootCauseAnalysis.identifiedRootCause || 'Não definida', style: 'bodyTextSmall', margin: [0, 0, 0, 5] },
+                        
+                        { text: 'DO - Execução', style: 'stepHeading', color: '#d97706', margin: [0, 10, 0, 5] },
                         ...(cycle.plan.actionPlan || []).map(action => ({
                           text: `• ${action.what} (${translateStatus(action.status)})`,
-                          style: 'bodyTextSmall'
+                          style: 'bodyTextSmall',
+                          margin: [0, 2, 0, 0]
                         }))
-                      ]
+                      ],
+                      margin: [0, 0, 10, 0]
+                    },
+                    // CHECK & ACT
+                    {
+                      width: '50%',
+                      stack: [
+                        { text: 'CHECK - Verificação', style: 'stepHeading', color: '#059669' },
+                        { text: 'Resultado:', style: 'labelTiny' },
+                        { text: cycle.plan.actionPlan?.[0]?.worked || 'Em análise', style: 'bodyTextSmall', margin: [0, 0, 0, 5] },
+                        { text: 'Evidência:', style: 'labelTiny' },
+                        { text: cycle.plan.actionPlan?.[0]?.evidence || 'Pendente', style: 'bodyTextSmall', margin: [0, 0, 0, 5] },
+
+                        { text: 'ACT - Padronização', style: 'stepHeading', color: '#e11d48', margin: [0, 10, 0, 5] },
+                        { text: 'Ação Final:', style: 'labelTiny' },
+                        { text: cycle.plan.actionPlan?.[0]?.finalAction || 'Em definição', style: 'bodyTextSmall', margin: [0, 0, 0, 5] },
+                        { text: 'Padronização:', style: 'labelTiny' },
+                        { text: cycle.plan.actionPlan?.[0]?.standardizationModels?.join(', ') || 'Nenhum modelo aplicado', style: 'bodyTextSmall' }
+                      ],
+                      margin: [10, 0, 0, 0]
                     }
                   ],
                   margin: [0, 0, 0, 20]
-                }
+                },
+                { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#e2e8f0' }], margin: [0, 10, 0, 20] }
               ],
               unbreakable: true
-            })),
+            })) : [{ text: 'Nenhum ciclo PDCA registrado para este projeto.', style: 'bodyText', italic: true }] ),
             // HISTORICO
+            { text: '05. HISTÓRICO DE INTERAÇÕES E AÇÕES', style: 'sectionHeading', pageBreak: 'before' },
             {
-              text: '04. HISTÓRICO DE AÇÕES OPERACIONAIS',
-              style: 'sectionHeading',
-              margin: [0, 40, 0, 20],
-              pageBreak: 'before'
+              canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 2, lineColor: '#003489' }],
+              margin: [0, 0, 0, 20]
             },
             {
               table: {
@@ -425,36 +566,55 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                 body: [
                   [
                     { text: 'RESPONSÁVEL', style: 'tableHeader' },
-                    { text: 'AÇÃO', style: 'tableHeader' },
+                    { text: 'DESCRIÇÃO DA AÇÃO', style: 'tableHeader' },
                     { text: 'STATUS', style: 'tableHeader' },
                     { text: 'CONCLUSÃO', style: 'tableHeader' }
                   ],
                   ...actions.filter(a => a.projectId === selectedProjectId).map(a => [
                     { text: a.responsibleName, style: 'tableCell' },
                     { text: a.action, style: 'tableCell' },
-                    { text: translateStatus(a.status), style: 'tableCell' },
+                    { 
+                      text: (STATUS_MAP[a.status] || a.status).toUpperCase(), 
+                      style: 'tableCell', 
+                      bold: true, 
+                      color: a.status === 'Concluído' ? '#059669' : a.status === 'Em andamento' ? '#d97706' : '#64748b' 
+                    },
                     { text: a.completionDate || '---', style: 'tableCell' }
                   ])
                 ]
               },
-              layout: 'lightHorizontalLines'
+              layout: {
+                fillColor: function (i: number) {
+                  return (i % 2 === 0) ? '#f8fafc' : null;
+                },
+                hLineColor: '#e2e8f0',
+                vLineColor: '#e2e8f0'
+              },
+              margin: [0, 0, 0, 20]
             }
           ],
           styles: {
-            mainTitle: { fontSize: 32, bold: true, color: '#0f172a' },
-            subtitle: { fontSize: 10, bold: true, letterSpacing: 2 },
-            sectionHeading: { fontSize: 18, bold: true, color: '#0f172a' },
-            subSectionHeading: { fontSize: 14, bold: true, color: '#334155' },
-            stepHeading: { fontSize: 10, bold: true, margin: [0, 10, 0, 5] },
-            label: { fontSize: 8, bold: true, color: '#94a3b8', margin: [0, 0, 0, 2] },
-            labelSmall: { fontSize: 7, bold: true, color: '#94a3b8' },
+            capaTitle: { fontSize: 28, bold: true, color: '#0f172a', letterSpacing: 1 },
+            capaSubtitle: { fontSize: 10, bold: true, color: '#4f46e9', letterSpacing: 4 },
+            capaValue: { fontSize: 14, bold: true, color: '#1e293b' },
+            headerLabel: { fontSize: 7, bold: true, color: '#94a3b8', letterSpacing: 1 },
+            headerValue: { fontSize: 9, bold: true, color: '#475569' },
+            sectionHeading: { fontSize: 20, bold: true, color: '#003489', margin: [0, 0, 0, 5] },
+            subSectionHeading: { fontSize: 14, bold: true, color: '#334155', fillColor: '#f8fafc', padding: [5, 5] },
+            stepHeading: { fontSize: 11, bold: true, decoration: 'underline' },
+            label: { fontSize: 8, bold: true, color: '#64748b', margin: [0, 0, 0, 2] },
+            labelTiny: { fontSize: 7, bold: true, color: '#94a3b8' },
             value: { fontSize: 12, bold: true, color: '#1e293b' },
-            bodyText: { fontSize: 10, color: '#475569', lineHeight: 1.4 },
-            bodyTextSmall: { fontSize: 8, color: '#475569', lineHeight: 1.2 },
-            tableHeader: { fontSize: 9, bold: true, color: '#64748b', fillColor: '#f8fafc' },
-            tableCell: { fontSize: 8, color: '#475569' },
-            headerSmall: { fontSize: 8, bold: true, color: '#94a3b8' },
+            bodyText: { fontSize: 11, color: '#334155', lineHeight: 1.4 },
+            bodyTextSmall: { fontSize: 9, color: '#475569', lineHeight: 1.3 },
+            tableHeader: { fontSize: 10, bold: true, color: '#0f172a', margin: [0, 5, 0, 5] },
+            tableHeaderSmall: { fontSize: 8, bold: true, color: '#0f172a' },
+            tableCell: { fontSize: 9, color: '#44546a', margin: [0, 5, 0, 5] },
+            tableCellTiny: { fontSize: 7, color: '#44546a' },
             footerText: { fontSize: 8, color: '#94a3b8' }
+          },
+          defaultStyle: {
+            font: 'Roboto'
           }
         };
 

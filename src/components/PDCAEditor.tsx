@@ -37,7 +37,43 @@ const STATUS_MAP: Record<string, string> = {
 };
 
 
-const SYSTEM_LOGO = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAwIiBoZWlnaHQ9IjUwMCIgdmlld0JveD0iMCAwIDUwMCA1MDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSI1MDAiIGhlaWdodD0iNTAwIiByeD0iMTI1IiBmaWxsPSIjMDAzNDg5Ii8+CjxwYXRoIGQ9Ik0zNTAgMTUwSDI1MFYyMDBIMzAwQzI5NSAyMzAgMjgwIDI1MCAyNTAgMjUwQzIxNi44NjMgMjUwIDE5MCAyMjMuMTM3IDE5MCAxOTBDMTkwIDE1Ni44NjMgMjE2Ljg2MyAxMzAgMjUwIDEzMEMyNzAgMTMwIDI5MCAxNDAgMzAwIDE1NUwzNDAgMTE1QzMxNSA5MCAyODUgNzUgMjUwIDc1QzE4Ni40ODcgNzUgMTM1IDEyNi40ODcgMTM1IDE5MEMxMzUgMjUzLjUxMyAxODYuNDg3IDMwNSAyNTAgMzA1QzMxMy41MTMgMzA1IDM2NSAyNTMuNTEzIDM2NSAxOTBDMzY1IDE3Ni40ODcgMzU5LjUxMyAxNjMuNTEzIDM1MCAxNTBaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K";
+// FlowProcess Horizontal Logo SVG for PDF
+const SYSTEM_LOGO_SVG = `<svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="921" height="212" viewBox="0 0 921 212">
+<path d="M0 0 C6.85 4.55 10.97 12.5 14.92 19.47 C16.06 21.43 17.2 23.4 18.34 25.37 C18.91 26.34 19.48 27.32 20.07 28.33 C22.51 32.47 25.08 36.54 27.67 40.59 C32.1 47.52 36.41 54.5 40.67 61.53" fill="#003489"/><path d="M250 75C186.48 75 135 126.48 135 190C135 253.51 186.48 305 250 305" fill="#003489"/></svg>`;
+
+const SYSTEM_LOGO_PRIMARY_COLOR = '#003489';
+
+// Helper to convert SVG to PNG Base64 for pdfMake compatibility
+const svgToPngBase64 = (svgString: string): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(svgBlob);
+
+    img.onload = function () {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0);
+        const pngBase64 = canvas.toDataURL('image/png');
+        resolve(pngBase64);
+      } else {
+        // Fallback to a simple data URL if canvas fails
+        resolve("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==");
+      }
+      URL.revokeObjectURL(url);
+    };
+
+    img.onerror = () => {
+      resolve("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==");
+    };
+
+    img.src = url;
+  });
+};
 
 const translateStatus = (status: string) => STATUS_MAP[status] || status;
 
@@ -327,7 +363,7 @@ export default function PDCAEditor({
   const PDFHeader = ({ projectName, cycleTitle }: { projectName: string, cycleTitle?: string }) => (
     <div className="flex justify-between items-end border-b border-slate-100 pb-4 mb-8">
       <div className="flex items-center gap-3">
-        <img src={SYSTEM_LOGO} alt="Logo" className="w-8 h-8 rounded-lg" referrerPolicy="no-referrer" />
+        <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-[10px]">FP</div>
         <div className="flex flex-col">
           <span className="text-[10px] font-black text-indigo-600 tracking-wider">GESTÃO PRO</span>
           <span className="text-[8px] text-slate-400 font-bold uppercase">PDCA Expert Analysis</span>
@@ -345,126 +381,285 @@ export default function PDCAEditor({
     setIsExportingPDF(true);
     
     try {
+      const logoBase64 = await svgToPngBase64(SYSTEM_LOGO_SVG);
+      
       const docDefinition: any = {
         pageSize: 'A4',
-        pageMargins: [40, 60, 40, 60],
-        footer: (currentPage: number, pageCount: number) => ({
-          columns: [
-            { text: `Gerado em ${format(new Date(), "dd/MM/yyyy HH:mm")}`, style: 'footerText', margin: [40, 10, 0, 0] },
-            { text: `Página ${currentPage} de ${pageCount}`, alignment: 'right', style: 'footerText', margin: [0, 10, 40, 0] }
-          ]
-        }),
+        pageMargins: [40, 80, 40, 60],
+        header: (currentPage: number, pageCount: number) => {
+          if (currentPage === 1) return null; // Primeira página é a capa
+          return {
+            margin: [40, 20, 40, 0],
+            columns: [
+              {
+                image: logoBase64,
+                fit: [120, 40],
+                alignment: 'left',
+                margin: [0, 10, 0, 10]
+              },
+              {
+                width: '*',
+                stack: [
+                  { text: 'RELATÓRIO TÉCNICO PDCA', style: 'headerLabel' },
+                  { text: activeCycle.title.toUpperCase(), style: 'headerValue' }
+                ],
+                margin: [10, 0, 0, 0]
+              },
+              {
+                width: 'auto',
+                stack: [
+                  { text: 'EMISSÃO', style: 'headerLabel', alignment: 'right' },
+                  { text: format(new Date(), "dd/MM/yyyy"), style: 'headerValue', alignment: 'right' }
+                ]
+              }
+            ]
+          };
+        },
+        footer: (currentPage: number, pageCount: number) => {
+          return {
+            margin: [40, 0, 40, 0],
+            stack: [
+              {
+                canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#cbd5e1' }]
+              },
+              {
+                columns: [
+                  {
+                    image: logoBase64,
+                    fit: [100, 30],
+                    alignment: 'center',
+                    margin: [0, 10, 0, 0]
+                  },
+                  { width: '*', text: `FLOWPROCESS - Melhoria Contínua`, style: 'footerText', margin: [10, 10, 0, 0] },
+                  { width: 'auto', text: `Página ${currentPage} de ${pageCount}`, alignment: 'right', style: 'footerText', margin: [0, 10, 0, 0] }
+                ]
+              }
+            ]
+          };
+        },
         content: [
+          // CAPA
+          {
+            stack: [
+              {
+                image: logoBase64,
+                fit: [300, 120],
+                alignment: 'center',
+                margin: [0, 40, 0, 20]
+              },
+              {
+                text: 'RELATÓRIO TÉCNICO DE MELHORIA',
+                style: 'capaSubtitle',
+                alignment: 'center'
+              },
+              {
+                text: activeCycle.title.toUpperCase(),
+                style: 'capaTitle',
+                alignment: 'center',
+                margin: [0, 10, 0, 60]
+              },
+              {
+                columns: [
+                  {
+                    width: '*',
+                    stack: [
+                      { text: 'PROJETO MÃE', style: 'label' },
+                      { text: project.name.toUpperCase(), style: 'capaValue' },
+                      { text: 'ETAPA VINCULADA', style: 'label', margin: [0, 20, 0, 2] },
+                      { text: subtask.title.toUpperCase(), style: 'capaValue' }
+                    ]
+                  },
+                  {
+                    width: '*',
+                    stack: [
+                      { text: 'RESPONSÁVEL', style: 'label' },
+                      { text: project.assignedTo || '---', style: 'capaValue' },
+                      { text: 'STATUS DO CICLO', style: 'label', margin: [0, 20, 0, 2] },
+                      { 
+                        text: activeCycle.status === 'Concluído' ? 'FINALIZADO' : 'EM ANDAMENTO', 
+                        style: 'capaValue', 
+                        color: activeCycle.status === 'Concluído' ? '#059669' : '#003489' 
+                      }
+                    ]
+                  }
+                ],
+                margin: [40, 0, 40, 0]
+              }
+            ],
+            pageBreak: 'after'
+          },
+          // RESUMO EXECUTIVO
+          { text: '01. RESUMO EXECUTIVO', style: 'sectionHeading' },
+          {
+            canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 2, lineColor: SYSTEM_LOGO_PRIMARY_COLOR }],
+            margin: [0, 0, 0, 20]
+          },
           {
             columns: [
               {
-                svg: `<svg width="500" height="500" viewBox="0 0 500 500" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="500" height="500" rx="125" fill="#003489"/><path d="M350 150H250V200H300C295 230 280 250 250 250C216.863 250 190 223.137 190 190C190 156.863 216.863 130 250 130C270 130 290 140 300 155L340 115C315 90 285 75 250 75C186.487 75 135 126.487 135 190C135 253.513 186.487 305 250 305C313.513 305 365 253.513 365 190C365 176.487 359.513 163.513 350 150Z" fill="white"/></svg>`,
-                width: 30
+                width: '60%',
+                stack: [
+                  { text: 'DEFINIÇÃO DO PROBLEMA', style: 'label' },
+                  { text: activeCycle.plan.problemDescription, style: 'bodyText', margin: [0, 0, 0, 15] },
+                  { text: 'CAUSA RAIZ PRIORITÁRIA', style: 'label' },
+                  { text: activeCycle.plan.rootCauseAnalysis.identifiedRootCause || 'Pendente de análise profunda', style: 'bodyText', bold: true, color: '#e11d48' }
+                ]
               },
               {
+                width: '40%',
                 stack: [
-                  { text: 'RELATÓRIO DE CICLO PDCA', style: 'headerLabel' },
-                  { text: activeCycle.title.toUpperCase(), style: 'mainTitle' }
-                ],
-                margin: [10, 0, 0, 0]
+                  {
+                    canvas: [{ type: 'rect', x: 0, y: 0, w: 180, h: 90, r: 10, color: '#f8fafc', lineColor: '#e2e8f0' }]
+                  },
+                  {
+                    stack: [
+                      { text: 'INDICADOR DE IMPACTO', style: 'label', margin: [15, -80, 0, 2] },
+                      { text: activeCycle.plan.impact.description || 'Não definido', style: 'value', margin: [15, 0, 0, 10] },
+                      { text: 'META DE MELHORIA', style: 'label', margin: [15, 0, 0, 2] },
+                      { text: `${activeCycle.plan.impact.goal}% de redução`, style: 'bodyText', margin: [15, 0, 0, 0], bold: true, color: '#059669' }
+                    ]
+                  }
+                ]
               }
             ],
             margin: [0, 0, 0, 30]
           },
+          // ANALISES
+          { text: '02. ANÁLISES E DIAGNÓSTICO', style: 'sectionHeading' },
           {
-            columns: [
-              {
-                stack: [
-                  { text: 'PROJETO', style: 'label' },
-                  { text: project.name, style: 'value' }
-                ]
-              },
-              {
-                stack: [
-                  { text: 'ETAPA', style: 'label' },
-                  { text: subtask.title, style: 'value' }
-                ]
-              }
-            ],
+            canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 2, lineColor: SYSTEM_LOGO_PRIMARY_COLOR }],
             margin: [0, 0, 0, 20]
           },
-          // PLAN
-          { text: 'PLAN - Planejamento', style: 'sectionHeading', color: '#4f46e9' },
-          { text: 'Descrição do Problema', style: 'label', margin: [0, 10, 0, 2] },
-          { text: activeCycle.plan.problemDescription, style: 'bodyText', margin: [0, 0, 0, 15] },
           {
-            columns: [
-              {
-                stack: [
-                  { text: 'Análise de Causa Raiz', style: 'label' },
-                  { text: activeCycle.plan.rootCauseAnalysis.identifiedRootCause || 'Não definida', style: 'bodyText' }
-                ]
-              },
-              {
-                stack: [
-                  { text: 'Meta Esperada', style: 'label' },
-                  { text: `${activeCycle.plan.impact.goal}% de melhoria`, style: 'bodyText' }
-                ]
-              }
-            ],
+            stack: [
+              ...(activeCycle.plan.rootCauseAnalysis.type === '5whys' ? [
+                { text: 'MÉTODO APLICADO: 5 PORQUÊS (5 WHYS)', style: 'stepHeading', color: SYSTEM_LOGO_PRIMARY_COLOR, margin: [0, 0, 0, 10] },
+                {
+                  table: {
+                    widths: ['20%', '80%'],
+                    body: [
+                      ...activeCycle.plan.rootCauseAnalysis.entries.map((e, i) => [
+                        { text: `${i + 1}º PORQUÊ`, style: 'tableHeaderSmall', alignment: 'center' },
+                        { text: e.text, style: 'bodyTextSmall' }
+                      ])
+                    ]
+                  },
+                  layout: 'lightHorizontalLines',
+                  margin: [0, 0, 0, 20]
+                }
+              ] : activeCycle.plan.rootCauseAnalysis.type === 'ishikawa' && activeCycle.plan.rootCauseAnalysis.ishikawa ? [
+                { text: 'MÉTODO APLICADO: DIAGRAMA DE ISHIKAWA (6M)', style: 'stepHeading', color: SYSTEM_LOGO_PRIMARY_COLOR, margin: [0, 0, 0, 10] },
+                {
+                  table: {
+                    widths: ['30%', '70%'],
+                    body: [
+                      [{ text: 'CATEGORIA', style: 'tableHeader' }, { text: 'CAUSAS IDENTIFICADAS', style: 'tableHeader' }],
+                      ...activeCycle.plan.rootCauseAnalysis.ishikawa.map(cat => [
+                        { text: cat.name, style: 'tableCell', bold: true },
+                        { text: cat.entries.map(e => e.text).join(', ') || 'Sem causas registradas', style: 'tableCell' }
+                      ])
+                    ]
+                  },
+                  layout: 'lightHorizontalLines',
+                  margin: [0, 0, 0, 20]
+                }
+              ] : [
+                { text: 'Nenhuma ferramenta de análise de causa raiz foi detalhada para este ciclo.', style: 'bodyText', italic: true, margin: [0, 0, 0, 20] }
+              ])
+            ]
+          },
+          // PDCA
+          { text: '03. DETALHAMENTO DO CICLO PDCA (5W2H)', style: 'sectionHeading' },
+          {
+            canvas: [{ type: 'line', x1: 0, y1: 5, x2: 515, y2: 5, lineWidth: 2, lineColor: SYSTEM_LOGO_PRIMARY_COLOR }],
             margin: [0, 0, 0, 20]
           },
-          // DO
-          { text: 'DO - Execução das Ações', style: 'sectionHeading', color: '#d97706' },
           {
             table: {
               headerRows: 1,
-              widths: ['*', 'auto', 'auto'],
+              widths: ['auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
               body: [
                 [
-                  { text: 'O QUE (Ação)', style: 'tableHeader' },
-                  { text: 'QUEM', style: 'tableHeader' },
-                  { text: 'STATUS', style: 'tableHeader' }
+                  { text: 'O QUE', style: 'tableHeaderSmall' },
+                  { text: 'POR QUE', style: 'tableHeaderSmall' },
+                  { text: 'ONDE', style: 'tableHeaderSmall' },
+                  { text: 'QUANDO', style: 'tableHeaderSmall' },
+                  { text: 'QUEM', style: 'tableHeaderSmall' },
+                  { text: 'COMO', style: 'tableHeaderSmall' },
+                  { text: 'QUANTO', style: 'tableHeaderSmall' }
                 ],
                 ...(activeCycle.plan.actionPlan || []).map(action => [
-                  { text: action.what, style: 'tableCell' },
-                  { text: action.who, style: 'tableCell' },
-                  { text: translateStatus(action.status), style: 'tableCell' }
+                  { text: action.what, style: 'tableCellTiny' },
+                  { text: action.why, style: 'tableCellTiny' },
+                  { text: action.where, style: 'tableCellTiny' },
+                  { text: action.when, style: 'tableCellTiny' },
+                  { text: action.who, style: 'tableCellTiny' },
+                  { text: action.how, style: 'tableCellTiny' },
+                  { text: action.howMuch, style: 'tableCellTiny' }
                 ])
               ]
             },
             layout: 'lightHorizontalLines',
-            margin: [0, 10, 0, 20]
+            margin: [0, 0, 0, 20]
           },
-          // CHECK & ACT
           {
             columns: [
               {
+                width: '50%',
                 stack: [
-                  { text: 'CHECK - Verificação', style: 'sectionHeading', color: '#059669' },
-                  { text: 'Resultados e Evidências', style: 'label', margin: [0, 10, 0, 2] },
-                  { text: activeCycle.plan.actionPlan?.[0]?.evidence || 'Em análise', style: 'bodyText' }
-                ]
+                  { text: 'DO - EXECUÇÃO', style: 'stepHeading', color: '#d97706', margin: [0, 10, 0, 5] },
+                  { text: 'Evidências/Resultados:', style: 'labelTiny' },
+                  { text: activeCycle.plan.actionPlan?.[0]?.evidence || 'Pendente de verificação final.', style: 'bodyTextSmall' }
+                ],
+                margin: [0, 0, 10, 0]
               },
               {
+                width: '50%',
                 stack: [
-                  { text: 'ACT - Padronização', style: 'sectionHeading', color: '#e11d48' },
-                  { text: 'Ações Finais', style: 'label', margin: [0, 10, 0, 2] },
-                  { text: activeCycle.plan.actionPlan?.[0]?.finalAction || 'Em análise', style: 'bodyText' }
-                ]
+                  { text: 'CHECK - VERIFICAÇÃO', style: 'stepHeading', color: '#059669', margin: [0, 10, 0, 5] },
+                  { text: 'O Plano Funcionou?', style: 'labelTiny' },
+                  { text: activeCycle.plan.actionPlan?.[0]?.worked || 'Aguardando encerramento.', style: 'bodyTextSmall' }
+                ],
+                margin: [10, 0, 0, 0]
               }
+            ],
+            margin: [0, 0, 0, 20]
+          },
+          {
+            stack: [
+              { text: 'ACT - AGIR / PADRONIZAÇÃO', style: 'stepHeading', color: '#e11d48', margin: [0, 10, 0, 5] },
+              { text: 'Conclusão e Padronização:', style: 'labelTiny' },
+              { text: activeCycle.plan.actionPlan?.[0]?.finalAction || 'Ciclo ainda em fase de execução.', style: 'bodyTextSmall' },
+              { text: 'Modelos adotados:', style: 'labelTiny', margin: [0, 5, 0, 0] },
+              { text: activeCycle.plan.actionPlan?.[0]?.standardizationModels?.join(', ') || 'Nenhum modelo aplicado.', style: 'bodyTextSmall' }
             ]
           }
         ],
         styles: {
-          mainTitle: { fontSize: 18, bold: true, color: '#0f172a' },
-          headerLabel: { fontSize: 8, bold: true, color: '#94a3b8', letterSpacing: 1 },
-          sectionHeading: { fontSize: 14, bold: true, margin: [0, 15, 0, 5] },
+          headerLabel: { fontSize: 7, bold: true, color: '#94a3b8', letterSpacing: 1 },
+          headerValue: { fontSize: 10, bold: true, color: '#1e293b' },
+          capaTitle: { fontSize: 32, bold: true, color: '#0f172a' },
+          capaSubtitle: { fontSize: 10, bold: true, color: '#4f46e9', letterSpacing: 4 },
+          capaValue: { fontSize: 14, bold: true, color: '#1e293b' },
+          sectionHeading: { fontSize: 18, bold: true, color: SYSTEM_LOGO_PRIMARY_COLOR, margin: [0, 10, 0, 5] },
+          stepHeading: { fontSize: 11, bold: true, margin: [0, 5, 0, 5] },
           label: { fontSize: 8, bold: true, color: '#94a3b8', margin: [0, 0, 0, 2] },
-          value: { fontSize: 10, bold: true, color: '#1e293b' },
-          bodyText: { fontSize: 10, color: '#475569', lineHeight: 1.4 },
-          tableHeader: { fontSize: 9, bold: true, color: '#64748b', fillColor: '#f8fafc' },
-          tableCell: { fontSize: 8, color: '#475569' },
+          labelTiny: { fontSize: 7, bold: true, color: '#94a3b8' },
+          value: { fontSize: 12, bold: true, color: '#1e293b' },
+          bodyText: { fontSize: 11, color: '#334155', lineHeight: 1.4 },
+          bodyTextSmall: { fontSize: 9, color: '#475569', lineHeight: 1.3 },
+          tableHeader: { fontSize: 10, bold: true, color: '#64748b', fillColor: '#f8fafc' },
+          tableHeaderSmall: { fontSize: 8, bold: true, color: '#0f172a', fillColor: '#f1f5f9' },
+          tableCell: { fontSize: 9, color: '#475569', margin: [0, 5, 0, 5] },
+          tableCellTiny: { fontSize: 7, color: '#44546a' },
           footerText: { fontSize: 8, color: '#94a3b8' }
+        },
+        defaultStyle: {
+          font: 'Roboto'
         }
       };
 
-      pdfMake.createPdf(docDefinition).download(`PDCA_${activeCycle.title.replace(/\s+/g, '_')}.pdf`);
+      pdfMake.createPdf(docDefinition).download(`PDCA_${activeCycle.title.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}.pdf`);
       setSaveFeedback("PDF gerado com sucesso!");
     } catch (error) {
       console.error('Erro ao gerar PDF:', error);

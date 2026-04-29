@@ -232,26 +232,29 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
             if (currentPage === 1) return null;
             return {
               margin: [40, 20, 40, 0],
-              columns: [
+              stack: [
                 {
                   image: logoBase64,
                   fit: [120, 40],
                   alignment: 'left',
-                  margin: [0, 10, 0, 10]
+                  margin: [0, 0, 0, 5]
                 },
                 {
-                  width: '*',
-                  stack: [
-                    { text: 'RELATÓRIO CORPORATIVO EXECUTIVO', style: 'headerLabel' },
-                    { text: project.name.toUpperCase(), style: 'headerValue' }
-                  ],
-                  margin: [10, 0, 0, 0]
-                },
-                {
-                  width: 'auto',
-                  stack: [
-                    { text: 'EMISSÃO', style: 'headerLabel', alignment: 'right' },
-                    { text: format(new Date(), "dd/MM/yyyy"), style: 'headerValue', alignment: 'right' }
+                  columns: [
+                    {
+                      width: '*',
+                      stack: [
+                        { text: 'RELATÓRIO CORPORATIVO EXECUTIVO', style: 'headerLabel' },
+                        { text: project.name.toUpperCase(), style: 'headerValue' }
+                      ]
+                    },
+                    {
+                      width: 'auto',
+                      stack: [
+                        { text: 'EMISSÃO', style: 'headerLabel', alignment: 'right' },
+                        { text: format(new Date(), "dd/MM/yyyy"), style: 'headerValue', alignment: 'right' }
+                      ]
+                    }
                   ]
                 }
               ]
@@ -265,15 +268,15 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                   canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#cbd5e1' }]
                 },
                 {
+                  image: logoBase64,
+                  fit: [100, 30],
+                  alignment: 'center',
+                  margin: [0, 5, 0, 5]
+                },
+                {
                   columns: [
-                    {
-                      image: logoBase64,
-                      fit: [100, 30],
-                      alignment: 'center',
-                      margin: [0, 10, 0, 0]
-                    },
-                    { width: '*', text: `FLOWPROCESS - Melhoria Contínua`, style: 'footerText', margin: [10, 10, 0, 0] },
-                    { width: 'auto', text: `Página ${currentPage} de ${pageCount}`, alignment: 'right', style: 'footerText', margin: [0, 10, 0, 0] }
+                    { width: '*', text: `FLOWPROCESS - Melhoria Contínua`, style: 'footerText' },
+                    { width: 'auto', text: `Página ${currentPage} de ${pageCount}`, alignment: 'right', style: 'footerText' }
                   ]
                 }
               ]
@@ -397,24 +400,38 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
             },
             {
               stack: [
-                { text: 'GARGALOS E PONTOS DE MELHORIA IDENTIFICADOS', style: 'label', margin: [0, 15, 0, 5] },
+                { text: 'GARGALOS IDENTIFICADOS', style: 'label', margin: [0, 15, 0, 5] },
                 ...( (project.subtasks || []).flatMap(sub => 
-                  (sub.mapping?.nodes || []).filter((n: any) => n.data?.isProblemStep).map((node: any) => ({
-                    columns: [
-                      { text: `• ${sub.title.toUpperCase()}:`, width: '30%', style: 'bodyTextSmall', bold: true },
-                      { text: node.data?.label || 'Ponto de atenção', width: '70%', style: 'bodyTextSmall', color: '#e11d48' }
-                    ],
-                    margin: [0, 2, 0, 0]
-                  }))
+                  (sub.mapping?.nodes || []).filter((n: any) => n.data?.isProblemStep).map((node: any) => {
+                    return {
+                      columns: [
+                        { text: `• ${sub.title.toUpperCase()}:`, width: '30%', style: 'bodyTextSmall', bold: true },
+                        { 
+                          text: `${node.data?.description || 'Ponto de interesse'} (PROBLEMA)`, 
+                          width: '70%', 
+                          style: 'bodyTextSmall', 
+                          color: '#e11d48' 
+                        }
+                      ],
+                      margin: [0, 2, 0, 0]
+                    };
+                  })
                 ).length > 0 ? (project.subtasks || []).flatMap(sub => 
-                  (sub.mapping?.nodes || []).filter((n: any) => n.data?.isProblemStep).map((node: any) => ({
-                    columns: [
-                      { text: `• ${sub.title.toUpperCase()}:`, width: '30%', style: 'bodyTextSmall', bold: true },
-                      { text: node.data?.label || 'Ponto de atenção', width: '70%', style: 'bodyTextSmall', color: '#e11d48' }
-                    ],
-                    margin: [0, 2, 0, 0]
-                  }))
-                ) : [{ text: 'Nenhum gargalo crítico identificado no mapeamento atual.', style: 'bodyTextSmall', italic: true }] )
+                  (sub.mapping?.nodes || []).filter((n: any) => n.data?.isProblemStep).map((node: any) => {
+                    return {
+                      columns: [
+                        { text: `• ${sub.title.toUpperCase()}:`, width: '30%', style: 'bodyTextSmall', bold: true },
+                        { 
+                          text: `${node.data?.description || 'Ponto de interesse'} (PROBLEMA)`, 
+                          width: '70%', 
+                          style: 'bodyTextSmall', 
+                          color: '#e11d48' 
+                        }
+                      ],
+                      margin: [0, 2, 0, 0]
+                    };
+                  })
+                ) : [{ text: 'Nenhum gargalo identificado no mapeamento atual.', style: 'bodyTextSmall', italic: true }] )
               ]
             },
             // ANALISES

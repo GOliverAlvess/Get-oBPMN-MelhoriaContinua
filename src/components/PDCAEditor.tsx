@@ -151,14 +151,26 @@ export default function PDCAEditor({
   const problemsFromMapping = useMemo(() => {
     const customData = subtask.mapping.customData || {};
     return Object.entries(customData)
-      .filter(([_, data]) => data.isProblemStep)
+      .filter(([id, data]) => {
+        if (!data.isProblemStep) return false;
+        // Check if task already has a cycle
+        const hasCycle = subtask.pdcaCycles.some(c => c.taskId === id);
+        // User requested: "Se o ciclo estiver concluído, a task NÃO deve aparecer novamente em Identificar Problemas"
+        const hasFinishedCycle = subtask.pdcaCycles.some(c => c.taskId === id && c.status === 'Concluído');
+        const hasActiveCycle = subtask.pdcaCycles.some(c => c.taskId === id && c.status === 'Ativo');
+        
+        // Only show if it doesn't have an active cycle and doesn't have a finished cycle
+        // Rule: Only allow new cycle if there is explicit user action (the modal IS the explicit action here, 
+        // but the rule says hide finished ones from Identify Problems)
+        return !hasActiveCycle && !hasFinishedCycle;
+      })
       .map(([id, data]) => ({
         id,
-        label: data.description || data.label || 'Sem descrição',
+        label: data.description || 'Sem descrição',
         time: data.timeInMinutes || 0,
         role: data.responsibleRole || ''
       }));
-  }, [subtask.mapping.customData]);
+  }, [subtask.mapping.customData, subtask.pdcaCycles]);
 
   const relatedCycles = useMemo(() => {
     if (!activeCycle) return [];
@@ -219,6 +231,22 @@ export default function PDCAEditor({
   };
 
   const createNewCycle = (taskId: string, taskLabel: string) => {
+    // Check if any cycle already exists for this task to avoid automatic duplicates
+    const existingActiveCycle = subtask.pdcaCycles.find(c => c.taskId === taskId && c.status === 'Ativo');
+    if (existingActiveCycle) {
+      setActiveCycleId(existingActiveCycle.id);
+      setActivePhase(existingActiveCycle.etapaAtual || 'PLAN');
+      setShowDashboard(false);
+      setShowProblemsModal(false);
+      setSaveFeedback('Já existe um ciclo ativo para esta etapa.');
+      return;
+    }
+
+    const existingFinishedCycle = subtask.pdcaCycles.find(c => c.taskId === taskId && c.status === 'Concluído');
+    if (existingFinishedCycle && !confirm('Já existe um ciclo concluído para esta etapa. Deseja iniciar um NOVO ciclo de melhoria?')) {
+      return;
+    }
+    
     const cycleCount = subtask.pdcaCycles.filter(c => c.taskId === taskId).length;
     const newCycle: PDCACycle = {
       id: uuidv4(),
@@ -390,26 +418,29 @@ export default function PDCAEditor({
           if (currentPage === 1) return null; // Primeira página é a capa
           return {
             margin: [40, 20, 40, 0],
-            columns: [
+            stack: [
               {
                 image: logoBase64,
                 fit: [120, 40],
                 alignment: 'left',
-                margin: [0, 10, 0, 10]
+                margin: [0, 0, 0, 5]
               },
               {
-                width: '*',
-                stack: [
-                  { text: 'RELATÓRIO TÉCNICO PDCA', style: 'headerLabel' },
-                  { text: activeCycle.title.toUpperCase(), style: 'headerValue' }
-                ],
-                margin: [10, 0, 0, 0]
-              },
-              {
-                width: 'auto',
-                stack: [
-                  { text: 'EMISSÃO', style: 'headerLabel', alignment: 'right' },
-                  { text: format(new Date(), "dd/MM/yyyy"), style: 'headerValue', alignment: 'right' }
+                columns: [
+                  {
+                    width: '*',
+                    stack: [
+                      { text: 'RELATÓRIO TÉCNICO PDCA', style: 'headerLabel' },
+                      { text: activeCycle.title.toUpperCase(), style: 'headerValue' }
+                    ]
+                  },
+                  {
+                    width: 'auto',
+                    stack: [
+                      { text: 'EMISSÃO', style: 'headerLabel', alignment: 'right' },
+                      { text: format(new Date(), "dd/MM/yyyy"), style: 'headerValue', alignment: 'right' }
+                    ]
+                  }
                 ]
               }
             ]
@@ -423,15 +454,15 @@ export default function PDCAEditor({
                 canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#cbd5e1' }]
               },
               {
+                image: logoBase64,
+                fit: [100, 30],
+                alignment: 'center',
+                margin: [0, 5, 0, 5]
+              },
+              {
                 columns: [
-                  {
-                    image: logoBase64,
-                    fit: [100, 30],
-                    alignment: 'center',
-                    margin: [0, 10, 0, 0]
-                  },
-                  { width: '*', text: `FLOWPROCESS - Melhoria Contínua`, style: 'footerText', margin: [10, 10, 0, 0] },
-                  { width: 'auto', text: `Página ${currentPage} de ${pageCount}`, alignment: 'right', style: 'footerText', margin: [0, 10, 0, 0] }
+                  { width: '*', text: `FLOWPROCESS - Melhoria Contínua`, style: 'footerText' },
+                  { width: 'auto', text: `Página ${currentPage} de ${pageCount}`, alignment: 'right', style: 'footerText' }
                 ]
               }
             ]
@@ -824,6 +855,10 @@ export default function PDCAEditor({
                             <p className="font-bold text-slate-800">{p.label}</p>
                             <div className="flex items-center gap-3 mt-1">
                               <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-1">
+                                <AlertCircle size={10} /> Problema
+                              </span>
+                              <span className="w-1 h-1 bg-slate-300 rounded-full" />
+                              <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-1">
                                 <Clock size={10} /> {p.time} min
                               </span>
                               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{p.role}</span>
@@ -920,13 +955,6 @@ export default function PDCAEditor({
             <option value="Ativo">Ativo</option>
             <option value="Concluído">Concluído</option>
           </select>
-          <button 
-            onClick={handleSave}
-            className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl text-xs font-black hover:bg-slate-800 transition-all shadow-md"
-          >
-            <Save size={16} />
-            Salvar
-          </button>
         </div>
       </div>
 
@@ -2359,7 +2387,7 @@ export default function PDCAEditor({
                   }}
                   className="py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-white bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all active:scale-95"
                 >
-                  Confirmar e Salvar
+                  Confirmar
                 </button>
               </div>
             </motion.div>

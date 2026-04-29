@@ -69,6 +69,13 @@ export default function BPMNModeler({
   const isSyncingRef = useRef(false);
   const isLoadedRef = useRef(false);
 
+  // Sync customData from props if they change externally (e.g. from Firestore)
+  useEffect(() => {
+    if (mapping.customData && JSON.stringify(mapping.customData) !== JSON.stringify(customData)) {
+      setCustomData(mapping.customData);
+    }
+  }, [mapping.customData]);
+
   // Force scroll to top on mount
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -236,12 +243,14 @@ export default function BPMNModeler({
     }
   };
 
-  // Sync custom data to project
+  // Sync custom data to project - Removed for manual save logic
+  /*
   useEffect(() => {
-    if (JSON.stringify(customData) !== JSON.stringify(mapping.customData)) {
+    if (isLoadedRef.current && JSON.stringify(customData) !== JSON.stringify(mapping.customData)) {
       saveChanges();
     }
   }, [customData]);
+  */
 
   const totalTime = useMemo(() => {
     // If diagram is not ready yet, calculate from customData as source of truth
@@ -285,7 +294,7 @@ export default function BPMNModeler({
         }
       }
     });
-  }, [customData]);
+  }, [customData, isDiagramReady]);
 
   const exportAsPng = async () => {
     if (!modelerRef.current) return;
@@ -348,8 +357,7 @@ export default function BPMNModeler({
   };
 
   const currentElementData = selectedElement ? (customData[selectedElement.id] || {
-    label: selectedElement.businessObject.name || '',
-    description: '',
+    description: selectedElement.businessObject.name || '',
     responsibleRole: '',
     timeInMinutes: 0,
     isProblemStep: false,
@@ -457,20 +465,10 @@ export default function BPMNModeler({
                 </button>
               </div>
 
-              <div className="p-6 space-y-6">
-                <div className="space-y-4">
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome (Interno)</label>
-                    <input 
-                      type="text" 
-                      value={currentElementData?.label || ''}
-                      onChange={(e) => updateElementData(selectedElement.id, { label: e.target.value })}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700 text-sm"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição (Texto da Task)</label>
+                <div className="p-6 space-y-6">
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição (Texto da Task)</label>
                     <textarea 
                       value={currentElementData?.description || ''}
                       onChange={(e) => updateElementData(selectedElement.id, { description: e.target.value })}

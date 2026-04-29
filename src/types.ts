@@ -58,7 +58,6 @@ export interface SavedColor {
 }
 
 export interface BPMNTaskData {
-  label: string;
   description?: string;
   responsibleRole: string;
   timeInMinutes: number;
@@ -191,6 +190,17 @@ export interface Subtask {
   pdcaCycles: PDCACycle[];
 }
 
+export interface ProjectFile {
+  id: string;
+  projectId: string;
+  fileName: string;
+  fileId: string;
+  fileUrl: string;
+  uploadedAt: string;
+  size?: number;
+  mimeType?: string;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -202,6 +212,7 @@ export interface Project {
   assignedTo: string; // User ID
   scope: ProjectScope;
   subtasks: Subtask[];
+  driveFolderId?: string;
 }
 
 export type UserProfile = 'Usuário Analista' | 'Usuário Master';

@@ -170,6 +170,23 @@ export default function DashboardView({ projects, users, actions, onProjectClick
     });
     const recentActivities = activities.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()).slice(0, 6);
 
+    // Involved Sectors Analysis
+    const sectorCounts = filteredProjects.reduce((acc, p) => {
+      const sectors = p.scope.involvedSectors || [];
+      // Rule: count only once per project
+      const names = sectors.map(s => s.name?.trim()).filter(Boolean) as string[];
+      const uniqueSectorNames = Array.from(new Set(names));
+      
+      uniqueSectorNames.forEach((name: string) => {
+        acc[name] = (acc[name] || 0) + 1;
+      });
+      return acc;
+    }, {} as Record<string, number>);
+
+    const sectorDistribution = Object.entries(sectorCounts)
+      .map(([name, count]) => ({ name, count: count as number }))
+      .sort((a, b) => b.count - a.count);
+
     return {
       total,
       completed,
@@ -182,7 +199,8 @@ export default function DashboardView({ projects, users, actions, onProjectClick
       totalGainValue,
       projectProgressList,
       avgProgress,
-      recentActivities
+      recentActivities,
+      sectorDistribution
     };
   }, [filteredProjects, users]);
 
@@ -416,6 +434,53 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* 4.5 Análise por Setores Envolvidos */}
+            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
+              <div className="flex items-center justify-between">
+                <div className="space-y-1">
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Setores Envolvidos</h3>
+                  <p className="text-xs text-slate-500 font-medium">Recorrência de setores nos escopos dos projetos ativos.</p>
+                </div>
+                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <Users size={20} className="text-[#003489]" />
+                </div>
+              </div>
+              <div className="h-[350px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stats.sectorDistribution} layout="vertical" margin={{ left: 40, right: 30 }}>
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                    <XAxis type="number" hide />
+                    <YAxis 
+                      dataKey="name" 
+                      type="category" 
+                      width={120} 
+                      tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <Tooltip 
+                      cursor={{ fill: '#f8fafc' }}
+                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                      formatter={(value: number) => [`${value} projeto(s)`, 'Ocorrência']}
+                    />
+                    <Bar dataKey="count" fill="#EABE41" radius={[0, 8, 8, 0]} barSize={24}>
+                      <LabelList 
+                        dataKey="count" 
+                        position="right" 
+                        style={{ fontSize: 11, fontWeight: 900, fill: '#003489' }}
+                        offset={10}
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              {stats.sectorDistribution.length === 0 && (
+                <div className="py-20 text-center space-y-4 bg-slate-50 rounded-3xl border border-dashed border-slate-200 mx-auto max-w-sm">
+                  <p className="text-slate-400 text-sm font-medium">Nenhum setor informado nos escopos.</p>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

@@ -67,6 +67,7 @@ import PDCAEditor from './components/PDCAEditor';
 import DashboardView from './components/DashboardView';
 import OperationalActionsTab from './components/OperationalActionsTab';
 import ReportsTab from './components/ReportsTab';
+import ProjectFilesSection from './components/ProjectFilesSection';
 import { calculateProjectProgress, calculateProjectStatus, calculateSubtaskStatus } from './lib/projectUtils';
 
 // Error Boundary Component
@@ -307,63 +308,76 @@ export default function App() {
   };
 
   const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
-  // Improved update function for child components
-  const syncProjectToFirestore = async (projectToSync: Project) => {
-    // Recalculate status automatically
-    const updatedProject = {
-      ...projectToSync,
-      status: calculateProjectStatus(projectToSync)
-    };
+  const [hasChanges, setHasChanges] = useState(false);
 
-    // Update local state immediately for UI responsiveness
-    setProjects(prev => prev.map(p => p.id === updatedProject.id ? updatedProject : p));
-    
-    // Persist to Firestore
+  // Unified save function
+  const persistProject = async (projectToSync: Project, isManual: boolean = false) => {
+    if (isManual) setIsSaving(true);
+    setSaveStatus('saving');
+
     try {
-      const projectRef = doc(db, 'projects', updatedProject.id);
-      await setDoc(projectRef, cleanObject(updatedProject));
-    } catch (error) {
-      console.error("Auto-save failed:", error);
+      // Ensure data integrity
+      const finalProject: Project = {
+        ...projectToSync,
+        status: calculateProjectStatus(projectToSync),
+        createdAt: isValidDate(projectToSync.createdAt) 
+          ? projectToSync.createdAt 
+          : new Date().toISOString(),
+        progress: calculateProjectProgress(projectToSync),
+        scope: {
+          ...projectToSync.scope,
+          title: projectToSync.name,
+          startDate: isValidDate(projectToSync.scope?.startDate) 
+            ? projectToSync.scope.startDate 
+            : new Date().toISOString().split('T')[0],
+          forecastCompletion: isValidDate(projectToSync.scope?.forecastCompletion) 
+            ? projectToSync.scope.forecastCompletion 
+            : new Date().toISOString().split('T')[0]
+        },
+        subtasks: (projectToSync.subtasks || []).map(s => ({
+          ...s,
+          status: calculateSubtaskStatus(s)
+        }))
+      };
+
+      // Update local state immediately
+      setProjects(prev => prev.map(p => p.id === finalProject.id ? finalProject : p));
+      
+      const projectRef = doc(db, 'projects', finalProject.id);
+      await setDoc(projectRef, cleanObject(finalProject));
+      
+      setSaveStatus('success');
+      if (isManual) {
+        console.log("✅ Projeto salvo manualmente com sucesso!");
+        setHasChanges(false);
+      }
+    } catch (error: any) {
+      console.error("❌ Falha ao salvar projeto:", error);
+      setSaveStatus('error');
+      handleFirestoreError(error, OperationType.WRITE, `projects/${projectToSync.id}`);
+    } finally {
+      if (isManual) {
+        setTimeout(() => {
+          setIsSaving(false);
+          setSaveStatus('idle');
+        }, 1500);
+      } else {
+        // Auto-save feedback lasts less
+        setTimeout(() => setSaveStatus('idle'), 2000);
+      }
     }
   };
 
-  const handleManualSave = async (projectToSave: Project) => {
-    setIsSaving(true);
-    try {
-      console.log("⏳ Iniciando salvamento MANUAL no Firestore para o projeto:", projectToSave.id);
-      const projectRef = doc(db, 'projects', projectToSave.id);
-      
-      // Ensure date is valid ISO string for security rules
-      // Recalculate status automatically
-      const finalProject = {
-        ...projectToSave,
-        status: calculateProjectStatus(projectToSave),
-        createdAt: isValidDate(projectToSave.createdAt) 
-          ? projectToSave.createdAt 
-          : new Date().toISOString(),
-        scope: {
-          ...projectToSave.scope,
-          startDate: isValidDate(projectToSave.scope.startDate) 
-            ? projectToSave.scope.startDate 
-            : new Date().toISOString().split('T')[0],
-          forecastCompletion: isValidDate(projectToSave.scope.forecastCompletion) 
-            ? projectToSave.scope.forecastCompletion 
-            : new Date().toISOString().split('T')[0]
-        }
-      };
+  const syncProjectToFirestore = (projectToSync: Project) => {
+    // UPDATED: No longer auto-saves to Firestore to prevent high request count
+    setProjects(prev => prev.map(p => p.id === projectToSync.id ? projectToSync : p));
+    setHasChanges(true);
+  };
 
-      await setDoc(projectRef, cleanObject(finalProject));
-      console.log("✅ Projeto salvo com sucesso!");
-    } catch (error: any) {
-      console.error("❌ Erro ao salvar no Firestore:", error);
-      if (error.message?.includes('offline') || error.message?.includes('not found')) {
-        console.error("DICA: Verifique se o banco de dados '" + (dbId || '(default)') + "' existe no seu console Firebase.");
-      }
-      handleFirestoreError(error, OperationType.WRITE, `projects/${projectToSave.id}`);
-    } finally {
-      setTimeout(() => setIsSaving(false), 1000);
-    }
+  const handleManualSave = (projectToSave: Project) => {
+    persistProject(projectToSave, true);
   };
 
   const handleSaveGlobalColor = async (color: SavedColor) => {
@@ -472,7 +486,16 @@ export default function App() {
   };
 
   const handleBackToKanban = () => {
+    if (!confirmNavigation()) return;
     setSelectedProjectId(null);
+    setHasChanges(false);
+  };
+
+  const confirmNavigation = () => {
+    if (hasChanges) {
+      return confirm("Você possui alterações não salvas. Deseja sair mesmo assim?");
+    }
+    return true;
   };
 
   if (!isAuthReady) {
@@ -561,8 +584,10 @@ export default function App() {
             <SidebarItem 
               active={activeView === 'dashboard'}
               onClick={() => {
+                if (!confirmNavigation()) return;
                 setActiveView('dashboard');
                 setSelectedProjectId(null);
+                setHasChanges(false);
               }}
               icon={<LayoutDashboard size={20} />}
               label="Dashboard"
@@ -571,8 +596,10 @@ export default function App() {
             <SidebarItem 
               active={activeView === 'kanban'}
               onClick={() => {
+                if (!confirmNavigation()) return;
                 setActiveView('kanban');
                 setSelectedProjectId(null);
+                setHasChanges(false);
               }}
               icon={<GitBranch size={20} />}
               label="Projetos"
@@ -581,8 +608,10 @@ export default function App() {
             <SidebarItem 
               active={activeView === 'actions'}
               onClick={() => {
+                if (!confirmNavigation()) return;
                 setActiveView('actions');
                 setSelectedProjectId(null);
+                setHasChanges(false);
               }}
               icon={<History size={20} />}
               label="Histórico de Ações"
@@ -590,7 +619,11 @@ export default function App() {
             />
             <SidebarItem 
               active={activeView === 'settings'}
-              onClick={() => setActiveView('settings')}
+              onClick={() => {
+                if (!confirmNavigation()) return;
+                setActiveView('settings');
+                setHasChanges(false);
+              }}
               icon={<Settings size={20} />}
               label="Configurações"
               collapsed={isSidebarCollapsed}
@@ -697,6 +730,7 @@ export default function App() {
                 savedColors={bpmnSavedColors}
                 onSaveGlobalColor={handleSaveGlobalColor}
                 onDeleteGlobalColor={handleDeleteGlobalColor}
+                saveStatus={saveStatus}
               />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
@@ -1245,7 +1279,8 @@ function ProjectDetailView({
   globalConfig,
   savedColors,
   onSaveGlobalColor,
-  onDeleteGlobalColor
+  onDeleteGlobalColor,
+  saveStatus
 }: { 
   project: Project, 
   activeTab: string, 
@@ -1259,6 +1294,7 @@ function ProjectDetailView({
   savedColors: SavedColor[],
   onSaveGlobalColor: (color: SavedColor) => void,
   onDeleteGlobalColor: (id: string) => void,
+  saveStatus: 'idle' | 'saving' | 'success' | 'error',
   key?: string
 }) {
   const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
@@ -1323,10 +1359,22 @@ function ProjectDetailView({
             <button 
               onClick={() => onSave(project)}
               disabled={isSaving}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-xl font-bold text-sm hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 disabled:opacity-50"
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all shadow-lg",
+                saveStatus === 'success' ? "bg-emerald-600 text-white" :
+                saveStatus === 'error' ? "bg-rose-500 text-white" :
+                "bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-100",
+                isSaving && "opacity-50"
+              )}
             >
-              <Save size={18} />
-              {isSaving ? 'Salvando...' : 'Salvar'}
+              {saveStatus === 'saving' ? <RefreshCw size={18} className="animate-spin" /> : 
+               saveStatus === 'success' ? <CheckCircle2 size={18} /> :
+               saveStatus === 'error' ? <AlertCircle size={18} /> :
+               <Save size={18} />}
+              {saveStatus === 'saving' ? 'Salvando...' : 
+               saveStatus === 'success' ? 'Salvo!' : 
+               saveStatus === 'error' ? 'Erro!' : 
+               'Salvar'}
             </button>
           </div>
         </div>
@@ -1385,9 +1433,12 @@ function ProjectDetailView({
                 className="text-2xl font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none transition-all"
               />
               {isSaving && (
-                <span className="flex items-center gap-1.5 text-[10px] font-black text-indigo-500 uppercase tracking-widest animate-pulse">
-                  <RefreshCw size={10} className="animate-spin" />
-                  Salvando...
+                <span className={cn(
+                  "flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest animate-pulse",
+                  saveStatus === 'error' ? "text-rose-500" : "text-indigo-500"
+                )}>
+                  <RefreshCw size={10} className={cn(saveStatus === 'saving' && "animate-spin")} />
+                  {saveStatus === 'saving' ? 'Salvando...' : saveStatus === 'success' ? 'Salvo!' : saveStatus === 'error' ? 'Erro!' : 'Salvando...'}
                 </span>
               )}
             </div>
@@ -1810,7 +1861,15 @@ function ScopeTab({
         </div>
       </section>
 
-      {/* 6. SUBTAREFAS (LIST FORMAT) */}
+      {/* 6. Arquivos do Projeto */}
+      <ProjectFilesSection 
+        project={project} 
+        onUpdateProject={(updates) => {
+          setProjects({ ...project, ...updates } as Project);
+        }} 
+      />
+
+      {/* 7. SUBTAREFAS (LIST FORMAT) */}
       <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">

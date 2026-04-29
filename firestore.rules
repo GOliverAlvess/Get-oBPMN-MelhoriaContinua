@@ -106,7 +106,8 @@ service cloud.firestore {
              (!('priority' in data) || data.priority in ['Baixa', 'Média', 'Alta']) &&
              data.assignedTo is string &&
              data.scope is map &&
-             data.subtasks is list;
+             data.subtasks is list &&
+             (!('driveFolderId' in data) || data.driveFolderId is string);
     }
 
     function isValidConfig(data) {
@@ -149,9 +150,25 @@ service cloud.firestore {
              data.borderColor is string && data.borderColor.matches("^#[0-9a-fA-F]{6}$");
     }
 
+    function isValidProjectFile(data) {
+      return hasRequiredFields(['projectId', 'fileName', 'fileId', 'fileUrl', 'uploadedAt']) &&
+             isValidId(data.projectId) &&
+             data.fileName is string && data.fileName.size() > 0 &&
+             data.fileId is string && data.fileId.size() > 0 &&
+             data.fileUrl is string &&
+             isValidDateString(data.uploadedAt);
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
+
+    match /projectFiles/{fileId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidProjectFile(request.resource.data);
+      allow update: if isAuthenticated() && isValidProjectFile(request.resource.data);
+      allow delete: if isAdmin() || (isAuthenticated() && exists(/databases/$(database)/documents/projects/$(resource.data.projectId)) && get(/databases/$(database)/documents/projects/$(resource.data.projectId)).data.assignedTo == request.auth.uid);
+    }
 
     match /users/{userId} {
       allow read: if isAuthenticated();

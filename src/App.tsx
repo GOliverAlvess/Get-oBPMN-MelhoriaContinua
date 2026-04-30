@@ -60,7 +60,17 @@ import {
   getDoc
 } from './firebase';
 import type { FirebaseUser } from './firebase';
-import { Project, ProjectStatus, ProjectPriority, User, Subtask, OperationalAction, SavedColor, UserProfile } from './types';
+import { 
+  Project, 
+  ProjectStatus, 
+  ProjectPriority, 
+  User, 
+  Subtask, 
+  OperationalAction, 
+  SavedColor, 
+  UserProfile,
+  InnovationProject
+} from './types';
 import { cn, isValidUrl, formatUrl, cleanObject } from './lib/utils';
 import MappingTab from './components/MappingTab';
 import PDCAEditor from './components/PDCAEditor';
@@ -68,6 +78,7 @@ import DashboardView from './components/DashboardView';
 import OperationalActionsTab from './components/OperationalActionsTab';
 import ReportsTab from './components/ReportsTab';
 import ProjectFilesSection from './components/ProjectFilesSection';
+import InnovationView from './components/InnovationView';
 import { calculateProjectProgress, calculateProjectStatus, calculateSubtaskStatus } from './lib/projectUtils';
 
 // Error Boundary Component
@@ -173,12 +184,28 @@ export default function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'scope' | 'mapping' | 'pdca'>('scope');
-  const [activeView, setActiveView] = useState<'kanban' | 'settings' | 'dashboard' | 'actions' | 'home'>('home');
+  const [activeView, setActiveView] = useState<'kanban' | 'settings' | 'dashboard' | 'actions' | 'home' | 'innovation'>('home');
+  const [mode, setMode] = useState<'processos' | 'inovacao' | null>(localStorage.getItem('flowprocess_mode') as any || null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [operationalActions, setOperationalActions] = useState<OperationalAction[]>([]);
+  const [innovationProjects, setInnovationProjects] = useState<InnovationProject[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [globalConfig, setGlobalConfig] = useState<{ sectors: string[], tools: string[] }>({ sectors: [], tools: [] });
   const [bpmnSavedColors, setBpmnSavedColors] = useState<SavedColor[]>([]);
+
+  const currentUserProfile = users.find(u => u.id === user?.uid);
+
+  // Listen for Module Restrictions
+  useEffect(() => {
+    if (user && currentUserProfile) {
+      // If user is restricted to a module but has a different one (or none) selected
+      if (currentUserProfile.module) {
+        if (mode !== currentUserProfile.module) {
+          handleSelectMode(currentUserProfile.module);
+        }
+      }
+    }
+  }, [user, currentUserProfile, mode]);
 
   // Auth State Listener
   useEffect(() => {
@@ -188,6 +215,7 @@ export default function App() {
       // Sempre que o usuário logar ou o sistema for recarregado com um usuário ativo, 
       // garantimos que a tela inicial seja a 'home' com a logo.
       if (firebaseUser) {
+        // Reset view when logging in but respect mode if already selected
         setActiveView('home');
         setSelectedProjectId(null);
       }
@@ -230,12 +258,19 @@ export default function App() {
       setBpmnSavedColors(colorsData);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'bpmnSavedColors'));
 
+    // Listen for Innovation Projects
+    const innovationUnsubscribe = onSnapshot(collection(db, 'innovationProjects'), (snapshot) => {
+      const innovationData = snapshot.docs.map(doc => doc.data() as InnovationProject);
+      setInnovationProjects(innovationData);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'innovationProjects'));
+
     return () => {
       usersUnsubscribe();
       projectsUnsubscribe();
       configUnsubscribe();
       actionsUnsubscribe();
       colorsUnsubscribe();
+      innovationUnsubscribe();
     };
   }, [user]);
 
@@ -286,6 +321,16 @@ export default function App() {
       } else {
         alert(`Falha no login: ${error.message}`);
       }
+    }
+  };
+
+  const handleSelectMode = (m: 'processos' | 'inovacao') => {
+    setMode(m);
+    localStorage.setItem('flowprocess_mode', m);
+    if (m === 'inovacao') {
+      setActiveView('innovation');
+    } else {
+      setActiveView('home');
     }
   };
 
@@ -423,6 +468,43 @@ export default function App() {
     }
   };
 
+  const handleAddInnovationProject = async (data: Omit<InnovationProject, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const newId = uuidv4();
+    const responsibleUser = users.find(u => u.id === data.responsibleId);
+    
+    const newProject: InnovationProject = {
+      ...data,
+      id: newId,
+      responsibleName: responsibleUser?.name || 'Sem Responsável',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      await setDoc(doc(db, 'innovationProjects', newId), cleanObject(newProject));
+      return newId;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `innovationProjects/${newId}`);
+      throw error;
+    }
+  };
+
+  const handleUpdateInnovationProject = async (id: string, updates: Partial<InnovationProject>) => {
+    try {
+      const innovationProject = innovationProjects.find(p => p.id === id);
+      if (!innovationProject) return;
+
+      const projectRef = doc(db, 'innovationProjects', id);
+      await setDoc(projectRef, { 
+        ...innovationProject, 
+        ...updates,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `innovationProjects/${id}`);
+    }
+  };
+
   const handleCreateProject = async (data: { name: string, priority: ProjectPriority, assignedTo: string }) => {
     if (!user) return;
     const newId = uuidv4();
@@ -538,6 +620,95 @@ export default function App() {
     );
   }
 
+  const canAccessProcessos = !currentUserProfile?.module || currentUserProfile.module === 'processos';
+  const canAccessInovacao = !currentUserProfile?.module || currentUserProfile.module === 'inovacao';
+
+  if (isAuthReady && user && !mode) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-50 via-white to-slate-50">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-4xl space-y-12"
+        >
+          <div className="text-center space-y-4">
+            <div className="bg-white p-6 rounded-3xl shadow-xl border border-slate-100 inline-block mb-4">
+              <img 
+                src="/assets/logo-flowprocess.svg" 
+                alt="Logo" 
+                className="h-16 w-auto object-contain"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight">Bem-vindo ao FlowProcess</h1>
+            <p className="text-slate-500 font-medium">Escolha o ambiente de trabalho que deseja acessar hoje.</p>
+          </div>
+
+          <div className={cn(
+            "grid gap-8",
+            canAccessProcessos && canAccessInovacao ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 max-w-lg mx-auto"
+          )}>
+            {canAccessProcessos && (
+              <motion.button
+                whileHover={{ scale: 1.02, y: -5 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => handleSelectMode('processos')}
+                className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-xl shadow-slate-200/50 text-left space-y-6 group transition-all hover:border-indigo-500"
+              >
+                <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform">
+                  <RefreshCw size={32} />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-black text-slate-900">Gestão de Processos</h3>
+                  <p className="text-slate-500 font-medium leading-relaxed">
+                    Acesse o mapeamento completo, BPMN, PDCA e dashboards operacionais da empresa.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-indigo-600 font-black text-xs uppercase tracking-widest pt-4">
+                  Acessar Módulo
+                  <ArrowRight size={16} />
+                </div>
+              </motion.button>
+            )}
+
+            {canAccessInovacao && (
+              <motion.button
+                whileHover={{ scale: 1.02, y: -5 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => handleSelectMode('inovacao')}
+                className="bg-white p-10 rounded-[3rem] border border-slate-200 shadow-xl shadow-slate-200/50 text-left space-y-6 group transition-all hover:border-emerald-500"
+              >
+                <div className="w-16 h-16 bg-emerald-600 rounded-2xl flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform">
+                  <Target size={32} />
+                </div>
+                <div className="space-y-2">
+                  <h3 className="text-2xl font-black text-slate-900">Gestão de Inovações</h3>
+                  <p className="text-slate-500 font-medium leading-relaxed">
+                    Gerencie o pipeline de PD&I, prototipagem, automações (RPA) e soluções tecnológicas.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 text-emerald-600 font-black text-xs uppercase tracking-widest pt-4">
+                  Acessar Inovações
+                  <ArrowRight size={16} />
+                </div>
+              </motion.button>
+            )}
+          </div>
+
+          <div className="text-center pt-8">
+            <button 
+              onClick={handleLogout}
+              className="text-slate-400 font-bold hover:text-red-500 transition-colors flex items-center gap-2 mx-auto"
+            >
+              <LogOut size={18} />
+              Sair da conta
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans">
@@ -581,42 +752,62 @@ export default function App() {
           </div>
 
           <nav className="flex-1 p-4 space-y-2 overflow-y-auto custom-scrollbar">
-            <SidebarItem 
-              active={activeView === 'dashboard'}
-              onClick={() => {
-                if (!confirmNavigation()) return;
-                setActiveView('dashboard');
-                setSelectedProjectId(null);
-                setHasChanges(false);
-              }}
-              icon={<LayoutDashboard size={20} />}
-              label="Dashboard"
-              collapsed={isSidebarCollapsed}
-            />
-            <SidebarItem 
-              active={activeView === 'kanban'}
-              onClick={() => {
-                if (!confirmNavigation()) return;
-                setActiveView('kanban');
-                setSelectedProjectId(null);
-                setHasChanges(false);
-              }}
-              icon={<GitBranch size={20} />}
-              label="Projetos"
-              collapsed={isSidebarCollapsed}
-            />
-            <SidebarItem 
-              active={activeView === 'actions'}
-              onClick={() => {
-                if (!confirmNavigation()) return;
-                setActiveView('actions');
-                setSelectedProjectId(null);
-                setHasChanges(false);
-              }}
-              icon={<History size={20} />}
-              label="Histórico de Ações"
-              collapsed={isSidebarCollapsed}
-            />
+            {mode === 'processos' && (
+              <>
+                <SidebarItem 
+                  active={activeView === 'dashboard'}
+                  onClick={() => {
+                    if (!confirmNavigation()) return;
+                    setActiveView('dashboard');
+                    setSelectedProjectId(null);
+                    setHasChanges(false);
+                  }}
+                  icon={<LayoutDashboard size={20} />}
+                  label="Dashboard"
+                  collapsed={isSidebarCollapsed}
+                />
+                <SidebarItem 
+                  active={activeView === 'kanban'}
+                  onClick={() => {
+                    if (!confirmNavigation()) return;
+                    setActiveView('kanban');
+                    setSelectedProjectId(null);
+                    setHasChanges(false);
+                  }}
+                  icon={<GitBranch size={20} />}
+                  label="Projetos"
+                  collapsed={isSidebarCollapsed}
+                />
+                <SidebarItem 
+                  active={activeView === 'actions'}
+                  onClick={() => {
+                    if (!confirmNavigation()) return;
+                    setActiveView('actions');
+                    setSelectedProjectId(null);
+                    setHasChanges(false);
+                  }}
+                  icon={<History size={20} />}
+                  label="Histórico de Ações"
+                  collapsed={isSidebarCollapsed}
+                />
+              </>
+            )}
+            
+            {mode === 'inovacao' && (
+              <SidebarItem 
+                active={activeView === 'innovation'}
+                onClick={() => {
+                  if (!confirmNavigation()) return;
+                  setActiveView('innovation');
+                  setSelectedProjectId(null);
+                  setHasChanges(false);
+                }}
+                icon={<Target size={20} />}
+                label="Projetos"
+                collapsed={isSidebarCollapsed}
+              />
+            )}
+
             <SidebarItem 
               active={activeView === 'settings'}
               onClick={() => {
@@ -628,6 +819,23 @@ export default function App() {
               label="Configurações"
               collapsed={isSidebarCollapsed}
             />
+
+            {(!currentUserProfile?.module) && (
+              <div className="pt-4 mt-4 border-t border-slate-100 italic">
+                <button 
+                  onClick={() => {
+                    if (!confirmNavigation()) return;
+                    setMode(null);
+                    localStorage.removeItem('flowprocess_mode');
+                  }}
+                  className="w-full flex items-center gap-2 p-3 text-slate-400 hover:text-indigo-600 transition-colors text-xs font-black uppercase tracking-widest"
+                >
+                  {!isSidebarCollapsed && <RefreshCw size={14} />}
+                  {!isSidebarCollapsed && "Trocar Módulo"}
+                  {isSidebarCollapsed && <RefreshCw size={18} />}
+                </button>
+              </div>
+            )}
           </nav>
 
           <div className="p-4 border-t border-slate-100">
@@ -706,6 +914,12 @@ export default function App() {
                 projects={projects}
                 users={users}
               />
+            ) : activeView === 'innovation' ? (
+              <InnovationView 
+                innovationProjects={innovationProjects}
+                projects={projects}
+                users={users}
+              />
             ) : !selectedProjectId ? (
               <KanbanView 
                 key="kanban"
@@ -731,6 +945,9 @@ export default function App() {
                 onSaveGlobalColor={handleSaveGlobalColor}
                 onDeleteGlobalColor={handleDeleteGlobalColor}
                 saveStatus={saveStatus}
+                onAddInnovationProject={handleAddInnovationProject}
+                onUpdateInnovationProject={handleUpdateInnovationProject}
+                innovationProjects={innovationProjects}
               />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
@@ -1280,7 +1497,10 @@ function ProjectDetailView({
   savedColors,
   onSaveGlobalColor,
   onDeleteGlobalColor,
-  saveStatus
+  saveStatus,
+  onAddInnovationProject,
+  onUpdateInnovationProject,
+  innovationProjects = []
 }: { 
   project: Project, 
   activeTab: string, 
@@ -1295,6 +1515,9 @@ function ProjectDetailView({
   onSaveGlobalColor: (color: SavedColor) => void,
   onDeleteGlobalColor: (id: string) => void,
   saveStatus: 'idle' | 'saving' | 'success' | 'error',
+  onAddInnovationProject?: (data: any) => Promise<string>,
+  onUpdateInnovationProject?: (id: string, updates: Partial<InnovationProject>) => Promise<void>,
+  innovationProjects?: InnovationProject[],
   key?: string
 }) {
   const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
@@ -1395,6 +1618,9 @@ function ProjectDetailView({
               project={project} 
               subtask={selectedSubtask}
               onUpdateSubtask={handleUpdateSubtask}
+              onAddInnovationProject={onAddInnovationProject}
+              onUpdateInnovationProject={onUpdateInnovationProject}
+              innovationProjects={innovationProjects}
               onBack={() => {
                 setSelectedSubtaskId(null);
                 setActiveTab('scope');
@@ -2859,12 +3085,18 @@ function PDCATab({
   project, 
   subtask, 
   onUpdateSubtask,
-  selectedTaskId 
+  selectedTaskId,
+  onAddInnovationProject,
+  onUpdateInnovationProject,
+  innovationProjects = []
 }: { 
   project: Project, 
   subtask: Subtask,
   onUpdateSubtask: (s: Subtask) => void,
-  selectedTaskId?: string | null 
+  selectedTaskId?: string | null,
+  onAddInnovationProject?: (data: any) => Promise<string>,
+  onUpdateInnovationProject?: (id: string, updates: Partial<InnovationProject>) => Promise<void>,
+  innovationProjects?: InnovationProject[]
 }) {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
 
@@ -2881,6 +3113,9 @@ function PDCATab({
           onUpdateSubtask={onUpdateSubtask}
           onBack={() => setIsEditorOpen(false)} 
           defaultTaskId={selectedTaskId || undefined}
+          onAddInnovationProject={onAddInnovationProject}
+          onUpdateInnovationProject={onUpdateInnovationProject}
+          innovationProjects={innovationProjects}
         />
       </div>
     );

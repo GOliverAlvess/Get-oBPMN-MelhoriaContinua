@@ -107,6 +107,8 @@ export interface ExecutionLog {
   type: 'update' | 'completion' | 'start';
 }
 
+export type ActionPlanType = 'Processual' | 'Operacional' | 'Inovação';
+
 export interface ActionPlanItem {
   id: string;
   // PLAN (5W2H)
@@ -115,9 +117,11 @@ export interface ActionPlanItem {
   where: string;
   when: string;
   who: string;
-  sector?: string; // New field
+  sector?: string; 
   how: string;
   howMuch: string;
+  actionType?: ActionPlanType; // New field
+  innovationProjectId?: string; // New field
   
   // DO
   status: 'Pendente' | 'Em andamento' | 'Concluído';
@@ -140,6 +144,16 @@ export interface ActionPlanItem {
   finalProblemStatus?: 'Resolvido' | 'Não resolvido';
   finalAction?: 'Padronizar processo' | 'Fazer nova análise';
   standardizationModels?: ('POP' | 'ITO' | 'Painel de controle')[];
+  innovationLogs?: InnovationLog[];
+}
+
+export interface InnovationLog {
+  id: string;
+  date: string;
+  previousStatus: InnovationStatus | '';
+  newStatus: InnovationStatus;
+  responsible: string;
+  origin: 'inovacao';
 }
 
 export type PDCAStatus = 'Ativo' | 'Concluído';
@@ -152,6 +166,7 @@ export interface PDCACycle {
   createdAt: string;
   status: PDCAStatus;
   etapaAtual?: 'PLAN' | 'DO' | 'CHECK' | 'ACT' | 'REPORT';
+  progress?: number;
   plan: {
     problemDescription: string;
     rootCauseAnalysis: {
@@ -188,6 +203,7 @@ export interface Subtask {
     savedColors: SavedColor[];
   };
   pdcaCycles: PDCACycle[];
+  progress?: number;
 }
 
 export interface ProjectFile {
@@ -224,6 +240,7 @@ export interface User {
   sector?: string;
   avatar?: string;
   profile?: UserProfile;
+  module?: 'processos' | 'inovacao';
 }
 
 export interface OperationalAction {
@@ -249,4 +266,26 @@ export interface ReportLog {
   userName: string;
   timestamp: string;
   reportType: 'PDCA' | 'Histórico de Ações' | 'Relatório Completo';
+}
+
+export type InnovationStatus = 'backlog' | 'análise' | 'desenvolvimento' | 'teste' | 'entregue';
+export type InnovationComplexity = 'Baixa' | 'Média' | 'Alta' | 'Muito Alta';
+export type InnovationSolutionType = 'RPA' | 'Sistema' | 'Integração' | 'BI';
+
+export interface InnovationProject {
+  id: string;
+  projectId: string; 
+  pdcaId: string;
+  actionId: string;
+  title: string;
+  type: InnovationSolutionType | '';
+  status: InnovationStatus;
+  complexity: InnovationComplexity | '';
+  responsibleId: string;
+  responsibleName?: string;
+  createdAt: string;
+  updatedAt: string;
+  projectName: string;
+  processName: string;
+  subtaskTitle?: string;
 }

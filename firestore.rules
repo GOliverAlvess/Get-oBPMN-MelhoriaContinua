@@ -159,9 +159,33 @@ service cloud.firestore {
              isValidDateString(data.uploadedAt);
     }
 
+    function isValidInnovationProject(data) {
+      return hasRequiredFields(['id', 'projectId', 'pdcaId', 'actionId', 'title', 'status', 'createdAt', 'updatedAt', 'projectName', 'processName', 'responsibleId']) &&
+             data.id is string &&
+             data.projectId is string &&
+             data.pdcaId is string &&
+             data.actionId is string &&
+             data.title is string && data.title.size() > 0 &&
+             data.status in ['backlog', 'análise', 'desenvolvimento', 'teste', 'entregue'] &&
+             (!('complexity' in data) || (data.complexity == '' || data.complexity in ['Baixa', 'Média', 'Alta', 'Muito Alta'])) &&
+             (!('type' in data) || (data.type == '' || data.type in ['RPA', 'Sistema', 'Integração', 'BI'])) &&
+             data.responsibleId is string &&
+             isValidDateString(data.createdAt) &&
+             isValidDateString(data.updatedAt) &&
+             data.projectName is string &&
+             data.processName is string;
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
+
+    match /innovationProjects/{projectId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidInnovationProject(request.resource.data);
+      allow update: if isAuthenticated() && isValidInnovationProject(request.resource.data);
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.responsibleId == request.auth.uid);
+    }
 
     match /projectFiles/{fileId} {
       allow read: if isAuthenticated();

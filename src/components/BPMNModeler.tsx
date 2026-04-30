@@ -221,6 +221,11 @@ export default function BPMNModeler({
     };
     setCustomData(newCustomData);
 
+    // Persist changes
+    setTimeout(() => {
+      saveChanges();
+    }, 0);
+
     // If description changed, update BPMN business object (it's the main visual text)
     if (data.description !== undefined && modelerRef.current) {
       const modeling = modelerRef.current.get('modeling');
@@ -278,16 +283,21 @@ export default function BPMNModeler({
     // Clear existing problem overlays
     overlays.remove({ type: 'problem-indicator' });
 
-    Object.entries(customData).forEach(([id, data]: [string, any]) => {
-      if (data.isProblemStep) {
-        const element = elementRegistry.get(id);
-        if (element) {
-          overlays.add(id, 'problem-indicator', {
+    const allElements = elementRegistry.getAll();
+    
+    allElements.forEach((element: any) => {
+      // Only for tasks
+      if (element.type === 'bpmn:Task' || element.type === 'bpmn:UserTask' || element.type === 'bpmn:ServiceTask') {
+        const data = customData[element.id] || {};
+        const isProblem = !!data.isProblemStep;
+        
+        if (isProblem) {
+          overlays.add(element.id, 'problem-indicator', {
             position: {
               top: -10,
               right: -10
             },
-            html: `<div class="bg-rose-500 text-white p-1 rounded-full shadow-lg border-2 border-white animate-pulse flex items-center justify-center" title="Etapa Problema">
+            html: `<div style="background-color: #FF6B6B;" class="text-white p-1 rounded-full shadow-lg border-2 border-white animate-pulse flex items-center justify-center transition-all" style="width: 20px; height: 20px;" title="Etapa Problema (Ativo)">
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
                    </div>`
           });
@@ -459,6 +469,13 @@ export default function BPMNModeler({
                 <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight flex items-center gap-2">
                   <Settings2 size={14} className="text-indigo-600" />
                   Propriedades BPMN
+                  <span className={cn(
+                    "ml-2 text-white text-[8px] px-2 py-0.5 rounded-full flex items-center gap-1 border border-white/20 transition-all",
+                    currentElementData?.isProblemStep ? "bg-[#FF6B6B] animate-pulse" : "bg-[#B0B0B0]"
+                  )}>
+                    <AlertCircle size={8} />
+                    {currentElementData?.isProblemStep ? 'GARGALO' : 'NORMAL'}
+                  </span>
                 </h4>
                 <button onClick={() => setSelectedElement(null)} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg">
                   <X size={16} />
@@ -502,10 +519,13 @@ export default function BPMNModeler({
                       onClick={() => updateElementData(selectedElement.id, { isProblemStep: !currentElementData?.isProblemStep })}
                       className={cn(
                         "w-10 h-5 rounded-full p-1 transition-all",
-                        currentElementData?.isProblemStep ? "bg-rose-500" : "bg-slate-200"
+                        currentElementData?.isProblemStep ? "bg-[#FF6B6B]" : "bg-[#E0E0E0]"
                       )}
                     >
-                      <div className={cn("w-3 h-3 bg-white rounded-full transition-all", currentElementData?.isProblemStep ? "translate-x-5" : "translate-x-0")} />
+                      <div className={cn(
+                        "w-3 h-3 rounded-full transition-all", 
+                        currentElementData?.isProblemStep ? "bg-white translate-x-5" : "bg-[#A0A0A0] translate-x-0"
+                      )} />
                     </button>
                   </div>
                 </div>

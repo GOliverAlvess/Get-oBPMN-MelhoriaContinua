@@ -40,6 +40,7 @@ interface InnovationViewProps {
   innovationProjects: InnovationProject[];
   projects: Project[];
   users: User[];
+  onDeleteInnovationProject?: (id: string) => Promise<void>;
 }
 
 const statusColumns: { id: InnovationStatus; label: string; color: string }[] = [
@@ -50,14 +51,15 @@ const statusColumns: { id: InnovationStatus; label: string; color: string }[] = 
   { id: 'entregue', label: 'Entregue', color: 'bg-emerald-400' }
 ];
 
-export default function InnovationView({ innovationProjects, projects, users }: InnovationViewProps) {
+export default function InnovationView({ innovationProjects, projects, users, onDeleteInnovationProject }: InnovationViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProject, setSelectedProject] = useState<InnovationProject | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [visibleStatuses, setVisibleStatuses] = useState<InnovationStatus[]>([]);
+  const [projectToDelete, setProjectToDelete] = useState<InnovationProject | null>(null);
 
   const filteredProjects = useMemo(() => {
-    return innovationProjects.filter(p => {
+    return innovationProjects.filter(p => !p.deleted).filter(p => {
       const matchesSearch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             (p.projectName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                             (p.processName || '').toLowerCase().includes(searchTerm.toLowerCase());
@@ -134,16 +136,50 @@ export default function InnovationView({ innovationProjects, projects, users }: 
   };
 
   const handleDeleteInnovation = async (id: string) => {
-    if (!confirm('Deseja realmente excluir este projeto de inovação?')) return;
-    try {
-      await deleteDoc(doc(db, 'innovationProjects', id));
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `innovationProjects/${id}`);
+    if (onDeleteInnovationProject) {
+      await onDeleteInnovationProject(id);
+      setProjectToDelete(null);
     }
   };
 
   return (
     <div className="space-y-8">
+      {/* Confirmation Modal */}
+      <AnimatePresence>
+        {projectToDelete && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden p-8 text-center"
+            >
+              <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Excluir Projeto de Inovação?</h3>
+              <p className="text-slate-500 mb-8 leading-relaxed">
+                Tem certeza que deseja excluir este card de inovação? Esta ação não poderá ser desfeita.
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setProjectToDelete(null)}
+                  className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-slate-200 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={() => handleDeleteInnovation(projectToDelete.id)}
+                  className="flex-1 px-6 py-3 bg-rose-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-200"
+                >
+                  Confirmar Exclusão
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
           <h2 className="text-3xl font-bold text-slate-900">Projetos</h2>
@@ -240,7 +276,7 @@ export default function InnovationView({ innovationProjects, projects, users }: 
                     key={project.id} 
                     project={project} 
                     onClick={() => setSelectedProject(project)}
-                    onDelete={() => handleDeleteInnovation(project.id)}
+                    onDelete={() => setProjectToDelete(project)}
                   />
                 ))}
                 
@@ -353,14 +389,27 @@ function InnovationCard({ project, onClick, onDelete }: { project: InnovationPro
                   Abrir Detalhes
                 </button>
                 <button 
-                  onClick={() => {
-                    onDelete();
-                    setIsMenuOpen(false);
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (project.status === 'backlog') {
+                      onDelete();
+                      setIsMenuOpen(false);
+                    }
                   }}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-rose-600 hover:bg-rose-50 transition-colors border-t border-slate-50"
+                  disabled={project.status !== 'backlog'}
+                  className={cn(
+                    "w-full flex items-center justify-between px-4 py-3 text-sm transition-colors border-t border-slate-50",
+                    project.status === 'backlog' 
+                      ? "text-rose-600 hover:bg-rose-50" 
+                      : "text-slate-300 cursor-not-allowed"
+                  )}
+                  title={project.status !== 'backlog' ? "Somente cards em Backlog podem ser excluídos" : ""}
                 >
-                  <Trash2 size={16} />
-                  Excluir Projeto
+                  <div className="flex items-center gap-3">
+                    <Trash2 size={16} />
+                    Excluir Projeto
+                  </div>
+                  {project.status !== 'backlog' && <AlertCircle size={14} className="text-slate-300" />}
                 </button>
               </motion.div>
             )}

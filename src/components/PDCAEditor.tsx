@@ -139,7 +139,7 @@ export default function PDCAEditor({
 
   const isDoPhaseValid = useMemo(() => {
     if (!activeCycle || activeCycle.plan.actionPlan.length === 0) return false;
-    return activeCycle.plan.actionPlan.every(item => {
+    return activeCycle.plan.actionPlan.some(item => {
       if (item.actionType === 'Inovação') {
         const innovationProject = innovationProjects.find(ip => ip.id === item.innovationProjectId);
         return innovationProject?.status === 'entregue';
@@ -149,8 +149,8 @@ export default function PDCAEditor({
   }, [activeCycle, innovationProjects]);
 
   const isCheckPhaseValid = useMemo(() => {
-    if (!activeCycle || !isDoPhaseValid) return false;
-    return activeCycle.plan.actionPlan.every(item => {
+    if (!activeCycle) return false;
+    return activeCycle.plan.actionPlan.some(item => {
       const hasMonitoring = !!item.monitoringTool?.trim();
       const hasEvidence = !!item.evidence?.trim();
       const hasWorked = !!item.worked;
@@ -158,11 +158,11 @@ export default function PDCAEditor({
       
       return hasMonitoring && hasEvidence && hasWorked && hasFailureReason;
     });
-  }, [activeCycle, isDoPhaseValid]);
+  }, [activeCycle]);
 
   const isActPhaseValid = useMemo(() => {
-    if (!activeCycle || !isCheckPhaseValid) return false;
-    return activeCycle.plan.actionPlan.every(item => {
+    if (!activeCycle) return false;
+    return activeCycle.plan.actionPlan.some(item => {
       const hasFinalStatus = !!item.finalProblemStatus;
       const hasFinalAction = !!item.finalAction;
       if (item.finalAction === 'Padronizar processo') {
@@ -170,17 +170,41 @@ export default function PDCAEditor({
       }
       return hasFinalStatus && hasFinalAction;
     });
-  }, [activeCycle, isCheckPhaseValid]);
+  }, [activeCycle]);
 
   const cycleProgress = useMemo(() => {
     if (!activeCycle) return 0;
-    let progress = 0;
-    if (isPlanPhaseValid) progress += 25;
-    if (isDoPhaseValid) progress += 25;
-    if (isCheckPhaseValid) progress += 25;
-    if (isActPhaseValid) progress += 25;
-    return progress;
-  }, [activeCycle, isPlanPhaseValid, isDoPhaseValid, isCheckPhaseValid, isActPhaseValid]);
+    const planItems = activeCycle.plan.actionPlan;
+    if (planItems.length === 0) return isPlanPhaseValid ? 25 : 0;
+
+    const itemsProgress = planItems.map(item => {
+      let p = 25; // PLAN is done if item exists in a cycle with PLAN valid
+
+      // DO progress
+      const isDoDone = item.actionType === 'Inovação' 
+        ? innovationProjects.find(ip => ip.id === item.innovationProjectId)?.status === 'entregue'
+        : item.status === 'Concluído';
+      
+      if (isDoDone) {
+        p += 25;
+        // CHECK progress
+        const isCheckDone = !!item.monitoringTool?.trim() && !!item.evidence?.trim() && !!item.worked && (item.worked === 'Sim' || !!item.failureReason?.trim());
+        if (isCheckDone) {
+          p += 25;
+          // ACT progress
+          const isActDone = !!item.finalProblemStatus && !!item.finalAction && (item.finalAction !== 'Padronizar processo' || (item.standardizationModels || []).length > 0);
+          if (isActDone) p += 25;
+        }
+      } else if (item.status === 'Em andamento' || (item.actionType === 'Inovação' && item.innovationProjectId)) {
+        p += 10; // Partial DO
+      }
+
+      return p;
+    });
+
+    const averageProgress = itemsProgress.reduce((acc, p) => acc + p, 0) / itemsProgress.length;
+    return Math.round(averageProgress);
+  }, [activeCycle, isPlanPhaseValid, innovationProjects]);
 
   // Sync progress with subtask overall progress
   useEffect(() => {
@@ -1069,7 +1093,7 @@ export default function PDCAEditor({
                 color="emerald" 
                 disabled={!isDoPhaseValid}
                 icon={!isDoPhaseValid ? <Lock size={12} /> : undefined}
-                lockTooltip={!isDoPhaseValid ? "Finalize a etapa DO para desbloquear" : undefined}
+                lockTooltip={!isDoPhaseValid ? "Pelo menos um plano deve ser concluído no DO para liberar o CHECK" : undefined}
               />
               <PhaseTab 
                 active={activePhase === 'ACT'} 
@@ -1078,7 +1102,7 @@ export default function PDCAEditor({
                 color="rose" 
                 disabled={!isCheckPhaseValid}
                 icon={!isCheckPhaseValid ? <Lock size={12} /> : undefined}
-                lockTooltip={!isCheckPhaseValid ? "Finalize a etapa CHECK para desbloquear" : undefined}
+                lockTooltip={!isCheckPhaseValid ? "Pelo menos um plano deve concluir o CHECK para liberar o ACT" : undefined}
               />
               <PhaseTab 
                 active={activePhase === 'REPORT'} 
@@ -1800,9 +1824,23 @@ export default function PDCAEditor({
                                                       <div className="flex-1">
                                                         <div className="flex items-center justify-between mb-1">
                                                           <div className="flex items-center gap-2">
-                                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{log.previousStatus || 'Início'}</span>
-                                                            <ArrowRight size={10} className="text-slate-300" />
-                                                            <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{log.newStatus}</span>
+                                                            {log.action ? (
+                                                              <div className="flex flex-col gap-0.5">
+                                                                <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest">{log.action}</span>
+                                                                {log.cardTitulo && (
+                                                                  <span className="text-[9px] font-bold text-slate-500 italic">Card: {log.cardTitulo}</span>
+                                                                )}
+                                                                {log.detalhes && (
+                                                                  <p className="text-[9px] text-slate-400 leading-tight mt-0.5">{log.detalhes}</p>
+                                                                )}
+                                                              </div>
+                                                            ) : (
+                                                              <>
+                                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{log.previousStatus || 'Início'}</span>
+                                                                <ArrowRight size={10} className="text-slate-300" />
+                                                                <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{log.newStatus}</span>
+                                                              </>
+                                                            )}
                                                           </div>
                                                           <span className="text-[10px] text-slate-400 font-medium">{format(new Date(log.date), 'dd/MM/yyyy HH:mm')}</span>
                                                         </div>
@@ -1984,41 +2022,64 @@ export default function PDCAEditor({
                             Nenhuma ação para verificação (CHECK).
                           </div>
                         ) : (
-                          activeCycle.plan.actionPlan
-                            .map((item) => {
-                              const isExpanded = expandedActionId === item.id;
+                          activeCycle.plan.actionPlan.map((item) => {
+                            const isExpanded = expandedActionId === item.id;
+                            const isDoDone = item.actionType === 'Inovação' 
+                              ? innovationProjects.find(ip => ip.id === item.innovationProjectId)?.status === 'entregue'
+                              : item.status === 'Concluído';
                               
-                              const idx = activeCycle.plan.actionPlan.findIndex(i => i.id === item.id);
+                            const idx = activeCycle.plan.actionPlan.findIndex(i => i.id === item.id);
                             
                             return (
                               <div key={item.id} className={cn(
                                 "border-b border-slate-100 last:border-0 transition-all",
-                                isExpanded ? "bg-white" : "hover:bg-slate-50/50"
+                                !isDoDone ? "bg-slate-50/50 opacity-75" : (isExpanded ? "bg-white" : "hover:bg-slate-50/50")
                               )}>
                                 {/* Accordion Header */}
                                 <button 
-                                  onClick={() => setExpandedActionId(isExpanded ? null : item.id)}
-                                  className="w-full p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left group"
+                                  onClick={() => isDoDone && setExpandedActionId(isExpanded ? null : item.id)}
+                                  className={cn(
+                                    "w-full p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left group",
+                                    !isDoDone && "cursor-not-allowed"
+                                  )}
                                 >
                                   <div className="flex items-center gap-4 flex-1">
-                                    <span className={cn(
-                                      "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
-                                      isExpanded ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100"
-                                    )}>
-                                      {idx + 1}
-                                    </span>
+                                    <div className="relative">
+                                      <span className={cn(
+                                        "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
+                                        isExpanded ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100",
+                                        !isDoDone && "bg-slate-200 text-slate-400"
+                                      )}>
+                                        {idx + 1}
+                                      </span>
+                                      {!isDoDone && (
+                                        <div className="absolute -top-1 -right-1 bg-amber-500 text-white p-0.5 rounded-full shadow-sm" title="Aguardando conclusão da etapa DO">
+                                          <Lock size={10} />
+                                        </div>
+                                      )}
+                                    </div>
                                     <div className="min-w-0">
-                                      <h5 className="font-bold text-slate-800 text-lg truncate group-hover:text-indigo-600 transition-colors">
-                                        {item.what || 'Ação sem descrição'}
-                                      </h5>
+                                      <div className="flex items-center gap-2">
+                                        <h5 className={cn(
+                                          "font-bold text-lg truncate transition-colors",
+                                          isDoDone ? "text-slate-800 group-hover:text-indigo-600" : "text-slate-400"
+                                        )}>
+                                          {item.what || 'Ação sem descrição'}
+                                        </h5>
+                                        {!isDoDone && (
+                                          <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg uppercase tracking-widest whitespace-nowrap">
+                                            Aguardando DO
+                                          </span>
+                                        )}
+                                      </div>
                                       <div className="flex items-center gap-3 mt-1">
                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
                                           <TrendingUp size={12} className="text-slate-400" />
-                                          Modo: <span className="text-slate-600 font-black">{item.monitoringMode || 'Dias'}</span>
+                                          Modo: <span className={isDoDone ? "text-slate-600 font-black" : "text-slate-400"}>{item.monitoringMode || 'Dias'}</span>
                                         </p>
                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
                                           <Target size={12} className="text-slate-400" />
-                                          Período: <span className="text-slate-600 font-black">{item.monitoringPeriod || 0}</span>
+                                          Período: <span className={isDoDone ? "text-slate-600 font-black" : "text-slate-400"}>{item.monitoringPeriod || 0}</span>
                                         </p>
                                       </div>
                                     </div>
@@ -2026,13 +2087,19 @@ export default function PDCAEditor({
                                   
                                   <div className="flex items-center gap-6">
                                     <div className="hidden sm:block">
-                                      <span className={cn(
-                                        "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
-                                        item.worked === 'Sim' ? "bg-emerald-100 text-emerald-700" :
-                                        item.worked === 'Não' ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
-                                      )}>
-                                        Funcionou? {item.worked || 'Pendente'}
-                                      </span>
+                                      {isDoDone ? (
+                                        <span className={cn(
+                                          "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
+                                          item.worked === 'Sim' ? "bg-emerald-100 text-emerald-700" :
+                                          item.worked === 'Não' ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
+                                        )}>
+                                          Funcionou? {item.worked || 'Pendente'}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] font-black px-3 py-1 rounded-full bg-slate-100 text-slate-400 uppercase tracking-wider">
+                                          Bloqueado
+                                        </span>
+                                      )}
                                     </div>
                                     <div className={cn(
                                       "w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 transition-transform duration-300 group-hover:border-indigo-200 group-hover:text-indigo-500",
@@ -2247,47 +2314,85 @@ export default function PDCAEditor({
                             Nenhuma ação para agir (ACT).
                           </div>
                         ) : (
-                          activeCycle.plan.actionPlan
-                            .map((item) => {
-                              const isExpanded = expandedActionId === item.id;
-                              
-                              const idx = activeCycle.plan.actionPlan.findIndex(i => i.id === item.id);
+                          activeCycle.plan.actionPlan.map((item) => {
+                            const isExpanded = expandedActionId === item.id;
+                            const isCheckDone = !!item.monitoringTool?.trim() && !!item.evidence?.trim() && !!item.worked && (item.worked === 'Sim' || !!item.failureReason?.trim());
+                            
+                            // Debug log for tracking blocking logic
+                            console.log(`ACT Action ${item.id}: isCheckDone=${isCheckDone}`, item);
+                            
+                            const idx = activeCycle.plan.actionPlan.findIndex(i => i.id === item.id);
                             
                             return (
                               <div key={item.id} className={cn(
                                 "border-b border-slate-100 last:border-0 transition-all",
-                                isExpanded ? "bg-white" : "hover:bg-slate-50/50"
+                                !isCheckDone ? "bg-slate-50/50 opacity-75" : (isExpanded ? "bg-white" : "hover:bg-slate-50/50")
                               )}>
                                 {/* Accordion Header */}
                                 <button 
-                                  onClick={() => setExpandedActionId(isExpanded ? null : item.id)}
-                                  className="w-full p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left group"
+                                  onClick={() => isCheckDone && setExpandedActionId(isExpanded ? null : item.id)}
+                                  className={cn(
+                                    "w-full p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left group",
+                                    !isCheckDone && "cursor-not-allowed"
+                                  )}
                                 >
                                   <div className="flex items-center gap-4 flex-1">
-                                    <span className={cn(
-                                      "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
-                                      isExpanded ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100"
-                                    )}>
-                                      {idx + 1}
-                                    </span>
+                                    <div className="relative">
+                                      <span className={cn(
+                                        "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
+                                        isExpanded ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100",
+                                        !isCheckDone && "bg-slate-200 text-slate-400"
+                                      )}>
+                                        {idx + 1}
+                                      </span>
+                                      {!isCheckDone && (
+                                        <div className="absolute -top-1 -right-1 bg-amber-500 text-white p-0.5 rounded-full shadow-sm" title="Aguardando conclusão da etapa CHECK">
+                                          <Lock size={10} />
+                                        </div>
+                                      )}
+                                    </div>
                                     <div className="min-w-0">
-                                      <h5 className="font-bold text-slate-800 text-lg truncate group-hover:text-indigo-600 transition-colors">
-                                        {item.what || 'Ação sem descrição'}
-                                      </h5>
+                                      <div className="flex items-center gap-2">
+                                        <h5 className={cn(
+                                          "font-bold text-lg truncate transition-colors",
+                                          isCheckDone ? "text-slate-800 group-hover:text-indigo-600" : "text-slate-400"
+                                        )}>
+                                          {item.what || 'Ação sem descrição'}
+                                        </h5>
+                                        {!isCheckDone && (
+                                          <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg uppercase tracking-widest whitespace-nowrap">
+                                            Aguardando CHECK
+                                          </span>
+                                        )}
+                                      </div>
                                       <div className="flex items-center gap-3 mt-1">
                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
                                           <CheckCircle2 size={12} className="text-slate-400" />
-                                          Status Final: <span className="text-slate-600 font-black">{item.finalProblemStatus || 'Resolvido'}</span>
+                                          Status Final: <span className={isCheckDone ? "text-slate-600 font-black" : "text-slate-400"}>{item.finalProblemStatus || 'Pendente'}</span>
                                         </p>
                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
                                           <Target size={12} className="text-slate-400" />
-                                          Ação Final: <span className="text-slate-600 font-black">{item.finalAction || 'Padronizar'}</span>
+                                          Ação Final: <span className={isCheckDone ? "text-slate-600 font-black" : "text-slate-400"}>{item.finalAction || 'Pendente'}</span>
                                         </p>
                                       </div>
                                     </div>
                                   </div>
                                   
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-6">
+                                    <div className="hidden sm:block">
+                                      {isCheckDone ? (
+                                        <span className={cn(
+                                          "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
+                                          !!item.finalProblemStatus ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                                        )}>
+                                          ACT: {item.finalProblemStatus ? 'Finalizado' : 'Em andamento'}
+                                        </span>
+                                      ) : (
+                                        <span className="text-[10px] font-black px-3 py-1 rounded-full bg-slate-100 text-slate-400 uppercase tracking-wider">
+                                          Bloqueado
+                                        </span>
+                                      )}
+                                    </div>
                                     <div className={cn(
                                       "w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 transition-transform duration-300 group-hover:border-indigo-200 group-hover:text-indigo-500",
                                       isExpanded && "rotate-180 bg-indigo-50 border-indigo-200 text-indigo-600"
@@ -2315,7 +2420,11 @@ export default function PDCAEditor({
                                               <select 
                                                 value={item.finalProblemStatus || 'Resolvido'}
                                                 onChange={(e) => updateActionPlan(item.id, { finalProblemStatus: e.target.value as any })}
-                                                className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                                disabled={!isCheckDone}
+                                                className={cn(
+                                                  "w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all",
+                                                  !isCheckDone && "opacity-50 cursor-not-allowed"
+                                                )}
                                               >
                                                 <option value="Resolvido">Resolvido</option>
                                                 <option value="Não resolvido">Não resolvido</option>
@@ -2326,7 +2435,11 @@ export default function PDCAEditor({
                                               <select 
                                                 value={item.finalAction || 'Padronizar processo'}
                                                 onChange={(e) => updateActionPlan(item.id, { finalAction: e.target.value as any })}
-                                                className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                                disabled={!isCheckDone}
+                                                className={cn(
+                                                  "w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all",
+                                                  !isCheckDone && "opacity-50 cursor-not-allowed"
+                                                )}
                                               >
                                                 <option value="Padronizar processo">Padronizar processo</option>
                                                 <option value="Fazer nova análise">Fazer nova análise</option>
@@ -2340,22 +2453,25 @@ export default function PDCAEditor({
                                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Modelo de Padronização Sugerido</label>
                                                 <div className="flex flex-wrap gap-2">
                                                   {['POP', 'ITO', 'Painel de controle'].map(model => (
-                                                    <button 
-                                                      key={model}
-                                                      onClick={() => {
-                                                        const current = item.standardizationModels || [];
-                                                        const next = current.includes(model as any)
-                                                          ? current.filter(m => m !== model)
-                                                          : [...current, model as any];
-                                                        updateActionPlan(item.id, { standardizationModels: next });
-                                                      }}
-                                                      className={cn(
-                                                        "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
-                                                        item.standardizationModels?.includes(model as any)
-                                                          ? "bg-indigo-600 border-indigo-600 text-white shadow-lg"
-                                                          : "bg-white border-slate-200 text-slate-400 hover:border-indigo-300"
-                                                      )}
-                                                    >
+                                                      <button 
+                                                        key={model}
+                                                        onClick={() => {
+                                                          if (!isCheckDone) return;
+                                                          const current = item.standardizationModels || [];
+                                                          const next = current.includes(model as any)
+                                                            ? current.filter(m => m !== model)
+                                                            : [...current, model as any];
+                                                          updateActionPlan(item.id, { standardizationModels: next });
+                                                        }}
+                                                        disabled={!isCheckDone}
+                                                        className={cn(
+                                                          "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
+                                                          item.standardizationModels?.includes(model as any)
+                                                            ? "bg-indigo-600 border-indigo-600 text-white shadow-lg"
+                                                            : "bg-white border-slate-200 text-slate-400 hover:border-indigo-300",
+                                                          !isCheckDone && "opacity-50 cursor-not-allowed"
+                                                        )}
+                                                      >
                                                       {model}
                                                     </button>
                                                   ))}
@@ -2371,9 +2487,14 @@ export default function PDCAEditor({
                                                 </div>
                                                 <button 
                                                   onClick={() => {
+                                                    if (!isCheckDone) return;
                                                     createNewCycle(activeCycle.taskId, activeCycle.plan.problemDescription);
                                                   }}
-                                                  className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-95"
+                                                  disabled={!isCheckDone}
+                                                  className={cn(
+                                                    "w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-95",
+                                                    !isCheckDone && "opacity-50 cursor-not-allowed"
+                                                  )}
                                                 >
                                                   <RefreshCw size={18} />
                                                   Refazer Ciclo PDCA
@@ -2483,6 +2604,50 @@ export default function PDCAEditor({
                     </div>
 
                     <div id="pdca-report-content" className="space-y-12 pb-12 print-container bg-white p-8 rounded-[2.5rem]">
+                      {/* Dashboard de indicadores do ciclo */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 no-print">
+                        <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Planos p/ Etapa</p>
+                          <div className="flex gap-4">
+                            <div className="text-center">
+                              <p className="text-lg font-black text-amber-600">{activeCycle.plan.actionPlan.filter(i => {
+                                const isDoDone = i.actionType === 'Inovação' ? innovationProjects.find(ip => ip.id === i.innovationProjectId)?.status === 'entregue' : i.status === 'Concluído';
+                                return !isDoDone;
+                              }).length}</p>
+                              <p className="text-[8px] font-black text-slate-400 uppercase">DO</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-lg font-black text-emerald-600">{activeCycle.plan.actionPlan.filter(i => {
+                                const isDoDone = i.actionType === 'Inovação' ? innovationProjects.find(ip => ip.id === i.innovationProjectId)?.status === 'entregue' : i.status === 'Concluído';
+                                const isCheckDone = !!i.monitoringTool?.trim() && !!i.evidence?.trim() && !!i.worked && (i.worked === 'Sim' || !!i.failureReason?.trim());
+                                return isDoDone && !isCheckDone;
+                              }).length}</p>
+                              <p className="text-[8px] font-black text-slate-400 uppercase">CHECK</p>
+                            </div>
+                            <div className="text-center">
+                              <p className="text-lg font-black text-rose-600">{activeCycle.plan.actionPlan.filter(i => {
+                                const isCheckDone = !!i.monitoringTool?.trim() && !!i.evidence?.trim() && !!i.worked && (i.worked === 'Sim' || !!i.failureReason?.trim());
+                                return isCheckDone;
+                              }).length}</p>
+                              <p className="text-[8px] font-black text-slate-400 uppercase">ACT</p>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Ações Concluídas</p>
+                          <p className="text-2xl font-black text-slate-800">
+                            {activeCycle.plan.actionPlan.filter(item => {
+                              return !!item.finalProblemStatus && !!item.finalAction && (item.finalAction !== 'Padronizar processo' || (item.standardizationModels || []).length > 0);
+                            }).length} <span className="text-slate-400 text-sm font-bold">/ {activeCycle.plan.actionPlan.length}</span>
+                          </p>
+                        </div>
+                        <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Progresso Real</p>
+                          <p className="text-2xl font-black text-indigo-600">{cycleProgress}%</p>
+                        </div>
+                      </div>
+
+
                       {relatedCycles.map((cycle, cycleIdx) => (
                         <div key={cycle.id} className="space-y-8 border-b-4 border-slate-100 pb-12 last:border-0 last:pb-0 min-h-[260mm]">
                           <PDFHeader projectName={project.name} cycleTitle={cycle.title} />
@@ -2694,6 +2859,22 @@ export default function PDCAEditor({
 
   async function updateActionPlan(id: string, data: Partial<ActionPlanItem>) {
     if (!activeCycle) return;
+
+    // Security check: Only update ACT fields if CHECK is concluded
+    const actFields = ['finalProblemStatus', 'finalAction', 'standardizationModels'];
+    const isUpdatingActField = Object.keys(data).some(key => actFields.includes(key));
+    
+    if (isUpdatingActField) {
+      const item = activeCycle.plan.actionPlan.find(i => i.id === id);
+      if (item) {
+        const isCheckDone = !!item.monitoringTool?.trim() && !!item.evidence?.trim() && !!item.worked && (item.worked === 'Sim' || !!item.failureReason?.trim());
+        if (!isCheckDone) {
+          setSaveFeedback("Plano ainda não liberado para ACT");
+          return;
+        }
+      }
+    }
+
     const newPlan = [...activeCycle.plan.actionPlan];
     const idx = newPlan.findIndex(i => i.id === id);
     if (idx === -1) return;
@@ -2745,6 +2926,12 @@ export default function PDCAEditor({
       newItem.currentPhase = 'CHECK';
     }
 
+    // Auto-transition from CHECK to ACT when all check fields are filled
+    const isCheckDone = !!newItem.monitoringTool?.trim() && !!newItem.evidence?.trim() && !!newItem.worked && (newItem.worked === 'Sim' || !!newItem.failureReason?.trim());
+    if (isCheckDone && newItem.currentPhase === 'CHECK') {
+      newItem.currentPhase = 'ACT';
+    }
+
     newPlan[idx] = newItem;
     updatePlan({ actionPlan: newPlan });
   }
@@ -2784,40 +2971,40 @@ export default function PDCAEditor({
     if (status === 'Concluído') return 100;
     if (!cycle) return 0;
     
-    // Calculate based on phases
-    let progress = 0;
-    
-    // PLAN completion
-    const { rootCauseAnalysis } = cycle.plan;
-    const isPlanComplete = rootCauseAnalysis.type === 'ishikawa' 
-      ? (rootCauseAnalysis.priorityCauses || []).length > 0
-      : !!rootCauseAnalysis.identifiedRootCause?.trim();
-    
-    if (isPlanComplete) progress += 25;
+    // Average calculation of progress per plan item
+    const planItems = cycle.plan.actionPlan || [];
+    if (planItems.length === 0) {
+      const { rootCauseAnalysis } = cycle.plan;
+      const isPlanComplete = rootCauseAnalysis.type === 'ishikawa' 
+        ? (rootCauseAnalysis.priorityCauses || []).length > 0
+        : !!rootCauseAnalysis.identifiedRootCause?.trim();
+      return isPlanComplete ? 25 : 0;
+    }
 
-    // DO completion
-    const isDoComplete = (cycle.plan.actionPlan || []).length > 0 && cycle.plan.actionPlan.every(item => {
-      if (item.actionType === 'Inovação') {
-        const innovationProject = innovationProjects.find(ip => ip.id === item.innovationProjectId);
-        return innovationProject?.status === 'entregue';
+    const itemsProgress = planItems.map(item => {
+      let p = 25; // PLAN is done
+
+      const isDoDone = item.actionType === 'Inovação' 
+        ? innovationProjects.find(ip => ip.id === item.innovationProjectId)?.status === 'entregue'
+        : item.status === 'Concluído';
+      
+      if (isDoDone) {
+        p += 25;
+        const isCheckDone = !!item.monitoringTool?.trim() && !!item.evidence?.trim() && !!item.worked && (item.worked === 'Sim' || !!item.failureReason?.trim());
+        if (isCheckDone) {
+          p += 25;
+          const isActDone = !!item.finalProblemStatus && !!item.finalAction && (item.finalAction !== 'Padronizar processo' || (item.standardizationModels || []).length > 0);
+          if (isActDone) p += 25;
+        }
+      } else if (item.status === 'Em andamento' || (item.actionType === 'Inovação' && item.innovationProjectId)) {
+        p += 10;
       }
-      return item.status === 'Concluído';
+
+      return p;
     });
-    if (isDoComplete) progress += 25;
 
-    // CHECK completion
-    const isCheckComplete = isDoComplete && cycle.plan.actionPlan.every(item => 
-      !!item.monitoringTool?.trim() && !!item.evidence?.trim() && !!item.worked && (item.worked === 'Sim' || !!item.failureReason?.trim())
-    );
-    if (isCheckComplete) progress += 25;
-
-    // ACT completion
-    const isActComplete = isCheckComplete && cycle.plan.actionPlan.every(item => 
-      !!item.finalProblemStatus && !!item.finalAction && (item.finalAction !== 'Padronizar processo' || (item.standardizationModels || []).length > 0)
-    );
-    if (isActComplete) progress += 25;
-
-    return progress;
+    const averageProgress = itemsProgress.reduce((acc, p) => acc + p, 0) / itemsProgress.length;
+    return Math.round(averageProgress);
   }
 }
 

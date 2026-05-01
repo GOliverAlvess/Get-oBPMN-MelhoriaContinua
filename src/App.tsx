@@ -69,7 +69,8 @@ import {
   OperationalAction, 
   SavedColor, 
   UserProfile,
-  InnovationProject
+  InnovationProject,
+  InnovationLog
 } from './types';
 import { cn, isValidUrl, formatUrl, cleanObject } from './lib/utils';
 import MappingTab from './components/MappingTab';
@@ -505,6 +506,65 @@ export default function App() {
     }
   };
 
+  const handleDeleteInnovationProject = async (id: string) => {
+    try {
+      const innovationProject = innovationProjects.find(p => p.id === id);
+      if (!innovationProject) return;
+
+      // Soft delete in innovationProjects
+      const projectRef = doc(db, 'innovationProjects', id);
+      await setDoc(projectRef, { 
+        ...innovationProject, 
+        deleted: true,
+        deletedAt: new Date().toISOString(),
+        deletedBy: user?.displayName || user?.email || 'Sistema',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+
+      // Update PDCA link and log
+      if (innovationProject.projectId && innovationProject.pdcaId && innovationProject.actionId) {
+        const pdcaProject = projects.find(p => p.id === innovationProject.projectId);
+        if (pdcaProject) {
+          const updatedSubtasks = pdcaProject.subtasks.map(sub => {
+            const updatedCycles = sub.pdcaCycles.map(cycle => {
+              if (cycle.id === innovationProject.pdcaId) {
+                const updatedActions = cycle.plan.actionPlan.map(action => {
+                  if (action.id === innovationProject.actionId) {
+                    const newLog: InnovationLog = {
+                      id: uuidv4(),
+                      date: new Date().toISOString(),
+                      action: 'Card de inovação excluído',
+                      detalhes: 'O card vinculado a este plano de ação foi excluído no módulo de inovação',
+                      cardTitulo: innovationProject.title,
+                      responsible: user?.displayName || user?.email || 'Sistema',
+                      origin: 'inovacao'
+                    };
+                    return {
+                      ...action,
+                      innovationProjectId: null,
+                      innovationLogs: [...(action.innovationLogs || []), newLog]
+                    };
+                  }
+                  return action;
+                });
+                return { ...cycle, plan: { ...cycle.plan, actionPlan: updatedActions } };
+              }
+              return cycle;
+            });
+            return { ...sub, pdcaCycles: updatedCycles };
+          });
+
+          await setDoc(doc(db, 'projects', pdcaProject.id), {
+            ...pdcaProject,
+            subtasks: updatedSubtasks
+          });
+        }
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `innovationProjects/${id}`);
+    }
+  };
+
   const handleCreateProject = async (data: { name: string, priority: ProjectPriority, assignedTo: string }) => {
     if (!user) return;
     const newId = uuidv4();
@@ -919,6 +979,7 @@ export default function App() {
                 innovationProjects={innovationProjects}
                 projects={projects}
                 users={users}
+                onDeleteInnovationProject={handleDeleteInnovationProject}
               />
             ) : !selectedProjectId ? (
               <KanbanView 

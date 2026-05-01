@@ -150,8 +150,11 @@ export interface ActionPlanItem {
 export interface InnovationLog {
   id: string;
   date: string;
-  previousStatus: InnovationStatus | '';
-  newStatus: InnovationStatus;
+  previousStatus?: InnovationStatus | '';
+  newStatus?: InnovationStatus;
+  action?: string;
+  detalhes?: string;
+  cardTitulo?: string;
   responsible: string;
   origin: 'inovacao';
 }
@@ -283,6 +286,9 @@ export interface InnovationProject {
   complexity: InnovationComplexity | '';
   responsibleId: string;
   responsibleName?: string;
+  deleted?: boolean;
+  deletedAt?: string;
+  deletedBy?: string;
   createdAt: string;
   updatedAt: string;
   projectName: string;

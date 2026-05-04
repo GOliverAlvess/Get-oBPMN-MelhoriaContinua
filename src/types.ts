@@ -124,7 +124,8 @@ export interface ActionPlanItem {
   innovationProjectId?: string; // New field
   
   // DO
-  status: 'Pendente' | 'Em andamento' | 'Concluído';
+  status: 'Pendente' | 'Em andamento' | 'Concluído' | 'Cancelado';
+  ativo?: boolean;
   startDate?: string;
   endDate?: string;
   observations?: string;
@@ -275,6 +276,31 @@ export type InnovationStatus = 'backlog' | 'análise' | 'desenvolvimento' | 'tes
 export type InnovationComplexity = 'Baixa' | 'Média' | 'Alta' | 'Muito Alta';
 export type InnovationSolutionType = 'RPA' | 'Sistema' | 'Integração' | 'BI';
 
+export interface InnovationPipelineStage {
+  id: string;
+  name: 'Entendimento' | 'Análise' | 'Solução' | 'Desenvolvimento' | 'Entrega';
+  status: 'Pendente' | 'Em andamento' | 'Concluído';
+  responsibleId: string;
+  observations: string;
+  updatedAt: string;
+}
+
+export interface InnovationTeamLogEntry {
+  id: string;
+  date: string;
+  type: 'Decisão' | 'Hipótese' | 'Teste' | 'Aprendizado' | 'Risco' | 'Ajuste';
+  content: string;
+  authorId: string;
+}
+
+export interface InnovationArtifact {
+  id: string;
+  name: string;
+  url: string;
+  type: 'link' | 'file';
+  addedAt: string;
+}
+
 export interface InnovationProject {
   id: string;
   projectId: string; 
@@ -294,4 +320,15 @@ export interface InnovationProject {
   projectName: string;
   processName: string;
   subtaskTitle?: string;
+  
+  // New fields for detail screen
+  technicalScope?: {
+    whatWillBeDone: string;
+    whatWillNotBeDone: string;
+    assumptions: string;
+    restrictions: string;
+  };
+  pipeline?: InnovationPipelineStage[];
+  teamLog?: InnovationTeamLogEntry[];
+  artifacts?: InnovationArtifact[];
 }

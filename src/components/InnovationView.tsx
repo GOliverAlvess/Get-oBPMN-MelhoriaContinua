@@ -35,6 +35,7 @@ import {
 } from '../types';
 import { cn, cleanObject } from '../lib/utils';
 import { db, setDoc, doc, handleFirestoreError, OperationType, deleteDoc } from '../firebase';
+import InnovationProjectDetail from './InnovationProjectDetail';
 
 interface InnovationViewProps {
   innovationProjects: InnovationProject[];
@@ -54,6 +55,7 @@ const statusColumns: { id: InnovationStatus; label: string; color: string }[] = 
 export default function InnovationView({ innovationProjects, projects, users, onDeleteInnovationProject }: InnovationViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProject, setSelectedProject] = useState<InnovationProject | null>(null);
+  const [showDetail, setShowDetail] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [visibleStatuses, setVisibleStatuses] = useState<InnovationStatus[]>([]);
   const [projectToDelete, setProjectToDelete] = useState<InnovationProject | null>(null);
@@ -113,6 +115,24 @@ export default function InnovationView({ innovationProjects, projects, users, on
     }
   };
 
+  const handleUpdateInnovation = async (updates: Partial<InnovationProject>) => {
+    if (!selectedProject) return;
+    try {
+      const previousStatus = selectedProject.status;
+      const projectRef = doc(db, 'innovationProjects', selectedProject.id);
+      const fullUpdate = { ...selectedProject, ...updates, updatedAt: new Date().toISOString() };
+      await setDoc(projectRef, fullUpdate);
+      
+      if (updates.status && updates.status !== previousStatus) {
+        await logStatusChange(fullUpdate, previousStatus, updates.status as InnovationStatus);
+      }
+      
+      setSelectedProject(fullUpdate);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `innovationProjects/${selectedProject.id}`);
+    }
+  };
+
   const handleUpdateStatus = async (projectId: string, newStatus: InnovationStatus) => {
     try {
       const innovationProject = innovationProjects.find(p => p.id === projectId);
@@ -141,6 +161,21 @@ export default function InnovationView({ innovationProjects, projects, users, on
       setProjectToDelete(null);
     }
   };
+
+  if (showDetail && selectedProject) {
+    return (
+      <InnovationProjectDetail 
+        project={selectedProject}
+        projects={projects}
+        users={users}
+        onBack={() => {
+          setShowDetail(false);
+          setSelectedProject(null);
+        }}
+        onUpdate={handleUpdateInnovation}
+      />
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -275,7 +310,10 @@ export default function InnovationView({ innovationProjects, projects, users, on
                   <InnovationCard 
                     key={project.id} 
                     project={project} 
-                    onClick={() => setSelectedProject(project)}
+                    onClick={() => {
+                      setSelectedProject(project);
+                      setShowDetail(true);
+                    }}
                     onDelete={() => setProjectToDelete(project)}
                   />
                 ))}
@@ -293,28 +331,11 @@ export default function InnovationView({ innovationProjects, projects, users, on
       </div>
 
       <InnovationDetailModal 
-        project={selectedProject} 
+        project={selectedProject && !showDetail ? selectedProject : null} 
         onClose={() => setSelectedProject(null)} 
         users={users}
         projects={projects}
-        onUpdateProject={async (updates) => {
-          if (selectedProject) {
-            try {
-              const previousStatus = selectedProject.status;
-              const projectRef = doc(db, 'innovationProjects', selectedProject.id);
-              const fullUpdate = { ...selectedProject, ...updates, updatedAt: new Date().toISOString() };
-              await setDoc(projectRef, fullUpdate);
-              
-              if (updates.status && updates.status !== previousStatus) {
-                await logStatusChange(fullUpdate, previousStatus, updates.status as InnovationStatus);
-              }
-              
-              setSelectedProject(fullUpdate);
-            } catch (error) {
-              handleFirestoreError(error, OperationType.WRITE, `innovationProjects/${selectedProject.id}`);
-            }
-          }
-        }}
+        onUpdateProject={handleUpdateInnovation}
       />
     </div>
   );

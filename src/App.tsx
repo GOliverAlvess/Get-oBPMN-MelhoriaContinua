@@ -470,6 +470,15 @@ export default function App() {
   };
 
   const handleAddInnovationProject = async (data: Omit<InnovationProject, 'id' | 'createdAt' | 'updatedAt'>) => {
+    // Check for existing card with same actionId to prevent duplicates
+    if (data.actionId) {
+      const existing = innovationProjects.find(ip => ip.actionId === data.actionId && !ip.deleted);
+      if (existing) {
+        console.log("⚠️ [App] Innovation card already exists for this action plan. Returning existing ID:", existing.id);
+        return existing.id;
+      }
+    }
+
     const newId = uuidv4();
     const responsibleUser = users.find(u => u.id === data.responsibleId);
     
@@ -522,18 +531,22 @@ export default function App() {
       }, { merge: true });
 
       // Update PDCA link and log
-      if (innovationProject.projectId && innovationProject.pdcaId && innovationProject.actionId) {
+      if (innovationProject.projectId) {
         const pdcaProject = projects.find(p => p.id === innovationProject.projectId);
         if (pdcaProject) {
-          const updatedSubtasks = pdcaProject.subtasks.map(sub => {
-            const updatedCycles = sub.pdcaCycles.map(cycle => {
-              if (cycle.id === innovationProject.pdcaId) {
-                const updatedActions = cycle.plan.actionPlan.map(action => {
-                  if (action.id === innovationProject.actionId) {
+          let found = false;
+          const updatedSubtasks = (pdcaProject.subtasks || []).map(sub => {
+            const updatedCycles = (sub.pdcaCycles || []).map(cycle => {
+              // If we have explicit pdcaId, only update that cycle. If not, check all.
+              if (!innovationProject.pdcaId || cycle.id === innovationProject.pdcaId) {
+                const updatedActions = (cycle.plan.actionPlan || []).map(action => {
+                  // Only cancel if this specific card ID is the one linked in the PDCA action plan
+                  if (action.innovationProjectId === id) {
+                    found = true;
                     const newLog: InnovationLog = {
                       id: uuidv4(),
                       date: new Date().toISOString(),
-                      action: 'Card de inovação excluído',
+                      action: 'Plano de ação cancelado via módulo de Inovações',
                       detalhes: 'O card vinculado a este plano de ação foi excluído no módulo de inovação',
                       cardTitulo: innovationProject.title,
                       responsible: user?.displayName || user?.email || 'Sistema',
@@ -541,7 +554,8 @@ export default function App() {
                     };
                     return {
                       ...action,
-                      innovationProjectId: null,
+                      status: 'Cancelado',
+                      ativo: false,
                       innovationLogs: [...(action.innovationLogs || []), newLog]
                     };
                   }
@@ -554,11 +568,21 @@ export default function App() {
             return { ...sub, pdcaCycles: updatedCycles };
           });
 
-          await setDoc(doc(db, 'projects', pdcaProject.id), {
-            ...pdcaProject,
-            subtasks: updatedSubtasks
-          });
+          if (found) {
+            await setDoc(doc(db, 'projects', pdcaProject.id), {
+              ...pdcaProject,
+              subtasks: updatedSubtasks,
+              updatedAt: new Date().toISOString()
+            }, { merge: true });
+            console.log(`✅ [App] Plano de ação vinculado ao card ${id} marcado como Cancelado.`);
+          } else {
+            console.warn(`⚠️ [App] Plano de ação vinculado ao card ${id} não encontrado no projeto ${innovationProject.projectId}.`);
+          }
+        } else {
+          console.warn(`⚠️ [App] Projeto PDCA ${innovationProject.projectId} não encontrado.`);
         }
+      } else {
+        console.warn(`⚠️ [App] Card de inovação ${id} não possui vínculo com Projeto PDCA.`);
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `innovationProjects/${id}`);

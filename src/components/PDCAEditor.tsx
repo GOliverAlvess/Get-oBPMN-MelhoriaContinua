@@ -117,6 +117,7 @@ export default function PDCAEditor({
   const [showActConfirmation, setShowActConfirmation] = useState(false);
 
   const [confirmingLog, setConfirmingLog] = useState<{ id: string, updates: any, obsInputId: string } | null>(null);
+  const pendingInnovationCreations = useRef<Set<string>>(new Set());
 
   // Filter cycles if defaultTaskId is provided
   const cycles = useMemo(() => {
@@ -1468,84 +1469,100 @@ export default function PDCAEditor({
                                   <motion.div 
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: 'auto' }}
-                                    className="space-y-6 pt-6 border-t border-slate-100 overflow-hidden"
+                                    className="space-y-6 pt-6 border-t border-slate-100 w-full overflow-hidden"
                                   >
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">What (O que será feito?)</label>
-                                        <input 
+                                    <div className="grid grid-cols-1 md:grid-cols-6 gap-4 w-full">
+                                      {/* What - Full Width */}
+                                      <div className="md:col-span-6 space-y-1 min-w-0">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">What (O que será feito?)</label>
+                                        <textarea 
+                                          rows={2}
                                           value={item.what || ''} 
-                                          placeholder="O que será feito?"
-                                          onChange={(e) => updateActionPlan(item.id, { what: e.target.value })}
-                                          className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                                          placeholder="Descreva o que será feito com detalhes..."
+                                          onChange={(e) => updateActionPlan(item.id, { what: e.target.value }, true)}
+                                          onBlur={() => updateActionPlan(item.id, {})}
+                                          className="w-full max-w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 resize-none min-h-[80px] box-border"
                                         />
                                       </div>
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Why (Por que será feito?)</label>
-                                        <input 
+
+                                      {/* Why - Full Width */}
+                                      <div className="md:col-span-6 space-y-1 min-w-0">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Why (Por que será feito?)</label>
+                                        <textarea 
+                                          rows={2}
                                           value={item.why || ''} 
                                           placeholder="Por que essa ação é necessária?"
-                                          onChange={(e) => updateActionPlan(item.id, { why: e.target.value })}
-                                          className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                                          onChange={(e) => updateActionPlan(item.id, { why: e.target.value }, true)}
+                                          onBlur={() => updateActionPlan(item.id, {})}
+                                          className="w-full max-w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 resize-none min-h-[80px] box-border"
                                         />
                                       </div>
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Where (Onde?)</label>
+
+                                      {/* Where, When, Who - Shared Row */}
+                                      <div className="md:col-span-2 space-y-1 min-w-0">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Where (Onde?)</label>
                                         <input 
                                           value={item.where || ''} 
-                                          placeholder="Onde será executada?"
-                                          onChange={(e) => updateActionPlan(item.id, { where: e.target.value })}
-                                          className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                                          placeholder="Local da execução"
+                                          onChange={(e) => updateActionPlan(item.id, { where: e.target.value }, true)}
+                                          onBlur={() => updateActionPlan(item.id, {})}
+                                          className="w-full max-w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
                                         />
                                       </div>
-                                      <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1">
-                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">When (Quando?)</label>
-                                          <input 
-                                            type="date"
-                                            value={item.when || ''} 
-                                            onChange={(e) => updateActionPlan(item.id, { when: e.target.value })}
-                                            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
-                                          />
-                                        </div>
-                                        <div className="space-y-1">
-                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Who (Quem)</label>
-                                          <input 
-                                            value={item.who || ''} 
-                                            placeholder="Nome do responsável"
-                                            onChange={(e) => updateActionPlan(item.id, { who: e.target.value })}
-                                            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
-                                          />
-                                        </div>
-                                      </div>
-                                      <div className="space-y-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">How (Como será feito?)</label>
+                                      <div className="md:col-span-2 space-y-1 min-w-0">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">When (Quando?)</label>
                                         <input 
+                                          type="date"
+                                          value={item.when || ''} 
+                                          onChange={(e) => updateActionPlan(item.id, { when: e.target.value }, true)}
+                                          onBlur={() => updateActionPlan(item.id, {})}
+                                          className="w-full max-w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 h-[46px] box-border"
+                                        />
+                                      </div>
+                                      <div className="md:col-span-2 space-y-1 min-w-0">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Who (Quem)</label>
+                                        <input 
+                                          value={item.who || ''} 
+                                          placeholder="Nome do responsável"
+                                          onChange={(e) => updateActionPlan(item.id, { who: e.target.value }, true)}
+                                          onBlur={() => updateActionPlan(item.id, {})}
+                                          className="w-full max-w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
+                                        />
+                                      </div>
+
+                                      {/* How - Full Width */}
+                                      <div className="md:col-span-6 space-y-1 min-w-0">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">How (Como será feito?)</label>
+                                        <textarea 
+                                          rows={2}
                                           value={item.how || ''} 
                                           placeholder="Como será executada?"
-                                          onChange={(e) => updateActionPlan(item.id, { how: e.target.value })}
-                                          className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                                          onChange={(e) => updateActionPlan(item.id, { how: e.target.value }, true)}
+                                          onBlur={() => updateActionPlan(item.id, {})}
+                                          className="w-full max-w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 resize-none min-h-[80px] box-border"
                                         />
                                       </div>
-                                      <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1">
-                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">How much (Custo)</label>
-                                          <input 
-                                            value={item.howMuch || ''} 
-                                            placeholder="Qual o custo?"
-                                            onChange={(e) => updateActionPlan(item.id, { howMuch: e.target.value })}
-                                            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
-                                          />
-                                        </div>
-                                        <div className="space-y-1">
-                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Setor</label>
-                                          <input 
-                                            value={item.sector || ''} 
-                                            placeholder="Setor responsável"
-                                            onChange={(e) => updateActionPlan(item.id, { sector: e.target.value })}
-                                            className="w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
-                                          />
-                                        </div>
+
+                                      {/* How much, Sector - Shared Row */}
+                                      <div className="md:col-span-3 space-y-1 min-w-0">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">How much (Custo)</label>
+                                        <input 
+                                          value={item.howMuch || ''} 
+                                          placeholder="Qual o custo?"
+                                          onChange={(e) => updateActionPlan(item.id, { howMuch: e.target.value }, true)}
+                                          onBlur={() => updateActionPlan(item.id, {})}
+                                          className="w-full max-w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
+                                        />
+                                      </div>
+                                      <div className="md:col-span-3 space-y-1 min-w-0">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Setor</label>
+                                        <input 
+                                          value={item.sector || ''} 
+                                          placeholder="Setor responsável"
+                                          onChange={(e) => updateActionPlan(item.id, { sector: e.target.value }, true)}
+                                          onBlur={() => updateActionPlan(item.id, {})}
+                                          className="w-full max-w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
+                                        />
                                       </div>
                                     </div>
                                   </motion.div>
@@ -1663,7 +1680,8 @@ export default function PDCAEditor({
                             return (
                               <div key={item.id} className={cn(
                                 "border-b border-slate-100 last:border-0 transition-all",
-                                isExpanded ? "bg-white" : "hover:bg-slate-50/50"
+                                isExpanded ? "bg-white" : "hover:bg-slate-50/50",
+                                item.status === 'Cancelado' && "bg-slate-50/50 opacity-60 grayscale-[0.5]"
                               )}>
                                 {/* Accordion Header */}
                                 <button 
@@ -1698,7 +1716,17 @@ export default function PDCAEditor({
                                   
                                   <div className="flex items-center gap-6">
                                     <div className="hidden sm:block">
-                                      {item.actionType === 'Inovação' ? (
+                                      {item.status === 'Cancelado' ? (
+                                        <div className="flex flex-col items-end">
+                                          <span className="text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider bg-rose-100 text-rose-700 shadow-sm border border-rose-200">
+                                            Cancelado
+                                          </span>
+                                          <span className="text-[8px] font-black text-rose-500 uppercase tracking-tighter mt-1 italic flex items-center gap-1">
+                                            <AlertCircle size={10} />
+                                            Via Inovações
+                                          </span>
+                                        </div>
+                                      ) : item.actionType === 'Inovação' ? (
                                         (() => {
                                           const innovationProject = innovationProjects.find(ip => ip.id === item.innovationProjectId);
                                           const statusLabel = innovationProject ? innovationProject.status : 'Pendente';
@@ -1860,7 +1888,17 @@ export default function PDCAEditor({
 
                                           {/* Add Log Form */}
                                           <div className="mt-8">
-                                            {item.actionType === 'Inovação' ? (
+                                            {item.status === 'Cancelado' ? (
+                                              <div className="bg-rose-50 p-8 rounded-[2.5rem] border border-rose-100 flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
+                                                <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center shadow-sm">
+                                                  <AlertCircle size={32} />
+                                                </div>
+                                                <div className="flex-1">
+                                                  <h6 className="text-sm font-black text-rose-900 uppercase tracking-widest mb-1">Ação Cancelada</h6>
+                                                  <p className="text-xs text-rose-600 font-medium leading-relaxed">Este plano de ação foi cancelado via módulo de Inovação e não permite mais atualizações.</p>
+                                                </div>
+                                              </div>
+                                            ) : item.actionType === 'Inovação' ? (
                                               <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100 flex flex-col items-center justify-center text-center space-y-3">
                                                 <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100">
                                                   <GitBranch size={24} />
@@ -2017,12 +2055,14 @@ export default function PDCAEditor({
                         <p className="text-slate-500 text-sm mt-1">Acompanhamento e validação de cada ação.</p>
                       </div>
                       <div className="divide-y divide-slate-100">
-                        {activeCycle.plan.actionPlan.length === 0 ? (
+                        {activeCycle.plan.actionPlan.filter(item => item.status !== 'Cancelado').length === 0 ? (
                           <div className="p-20 text-center text-slate-400 italic">
                             Nenhuma ação para verificação (CHECK).
                           </div>
                         ) : (
-                          activeCycle.plan.actionPlan.map((item) => {
+                          activeCycle.plan.actionPlan
+                            .filter(item => item.status !== 'Cancelado')
+                            .map((item) => {
                             const isExpanded = expandedActionId === item.id;
                             const isDoDone = item.actionType === 'Inovação' 
                               ? innovationProjects.find(ip => ip.id === item.innovationProjectId)?.status === 'entregue'
@@ -2309,12 +2349,14 @@ export default function PDCAEditor({
                         <p className="text-slate-500 text-sm mt-1">Padronização ou novos ajustes para cada ação.</p>
                       </div>
                       <div className="divide-y divide-slate-100">
-                        {activeCycle.plan.actionPlan.length === 0 ? (
+                        {activeCycle.plan.actionPlan.filter(item => item.status !== 'Cancelado').length === 0 ? (
                           <div className="p-20 text-center text-slate-400 italic">
                             Nenhuma ação para agir (ACT).
                           </div>
                         ) : (
-                          activeCycle.plan.actionPlan.map((item) => {
+                          activeCycle.plan.actionPlan
+                            .filter(item => item.status !== 'Cancelado')
+                            .map((item) => {
                             const isExpanded = expandedActionId === item.id;
                             const isCheckDone = !!item.monitoringTool?.trim() && !!item.evidence?.trim() && !!item.worked && (item.worked === 'Sim' || !!item.failureReason?.trim());
                             
@@ -2604,50 +2646,6 @@ export default function PDCAEditor({
                     </div>
 
                     <div id="pdca-report-content" className="space-y-12 pb-12 print-container bg-white p-8 rounded-[2.5rem]">
-                      {/* Dashboard de indicadores do ciclo */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 no-print">
-                        <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Planos p/ Etapa</p>
-                          <div className="flex gap-4">
-                            <div className="text-center">
-                              <p className="text-lg font-black text-amber-600">{activeCycle.plan.actionPlan.filter(i => {
-                                const isDoDone = i.actionType === 'Inovação' ? innovationProjects.find(ip => ip.id === i.innovationProjectId)?.status === 'entregue' : i.status === 'Concluído';
-                                return !isDoDone;
-                              }).length}</p>
-                              <p className="text-[8px] font-black text-slate-400 uppercase">DO</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-lg font-black text-emerald-600">{activeCycle.plan.actionPlan.filter(i => {
-                                const isDoDone = i.actionType === 'Inovação' ? innovationProjects.find(ip => ip.id === i.innovationProjectId)?.status === 'entregue' : i.status === 'Concluído';
-                                const isCheckDone = !!i.monitoringTool?.trim() && !!i.evidence?.trim() && !!i.worked && (i.worked === 'Sim' || !!i.failureReason?.trim());
-                                return isDoDone && !isCheckDone;
-                              }).length}</p>
-                              <p className="text-[8px] font-black text-slate-400 uppercase">CHECK</p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-lg font-black text-rose-600">{activeCycle.plan.actionPlan.filter(i => {
-                                const isCheckDone = !!i.monitoringTool?.trim() && !!i.evidence?.trim() && !!i.worked && (i.worked === 'Sim' || !!i.failureReason?.trim());
-                                return isCheckDone;
-                              }).length}</p>
-                              <p className="text-[8px] font-black text-slate-400 uppercase">ACT</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Ações Concluídas</p>
-                          <p className="text-2xl font-black text-slate-800">
-                            {activeCycle.plan.actionPlan.filter(item => {
-                              return !!item.finalProblemStatus && !!item.finalAction && (item.finalAction !== 'Padronizar processo' || (item.standardizationModels || []).length > 0);
-                            }).length} <span className="text-slate-400 text-sm font-bold">/ {activeCycle.plan.actionPlan.length}</span>
-                          </p>
-                        </div>
-                        <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Progresso Real</p>
-                          <p className="text-2xl font-black text-indigo-600">{cycleProgress}%</p>
-                        </div>
-                      </div>
-
-
                       {relatedCycles.map((cycle, cycleIdx) => (
                         <div key={cycle.id} className="space-y-8 border-b-4 border-slate-100 pb-12 last:border-0 last:pb-0 min-h-[260mm]">
                           <PDFHeader projectName={project.name} cycleTitle={cycle.title} />
@@ -2857,15 +2855,20 @@ export default function PDCAEditor({
     </div>
   );
 
-  async function updateActionPlan(id: string, data: Partial<ActionPlanItem>) {
+  async function updateActionPlan(id: string, data: Partial<ActionPlanItem>, isTyping = false) {
     if (!activeCycle) return;
+
+    const item = activeCycle.plan.actionPlan.find(i => i.id === id);
+    if (item && item.status === 'Cancelado') {
+      setSaveFeedback("Plano cancelado não pode ser modificado");
+      return;
+    }
 
     // Security check: Only update ACT fields if CHECK is concluded
     const actFields = ['finalProblemStatus', 'finalAction', 'standardizationModels'];
     const isUpdatingActField = Object.keys(data).some(key => actFields.includes(key));
     
     if (isUpdatingActField) {
-      const item = activeCycle.plan.actionPlan.find(i => i.id === id);
       if (item) {
         const isCheckDone = !!item.monitoringTool?.trim() && !!item.evidence?.trim() && !!item.worked && (item.worked === 'Sim' || !!item.failureReason?.trim());
         if (!isCheckDone) {
@@ -2883,13 +2886,17 @@ export default function PDCAEditor({
     let newItem = { ...oldItem, ...data };
 
     // Handle Innovation Project Creation
-    const isNewInnovationType = data.actionType === 'Inovação' && oldItem.actionType !== 'Inovação';
-    const isWhatChangingOnInnovation = data.what !== undefined && newItem.actionType === 'Inovação';
+    const isInnovationType = newItem.actionType === 'Inovação';
+    const hasLongWhat = (newItem.what?.trim().length || 0) > 3;
+    const hasNoProject = !newItem.innovationProjectId;
+    const isNotPending = !pendingInnovationCreations.current.has(id);
     
-    // Create new innovation project if it's the first time it's selected as Innovation OR if what changes and none exists
-    if ((isNewInnovationType || isWhatChangingOnInnovation) && !newItem.innovationProjectId && newItem.what?.trim().length > 3) {
+    // Only create card if NOT typing (e.g. onBlur or actionType change)
+    if (!isTyping && isInnovationType && hasLongWhat && hasNoProject && isNotPending) {
       if (onAddInnovationProject) {
+        pendingInnovationCreations.current.add(id);
         try {
+          console.log(`🚀 [PDCAEditor] Creating innovation card for action ${id}...`);
           const innovationProjectId = await onAddInnovationProject({
             projectId: project.id,
             projectName: project.name,
@@ -2904,19 +2911,34 @@ export default function PDCAEditor({
             responsibleId: newItem.who || '',
             responsibleName: '' 
           });
-          newItem.innovationProjectId = innovationProjectId;
-          newItem.status = 'Pendente';
+          
+          // Re-fetch the current state to avoid overwriting newer changes during async call
+          const currentPlan = [...(subtask.pdcaCycles.find(c => c.id === activeCycle.id)?.plan.actionPlan || [])];
+          const currentIdx = currentPlan.findIndex(i => i.id === id);
+          if (currentIdx !== -1) {
+            currentPlan[currentIdx] = { 
+              ...currentPlan[currentIdx], 
+              innovationProjectId, 
+              status: 'Pendente' 
+            };
+            updatePlan({ actionPlan: currentPlan });
+            console.log(`✅ [PDCAEditor] Innovation card created: ${innovationProjectId}`);
+          }
         } catch (err) {
           console.error("Erro ao criar projeto de inovação:", err);
+          setSaveFeedback("Erro ao integrar com Inovação");
+        } finally {
+          pendingInnovationCreations.current.delete(id);
         }
+        // Early return as we already updated the state in the async callback
+        return;
       }
     }
 
     // Sync title to innovation project if it changes and project already exists
-    if (data.what !== undefined && newItem.innovationProjectId) {
+    // Also avoid excessive updates if typing
+    if (!isTyping && data.what !== undefined && newItem.innovationProjectId) {
       if (onUpdateInnovationProject) {
-        // Use a small delay or check to avoid excessive updates if needed, 
-        // but for requirements we sync the title.
         onUpdateInnovationProject(newItem.innovationProjectId, { title: newItem.what });
       }
     }

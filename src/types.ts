@@ -272,18 +272,9 @@ export interface ReportLog {
   reportType: 'PDCA' | 'Histórico de Ações' | 'Relatório Completo';
 }
 
-export type InnovationStatus = 'backlog' | 'análise' | 'desenvolvimento' | 'teste' | 'entregue';
+export type InnovationStatus = 'backlog' | 'análise' | 'planejamento' | 'desenvolvimento' | 'teste' | 'concluído';
 export type InnovationComplexity = 'Baixa' | 'Média' | 'Alta' | 'Muito Alta';
 export type InnovationSolutionType = 'RPA' | 'Sistema' | 'Integração' | 'BI';
-
-export interface InnovationPipelineStage {
-  id: string;
-  name: 'Entendimento' | 'Análise' | 'Solução' | 'Desenvolvimento' | 'Entrega';
-  status: 'Pendente' | 'Em andamento' | 'Concluído';
-  responsibleId: string;
-  observations: string;
-  updatedAt: string;
-}
 
 export interface InnovationTeamLogEntry {
   id: string;
@@ -291,6 +282,20 @@ export interface InnovationTeamLogEntry {
   type: 'Decisão' | 'Hipótese' | 'Teste' | 'Aprendizado' | 'Risco' | 'Ajuste';
   content: string;
   authorId: string;
+}
+
+export type InnovationActionType = 'Alinhamento' | 'Ajustes' | 'Decisão' | 'Testes' | 'Implementação';
+
+export interface InnovationAction {
+  id: string;
+  type: InnovationActionType;
+  priority: 'Baixa' | 'Média' | 'Alta';
+  description: string;
+  responsibleId: string;
+  deadline: string;
+  status: 'Pendente' | 'Em andamento' | 'Concluído';
+  responseDescription?: string;
+  completionDate?: string;
 }
 
 export interface InnovationArtifact {
@@ -312,6 +317,7 @@ export interface InnovationProject {
   complexity: InnovationComplexity | '';
   responsibleId: string;
   responsibleName?: string;
+  participantIds?: string[];
   deleted?: boolean;
   deletedAt?: string;
   deletedBy?: string;
@@ -320,15 +326,29 @@ export interface InnovationProject {
   projectName: string;
   processName: string;
   subtaskTitle?: string;
+  priority?: ProjectPriority;
+  deadline?: string;
   
   // New fields for detail screen
   technicalScope?: {
     whatWillBeDone: string;
-    whatWillNotBeDone: string;
+    technologies: string[];
     assumptions: string;
     restrictions: string;
   };
-  pipeline?: InnovationPipelineStage[];
-  teamLog?: InnovationTeamLogEntry[];
+  developmentActions?: InnovationAction[];
   artifacts?: InnovationArtifact[];
+  production?: {
+    document?: { name: string; url: string };
+    technicalDeliverable?: { name: string; type: string; url: string };
+    externalLinks?: {
+      repositories: { id: string; name: string; url: string }[];
+      externalTools: { id: string; name: string; url: string }[];
+    };
+  };
+  progress?: number;
+}
+
+export interface InnovationConfig {
+  technologies: string[];
 }

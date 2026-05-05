@@ -143,7 +143,7 @@ export default function PDCAEditor({
     return activeCycle.plan.actionPlan.some(item => {
       if (item.actionType === 'Inovação') {
         const innovationProject = innovationProjects.find(ip => ip.id === item.innovationProjectId);
-        return innovationProject?.status === 'entregue';
+        return innovationProject?.status === 'concluído';
       }
       return item.status === 'Concluído';
     });
@@ -183,7 +183,7 @@ export default function PDCAEditor({
 
       // DO progress
       const isDoDone = item.actionType === 'Inovação' 
-        ? innovationProjects.find(ip => ip.id === item.innovationProjectId)?.status === 'entregue'
+        ? innovationProjects.find(ip => ip.id === item.innovationProjectId)?.status === 'concluído'
         : item.status === 'Concluído';
       
       if (isDoDone) {
@@ -289,13 +289,13 @@ export default function PDCAEditor({
 
   const isInnovationBlocked = useMemo(() => {
     if (!activeCycle) return false;
-    // We only block if there is AT LEAST ONE innovation action that is not 'entregue'
+    // We only block if there is AT LEAST ONE innovation action that is not 'concluído'
     const innovationActions = activeCycle.plan.actionPlan.filter(item => item.actionType === 'Inovação');
     if (innovationActions.length === 0) return false;
     
     return innovationActions.some(item => {
       const innovationProject = innovationProjects.find(ip => ip.id === item.innovationProjectId);
-      return !innovationProject || innovationProject.status !== 'entregue';
+      return !innovationProject || innovationProject.status !== 'concluído';
     });
   }, [activeCycle, innovationProjects]);
 
@@ -1734,10 +1734,10 @@ export default function PDCAEditor({
                                             <div className="flex flex-col items-end">
                                               <span className={cn(
                                                 "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
-                                                statusLabel === 'entregue' ? "bg-emerald-100 text-emerald-700" :
+                                                statusLabel === 'concluído' ? "bg-emerald-100 text-emerald-700" :
                                                 statusLabel === 'backlog' ? "bg-slate-100 text-slate-600" : "bg-amber-100 text-amber-700"
                                               )}>
-                                                {statusLabel === 'entregue' ? 'Concluído' : statusLabel === 'backlog' ? 'Pendente' : 'Em andamento'}
+                                                {statusLabel === 'concluído' ? 'Concluído' : statusLabel === 'backlog' ? 'Pendente' : 'Em andamento'}
                                               </span>
                                               <span className="text-[9px] font-black text-indigo-500 uppercase tracking-tighter mt-1 italic">Vínculo: Inovação</span>
                                             </div>
@@ -1905,7 +1905,7 @@ export default function PDCAEditor({
                                                 </div>
                                                 <div>
                                                   <p className="text-[10px] font-black text-indigo-800 uppercase tracking-widest">Execução Gerenciada pela Inovação</p>
-                                                  <p className="text-xs text-indigo-600 font-medium mt-1">Este status é atualizado automaticamente via Pipeline de Inovação.</p>
+                                                  <p className="text-xs text-indigo-600 font-medium mt-1">Este status é atualizado automaticamente via Módulo de Inovação.</p>
                                                 </div>
                                               </div>
                                             ) : item.status !== 'Concluído' ? (
@@ -2065,7 +2065,7 @@ export default function PDCAEditor({
                             .map((item) => {
                             const isExpanded = expandedActionId === item.id;
                             const isDoDone = item.actionType === 'Inovação' 
-                              ? innovationProjects.find(ip => ip.id === item.innovationProjectId)?.status === 'entregue'
+                              ? innovationProjects.find(ip => ip.id === item.innovationProjectId)?.status === 'concluído'
                               : item.status === 'Concluído';
                               
                             const idx = activeCycle.plan.actionPlan.findIndex(i => i.id === item.id);
@@ -3007,7 +3007,7 @@ export default function PDCAEditor({
       let p = 25; // PLAN is done
 
       const isDoDone = item.actionType === 'Inovação' 
-        ? innovationProjects.find(ip => ip.id === item.innovationProjectId)?.status === 'entregue'
+        ? innovationProjects.find(ip => ip.id === item.innovationProjectId)?.status === 'concluído'
         : item.status === 'Concluído';
       
       if (isDoDone) {

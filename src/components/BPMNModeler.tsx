@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import Modeler from 'bpmn-js/lib/Modeler';
+import Viewer from 'bpmn-js/lib/NavigatedViewer';
 import 'bpmn-js/dist/assets/diagram-js.css';
 import 'bpmn-js/dist/assets/bpmn-font/css/bpmn.css';
 import 'bpmn-js/dist/assets/bpmn-js.css';
@@ -35,6 +36,7 @@ interface BPMNModelerProps {
   savedColors: SavedColor[];
   onSaveGlobalColor: (color: SavedColor) => void;
   onDeleteGlobalColor: (id: string) => void;
+  readOnly?: boolean;
 }
 
 const INITIAL_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -57,7 +59,8 @@ export default function BPMNModeler({
   projectName,
   savedColors,
   onSaveGlobalColor,
-  onDeleteGlobalColor
+  onDeleteGlobalColor,
+  readOnly = false
 }: BPMNModelerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const modelerRef = useRef<Modeler | null>(null);
@@ -102,9 +105,10 @@ export default function BPMNModeler({
     
     container.addEventListener('wheel', handleWheel, { capture: true });
 
-    const modeler = new Modeler({
+    const ModelerClass = readOnly ? Viewer : Modeler;
+    const modeler = new (ModelerClass as any)({
       container: container,
-      keyboard: {
+      keyboard: readOnly ? undefined : {
         bindOn: window
       }
     });
@@ -397,14 +401,16 @@ export default function BPMNModeler({
 
           <div className="h-6 w-px bg-slate-200" />
 
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
-            <button onClick={undo} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Desfazer">
-              <Undo2 size={16} />
-            </button>
-            <button onClick={redo} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Refazer">
-              <Redo2 size={16} />
-            </button>
-          </div>
+          {!readOnly && (
+            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+              <button onClick={undo} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Desfazer">
+                <Undo2 size={16} />
+              </button>
+              <button onClick={redo} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Refazer">
+                <Redo2 size={16} />
+              </button>
+            </div>
+          )}
 
           <div className="h-6 w-px bg-slate-200" />
 
@@ -488,9 +494,13 @@ export default function BPMNModeler({
                       <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição (Texto da Task)</label>
                     <textarea 
                       value={currentElementData?.description || ''}
-                      onChange={(e) => updateElementData(selectedElement.id, { description: e.target.value })}
+                      onChange={(e) => !readOnly && updateElementData(selectedElement.id, { description: e.target.value })}
+                      readOnly={readOnly}
                       rows={3}
-                      className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium text-slate-700 text-xs resize-none"
+                      className={cn(
+                        "w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium text-slate-700 text-xs resize-none",
+                        readOnly && "bg-slate-100 cursor-not-allowed"
+                      )}
                       placeholder="Este texto aparecerá dentro da task no canvas..."
                     />
                   </div>
@@ -502,8 +512,12 @@ export default function BPMNModeler({
                         type="number" 
                         value={currentElementData?.timeInMinutes || 0}
                         onFocus={(e) => e.target.select()}
-                        onChange={(e) => updateElementData(selectedElement.id, { timeInMinutes: parseInt(e.target.value) || 0 })}
-                        className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700 text-xs"
+                        onChange={(e) => !readOnly && updateElementData(selectedElement.id, { timeInMinutes: parseInt(e.target.value) || 0 })}
+                        readOnly={readOnly}
+                        className={cn(
+                          "w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700 text-xs",
+                          readOnly && "bg-slate-100 cursor-not-allowed"
+                        )}
                       />
                     </div>
                   </div>
@@ -516,10 +530,12 @@ export default function BPMNModeler({
                       <span className="text-[10px] text-slate-400 font-medium">Marcar como gargalo</span>
                     </div>
                     <button 
-                      onClick={() => updateElementData(selectedElement.id, { isProblemStep: !currentElementData?.isProblemStep })}
+                      onClick={() => !readOnly && updateElementData(selectedElement.id, { isProblemStep: !currentElementData?.isProblemStep })}
+                      disabled={readOnly}
                       className={cn(
                         "w-10 h-5 rounded-full p-1 transition-all",
-                        currentElementData?.isProblemStep ? "bg-[#FF6B6B]" : "bg-[#E0E0E0]"
+                        currentElementData?.isProblemStep ? "bg-[#FF6B6B]" : "bg-[#E0E0E0]",
+                        readOnly && "opacity-50"
                       )}
                     >
                       <div className={cn(
@@ -530,113 +546,117 @@ export default function BPMNModeler({
                   </div>
                 </div>
 
-                <div className="pt-6 border-t border-slate-100 space-y-4">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                    <Palette size={12} />
-                    Aparência BPMN
-                  </label>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1.5">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">Fundo</span>
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="color" 
-                          value={currentElementData?.backgroundColor || '#ffffff'}
-                          onChange={(e) => updateElementData(selectedElement.id, { backgroundColor: e.target.value })}
-                          className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0 p-0"
-                        />
-                        <span className="text-[10px] font-mono text-slate-400">{currentElementData?.backgroundColor || '#ffffff'}</span>
-                      </div>
-                    </div>
-                    <div className="space-y-1.5">
-                      <span className="text-[9px] font-bold text-slate-400 uppercase">Borda</span>
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="color" 
-                          value={currentElementData?.borderColor || '#333333'}
-                          onChange={(e) => updateElementData(selectedElement.id, { borderColor: e.target.value })}
-                          className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0 p-0"
-                        />
-                        <span className="text-[10px] font-mono text-slate-400">{currentElementData?.borderColor || '#333333'}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-6 border-t border-slate-100 space-y-4">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Palette size={12} />
-                      Biblioteca de Cores
-                    </div>
-                    <span className="text-[9px] font-bold text-indigo-500 tabular-nums">
-                      {savedColors.length} cores
-                    </span>
-                  </label>
-                  
-                  <div className="grid grid-cols-1 gap-3">
-                    {savedColors.length > 0 ? (
-                      <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-                        {savedColors.map((color) => (
-                          <div 
-                            key={color.id}
-                            className="flex items-center gap-3 p-2 bg-slate-50 border border-slate-100 rounded-xl group hover:border-indigo-200 transition-all cursor-pointer"
-                            onClick={() => updateElementData(selectedElement.id, { 
-                              backgroundColor: color.backgroundColor,
-                              borderColor: color.borderColor
-                            })}
-                          >
-                            <div 
-                              className="w-8 h-8 rounded-lg border-2 shadow-sm shrink-0"
-                              style={{ backgroundColor: color.backgroundColor, borderColor: color.borderColor }}
+                {!readOnly && (
+                  <>
+                    <div className="pt-6 border-t border-slate-100 space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <Palette size={12} />
+                        Aparência BPMN
+                      </label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">Fundo</span>
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="color" 
+                              value={currentElementData?.backgroundColor || '#ffffff'}
+                              onChange={(e) => updateElementData(selectedElement.id, { backgroundColor: e.target.value })}
+                              className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0 p-0"
                             />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-[10px] font-black text-slate-700 truncate">{color.name}</p>
-                              <p className="text-[8px] font-mono text-slate-400 mt-0.5">{color.backgroundColor}</p>
-                            </div>
+                            <span className="text-[10px] font-mono text-slate-400">{currentElementData?.backgroundColor || '#ffffff'}</span>
+                          </div>
+                        </div>
+                        <div className="space-y-1.5">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">Borda</span>
+                          <div className="flex items-center gap-2">
+                            <input 
+                              type="color" 
+                              value={currentElementData?.borderColor || '#333333'}
+                              onChange={(e) => updateElementData(selectedElement.id, { borderColor: e.target.value })}
+                              className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0 p-0"
+                            />
+                            <span className="text-[10px] font-mono text-slate-400">{currentElementData?.borderColor || '#333333'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-6 border-t border-slate-100 space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Palette size={12} />
+                          Biblioteca de Cores
+                        </div>
+                        <span className="text-[9px] font-bold text-indigo-500 tabular-nums">
+                          {savedColors.length} cores
+                        </span>
+                      </label>
+                      
+                      <div className="grid grid-cols-1 gap-3">
+                        {savedColors.length > 0 ? (
+                          <div className="grid grid-cols-1 gap-2 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
+                            {savedColors.map((color) => (
+                              <div 
+                                key={color.id}
+                                className="flex items-center gap-3 p-2 bg-slate-50 border border-slate-100 rounded-xl group hover:border-indigo-200 transition-all cursor-pointer"
+                                onClick={() => updateElementData(selectedElement.id, { 
+                                  backgroundColor: color.backgroundColor,
+                                  borderColor: color.borderColor
+                                })}
+                              >
+                                <div 
+                                  className="w-8 h-8 rounded-lg border-2 shadow-sm shrink-0"
+                                  style={{ backgroundColor: color.backgroundColor, borderColor: color.borderColor }}
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[10px] font-black text-slate-700 truncate">{color.name}</p>
+                                  <p className="text-[8px] font-mono text-slate-400 mt-0.5">{color.backgroundColor}</p>
+                                </div>
+                                <button 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (confirm(`Deseja excluir a cor "${color.name}" da biblioteca?`)) {
+                                      onDeleteGlobalColor(color.id);
+                                    }
+                                  }}
+                                  className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-white rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                >
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="py-6 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nenhuma cor salva</p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 space-y-3">
+                        <div className="space-y-1.5">
+                          <label className="text-[9px] font-black text-indigo-600 uppercase tracking-widest ml-1">Salvar Cor Atual</label>
+                          <div className="flex gap-2">
+                            <input 
+                              type="text"
+                              placeholder="Ex: Etapa Crítica"
+                              value={newColorName}
+                              onChange={(e) => setNewColorName(e.target.value)}
+                              className="flex-1 px-3 py-2 bg-white border border-indigo-100 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
+                            />
                             <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                if (confirm(`Deseja excluir a cor "${color.name}" da biblioteca?`)) {
-                                  onDeleteGlobalColor(color.id);
-                                }
-                              }}
-                              className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-white rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                              onClick={saveCurrentColor}
+                              disabled={!newColorName.trim()}
+                              className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-tight disabled:opacity-50 hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
                             >
-                              <Trash2 size={12} />
+                              Salvar
                             </button>
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="py-6 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nenhuma cor salva</p>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="p-4 bg-indigo-50/50 rounded-2xl border border-indigo-100/50 space-y-3">
-                    <div className="space-y-1.5">
-                      <label className="text-[9px] font-black text-indigo-600 uppercase tracking-widest ml-1">Salvar Cor Atual</label>
-                      <div className="flex gap-2">
-                        <input 
-                          type="text"
-                          placeholder="Ex: Etapa Crítica"
-                          value={newColorName}
-                          onChange={(e) => setNewColorName(e.target.value)}
-                          className="flex-1 px-3 py-2 bg-white border border-indigo-100 rounded-xl text-[10px] font-bold outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm"
-                        />
-                        <button 
-                          onClick={saveCurrentColor}
-                          disabled={!newColorName.trim()}
-                          className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-tight disabled:opacity-50 hover:bg-indigo-700 transition-all shadow-md shadow-indigo-100"
-                        >
-                          Salvar
-                        </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
+                  </>
+                )}
               </div>
             </motion.div>
           )}
@@ -653,6 +673,7 @@ export default function BPMNModeler({
           display: none !important;
         }
         .djs-palette {
+          display: ${readOnly ? 'none !important' : 'block !important'};
           top: 20px !important;
           left: 20px !important;
           border-radius: 12px !important;
@@ -661,6 +682,7 @@ export default function BPMNModeler({
           background: white !important;
         }
         .djs-context-pad {
+          display: ${readOnly ? 'none !important' : 'block !important'};
           border-radius: 8px !important;
           border: 1px solid #e2e8f0 !important;
           box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;

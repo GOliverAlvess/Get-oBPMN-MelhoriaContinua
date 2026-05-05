@@ -12,6 +12,7 @@ import {
   Target,
   GitBranch,
   RefreshCw,
+  Layers,
   Users,
   User as UserIcon,
   FileText,
@@ -70,7 +71,8 @@ import {
   SavedColor, 
   UserProfile,
   InnovationProject,
-  InnovationLog
+  InnovationLog,
+  InnovationConfig
 } from './types';
 import { cn, isValidUrl, formatUrl, cleanObject } from './lib/utils';
 import MappingTab from './components/MappingTab';
@@ -80,6 +82,7 @@ import OperationalActionsTab from './components/OperationalActionsTab';
 import ReportsTab from './components/ReportsTab';
 import ProjectFilesSection from './components/ProjectFilesSection';
 import InnovationView from './components/InnovationView';
+import InnovationDashboardView from './components/InnovationDashboardView';
 import { calculateProjectProgress, calculateProjectStatus, calculateSubtaskStatus } from './lib/projectUtils';
 
 // Error Boundary Component
@@ -190,6 +193,8 @@ export default function App() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [operationalActions, setOperationalActions] = useState<OperationalAction[]>([]);
   const [innovationProjects, setInnovationProjects] = useState<InnovationProject[]>([]);
+  const [innovationConfig, setInnovationConfig] = useState<InnovationConfig>({ technologies: [] });
+  const [targetSubtaskId, setTargetSubtaskId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [globalConfig, setGlobalConfig] = useState<{ sectors: string[], tools: string[] }>({ sectors: [], tools: [] });
   const [bpmnSavedColors, setBpmnSavedColors] = useState<SavedColor[]>([]);
@@ -247,6 +252,13 @@ export default function App() {
       }
     }, (error) => handleFirestoreError(error, OperationType.GET, 'config/global'));
 
+    // Listen for Innovation Config
+    const innovationConfigUnsubscribe = onSnapshot(doc(db, 'config', 'innovation'), (snapshot) => {
+      if (snapshot.exists()) {
+        setInnovationConfig(snapshot.data() as InnovationConfig);
+      }
+    }, (error) => handleFirestoreError(error, OperationType.GET, 'config/innovation'));
+
     // Listen for Operational Actions
     const actionsUnsubscribe = onSnapshot(collection(db, 'operationalActions'), (snapshot) => {
       const actionsData = snapshot.docs.map(doc => doc.data() as OperationalAction);
@@ -269,6 +281,7 @@ export default function App() {
       usersUnsubscribe();
       projectsUnsubscribe();
       configUnsubscribe();
+      innovationConfigUnsubscribe();
       actionsUnsubscribe();
       colorsUnsubscribe();
       innovationUnsubscribe();
@@ -329,7 +342,7 @@ export default function App() {
     setMode(m);
     localStorage.setItem('flowprocess_mode', m);
     if (m === 'inovacao') {
-      setActiveView('innovation');
+      setActiveView('innovation_dashboard');
     } else {
       setActiveView('home');
     }
@@ -768,7 +781,7 @@ export default function App() {
                 <div className="space-y-2">
                   <h3 className="text-2xl font-black text-slate-900">Gestão de Inovações</h3>
                   <p className="text-slate-500 font-medium leading-relaxed">
-                    Gerencie o pipeline de PD&I, prototipagem, automações (RPA) e soluções tecnológicas.
+                    Gerencie projetos de PD&I, prototipagem, automações (RPA) e soluções tecnológicas.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 text-emerald-600 font-black text-xs uppercase tracking-widest pt-4">
@@ -878,18 +891,32 @@ export default function App() {
             )}
             
             {mode === 'inovacao' && (
-              <SidebarItem 
-                active={activeView === 'innovation'}
-                onClick={() => {
-                  if (!confirmNavigation()) return;
-                  setActiveView('innovation');
-                  setSelectedProjectId(null);
-                  setHasChanges(false);
-                }}
-                icon={<Target size={20} />}
-                label="Projetos"
-                collapsed={isSidebarCollapsed}
-              />
+              <>
+                <SidebarItem 
+                  active={activeView === 'innovation_dashboard'}
+                  onClick={() => {
+                    if (!confirmNavigation()) return;
+                    setActiveView('innovation_dashboard');
+                    setSelectedProjectId(null);
+                    setHasChanges(false);
+                  }}
+                  icon={<LayoutDashboard size={20} />}
+                  label="Dashboard"
+                  collapsed={isSidebarCollapsed}
+                />
+                <SidebarItem 
+                  active={activeView === 'innovation'}
+                  onClick={() => {
+                    if (!confirmNavigation()) return;
+                    setActiveView('innovation');
+                    setSelectedProjectId(null);
+                    setHasChanges(false);
+                  }}
+                  icon={<Target size={20} />}
+                  label="Projetos"
+                  collapsed={isSidebarCollapsed}
+                />
+              </>
             )}
 
             <SidebarItem 
@@ -982,6 +1009,12 @@ export default function App() {
                 globalConfig={globalConfig} 
                 projects={projects}
                 actions={operationalActions}
+                mode={mode}
+                innovationConfig={innovationConfig}
+                onUpdateInnovationConfig={(config) => {
+                  const configRef = doc(db, 'config', 'innovation');
+                  setDoc(configRef, config).catch(e => handleFirestoreError(e, OperationType.WRITE, 'config/innovation'));
+                }}
               />
             ) : activeView === 'dashboard' ? (
               <DashboardView 
@@ -998,12 +1031,27 @@ export default function App() {
                 projects={projects}
                 users={users}
               />
+            ) : activeView === 'innovation_dashboard' ? (
+              <InnovationDashboardView 
+                key="innovation_dashboard"
+                innovationProjects={innovationProjects}
+                users={users}
+              />
             ) : activeView === 'innovation' ? (
               <InnovationView 
                 innovationProjects={innovationProjects}
                 projects={projects}
                 users={users}
                 onDeleteInnovationProject={handleDeleteInnovationProject}
+                onUpdateInnovationProject={handleUpdateInnovationProject}
+                bpmnSavedColors={bpmnSavedColors}
+                onSaveBpmnColor={(color) => setBpmnSavedColors(prev => [...prev, color])}
+                onDeleteBpmnColor={(id) => setBpmnSavedColors(prev => prev.filter(c => c.id !== id))}
+                innovationConfig={innovationConfig}
+                onUpdateInnovationConfig={(config) => {
+                  const configRef = doc(db, 'config', 'innovation');
+                  setDoc(configRef, config).catch(e => handleFirestoreError(e, OperationType.WRITE, 'config/innovation'));
+                }}
               />
             ) : !selectedProjectId ? (
               <KanbanView 
@@ -1033,6 +1081,8 @@ export default function App() {
                 onAddInnovationProject={handleAddInnovationProject}
                 onUpdateInnovationProject={handleUpdateInnovationProject}
                 innovationProjects={innovationProjects}
+                initialSubtaskId={targetSubtaskId}
+                onClearInitialSubtask={() => setTargetSubtaskId(null)}
               />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
@@ -1585,7 +1635,9 @@ function ProjectDetailView({
   saveStatus,
   onAddInnovationProject,
   onUpdateInnovationProject,
-  innovationProjects = []
+  innovationProjects = [],
+  initialSubtaskId,
+  onClearInitialSubtask
 }: { 
   project: Project, 
   activeTab: string, 
@@ -1603,9 +1655,18 @@ function ProjectDetailView({
   onAddInnovationProject?: (data: any) => Promise<string>,
   onUpdateInnovationProject?: (id: string, updates: Partial<InnovationProject>) => Promise<void>,
   innovationProjects?: InnovationProject[],
+  initialSubtaskId?: string | null,
+  onClearInitialSubtask?: () => void,
   key?: string
 }) {
-  const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(null);
+  const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(initialSubtaskId || null);
+
+  useEffect(() => {
+    if (initialSubtaskId) {
+      setSelectedSubtaskId(initialSubtaskId);
+      if (onClearInitialSubtask) onClearInitialSubtask();
+    }
+  }, [initialSubtaskId, onClearInitialSubtask]);
 
   const selectedSubtask = project.subtasks?.find(s => s.id === selectedSubtaskId);
 
@@ -2693,20 +2754,26 @@ function CreateProjectModal({ isOpen, onClose, onCreate, users }: {
 
 // --- SETTINGS VIEW ---
 
-function SettingsView({ users, globalConfig, projects, actions }: { 
+function SettingsView({ users, globalConfig, projects, actions, mode, innovationConfig, onUpdateInnovationConfig }: { 
   users: User[], 
   globalConfig: { sectors: string[], tools: string[] }, 
   projects: Project[],
   actions: OperationalAction[],
+  mode: 'processos' | 'inovacao' | null,
+  innovationConfig: InnovationConfig,
+  onUpdateInnovationConfig: (config: InnovationConfig) => void,
   key?: string 
 }) {
-  const [activeSubTab, setActiveSubTab] = useState<'perfil' | 'cadastros' | 'setores-ferramentas' | 'relatorios'>('cadastros');
+  const [activeSubTab, setActiveSubTab] = useState<'cadastros' | 'setores-ferramentas' | 'relatorios' | 'tecnologias'>('cadastros');
 
   const menuItems = [
     { id: 'cadastros', label: 'Cadastros', icon: <Users size={18} /> },
-    { id: 'setores-ferramentas', label: 'Setores e Ferramentas', icon: <Settings size={18} /> },
+    { 
+      id: mode === 'inovacao' ? 'tecnologias' : 'setores-ferramentas', 
+      label: mode === 'inovacao' ? 'Tecnologias e automações' : 'Setores e Ferramentas', 
+      icon: <Settings size={18} /> 
+    },
     { id: 'relatorios', label: 'Relatórios', icon: <FileText size={18} /> },
-    { id: 'perfil', label: 'Meu Perfil', icon: <UserIcon size={18} /> },
   ] as const;
 
   return (
@@ -2759,25 +2826,148 @@ function SettingsView({ users, globalConfig, projects, actions }: {
             className="flex-1 flex flex-col"
           >
             {activeSubTab === 'cadastros' && <UserRegistrationTab users={users} currentUser={users.find(u => u.id === auth.currentUser?.uid)} />}
-            {activeSubTab === 'setores-ferramentas' && <GlobalConfigTab config={globalConfig} />}
-            {activeSubTab === 'relatorios' && <ReportsTab projects={projects} users={users} actions={actions} />}
-            {activeSubTab === 'perfil' && (
-              <div className="flex-1 flex flex-col items-center justify-center p-12 text-center space-y-6 w-full">
-                <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 ring-8 ring-slate-50">
-                  <UserIcon size={48} />
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-slate-800">Meus Dados</h3>
-                  <p className="text-slate-500 mt-1 mx-auto">Em breve você poderá gerenciar sua senha e dados pessoais aqui.</p>
-                </div>
-                <div className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 rounded-full text-xs font-bold border border-amber-100">
-                  <Clock size={14} />
-                  <span>FUNCIONALIDADE EM DESENVOLVIMENTO</span>
-                </div>
-              </div>
+            {activeSubTab === 'setores-ferramentas' && mode !== 'inovacao' && <GlobalConfigTab config={globalConfig} />}
+            {activeSubTab === 'tecnologias' && mode === 'inovacao' && (
+              <InnovationConfigTab 
+                config={innovationConfig} 
+                onUpdateConfig={onUpdateInnovationConfig} 
+              />
             )}
+            {activeSubTab === 'relatorios' && <ReportsTab projects={projects} users={users} actions={actions} />}
           </motion.div>
         </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+function InnovationConfigTab({ config, onUpdateConfig }: { 
+  config: InnovationConfig, 
+  onUpdateConfig: (config: InnovationConfig) => void 
+}) {
+  const [newTech, setNewTech] = useState('');
+  const [editingTech, setEditingTech] = useState<{ index: number, value: string } | null>(null);
+
+  const addTech = () => {
+    if (!newTech.trim()) return;
+    onUpdateConfig({
+      ...config,
+      technologies: [...(config.technologies || []), newTech.trim()]
+    });
+    setNewTech('');
+  };
+
+  const removeTech = (index: number) => {
+    onUpdateConfig({
+      ...config,
+      technologies: config.technologies.filter((_, i) => i !== index)
+    });
+  };
+
+  const updateTech = () => {
+    if (!editingTech || !editingTech.value.trim()) return;
+    const newTechnologies = [...config.technologies];
+    newTechnologies[editingTech.index] = editingTech.value.trim();
+    onUpdateConfig({ ...config, technologies: newTechnologies });
+    setEditingTech(null);
+  };
+
+  return (
+    <div className="p-8 space-y-10 w-full overflow-y-auto max-h-[80vh] custom-scrollbar">
+      <div className="flex items-center gap-4 border-b border-slate-100 pb-8">
+        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner">
+          <Layers size={24} />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-slate-900 leading-tight">Tecnologias e automações</h3>
+          <p className="text-slate-500 text-sm mt-1">Gerencie as linguagens e tipos de automação do módulo de Inovação.</p>
+        </div>
+        <div className="ml-auto bg-indigo-50 text-indigo-700 text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-widest border border-indigo-100">
+          {config.technologies?.length || 0} Itens
+        </div>
+      </div>
+
+      <div className="max-w-2xl space-y-8">
+        <div className="space-y-3">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Adicionar Nova Tecnologia</label>
+          <div className="flex h-12 gap-2">
+            <input 
+              type="text" 
+              value={newTech}
+              onChange={(e) => setNewTech(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && addTech()}
+              placeholder="Ex: Python, RPA, Chatbot, IA..."
+              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 text-sm font-medium outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm"
+            />
+            <button 
+              onClick={addTech}
+              className="w-12 h-12 bg-indigo-600 text-white rounded-xl flex items-center justify-center hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 shrink-0"
+            >
+              <Plus size={20} />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {config.technologies?.map((tech, index) => (
+            <div 
+              key={index}
+              className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-2xl group hover:border-indigo-200 hover:bg-white transition-all shadow-sm hover:shadow-md"
+            >
+              {editingTech?.index === index ? (
+                <div className="flex-1 flex gap-2">
+                  <input 
+                    type="text" 
+                    value={editingTech.value}
+                    onChange={(e) => setEditingTech({ ...editingTech, value: e.target.value })}
+                    onKeyDown={(e) => e.key === 'Enter' && updateTech()}
+                    onBlur={updateTech}
+                    autoFocus
+                    className="flex-1 bg-white border border-indigo-500 rounded-lg px-2 py-1 text-sm font-medium outline-none"
+                  />
+                </div>
+              ) : (
+                <span className="text-sm font-bold text-slate-700">{tech}</span>
+              )}
+              
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button 
+                  onClick={() => setEditingTech({ index, value: tech })}
+                  className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"
+                >
+                  <Edit size={14} />
+                </button>
+                <button 
+                  onClick={() => removeTech(index)}
+                  className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+          
+          {(!config.technologies || config.technologies.length === 0) && (
+            <div className="col-span-full py-12 text-center bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200">
+              <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-slate-300 mx-auto mb-4 border border-slate-100 shadow-sm">
+                <Layers size={20} />
+              </div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nenhuma tecnologia cadastrada</p>
+            </div>
+          )}
+        </div>
+      </div>
+      
+      <div className="bg-amber-50 border border-amber-100 rounded-2xl p-6 flex gap-4 items-start max-w-2xl">
+        <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-amber-500 shadow-sm shrink-0 border border-amber-200">
+          <AlertCircle size={20} />
+        </div>
+        <div className="space-y-1">
+          <h4 className="text-sm font-bold text-amber-900">Uso do Cadastro</h4>
+          <p className="text-xs text-amber-700 leading-relaxed font-medium">
+            Estas tecnologias serão exibidas como opções de múltipla escolha na aba **Escopo Técnico** de todos os projetos de Inovação. Alterações aqui são refletidas imediatamente.
+          </p>
+        </div>
       </div>
     </div>
   );

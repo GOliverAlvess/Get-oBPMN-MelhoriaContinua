@@ -18,7 +18,11 @@ import {
   Layers,
   MoreVertical,
   Trash2,
-  Calendar
+  Calendar,
+  Edit,
+  ChevronRight,
+  Save,
+  CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -26,39 +30,114 @@ import { ptBR } from 'date-fns/locale';
 import { v4 as uuidv4 } from 'uuid';
 import { 
   Project, 
+  ProjectPriority,
   User, 
   InnovationProject, 
   InnovationStatus, 
   InnovationComplexity,
   InnovationSolutionType,
-  InnovationLog
+  InnovationLog,
+  SavedColor,
+  InnovationConfig
 } from '../types';
 import { cn, cleanObject } from '../lib/utils';
 import { db, setDoc, doc, handleFirestoreError, OperationType, deleteDoc } from '../firebase';
 import InnovationProjectDetail from './InnovationProjectDetail';
+import MappingTab from './MappingTab';
+import { calculateInnovationStatusAndProgress } from '../lib/innovationUtils';
 
 interface InnovationViewProps {
   innovationProjects: InnovationProject[];
   projects: Project[];
   users: User[];
   onDeleteInnovationProject?: (id: string) => Promise<void>;
+  onUpdateInnovationProject?: (id: string, updates: Partial<InnovationProject>) => Promise<void>;
+  onNavigateToMapping?: (projectId: string, subtaskId: string) => void;
+  bpmnSavedColors: SavedColor[];
+  onSaveBpmnColor: (color: SavedColor) => void;
+  onDeleteBpmnColor: (id: string) => void;
+  innovationConfig: InnovationConfig;
+  onUpdateInnovationConfig: (config: InnovationConfig) => void;
 }
 
 const statusColumns: { id: InnovationStatus; label: string; color: string }[] = [
   { id: 'backlog', label: 'Backlog', color: 'bg-slate-400' },
   { id: 'análise', label: 'Análise', color: 'bg-amber-400' },
-  { id: 'desenvolvimento', label: 'Desenvolvimento', color: 'bg-blue-400' },
-  { id: 'teste', label: 'Teste', color: 'bg-indigo-400' },
-  { id: 'entregue', label: 'Entregue', color: 'bg-emerald-400' }
+  { id: 'planejamento', label: 'Em planejamento', color: 'bg-blue-400' },
+  { id: 'desenvolvimento', label: 'Em desenvolvimento', color: 'bg-indigo-400' },
+  { id: 'teste', label: 'Em teste', color: 'bg-purple-400' },
+  { id: 'concluído', label: 'Concluído', color: 'bg-emerald-400' }
 ];
 
-export default function InnovationView({ innovationProjects, projects, users, onDeleteInnovationProject }: InnovationViewProps) {
+export default function InnovationView({ 
+  innovationProjects, 
+  projects, 
+  users, 
+  onDeleteInnovationProject,
+  onUpdateInnovationProject,
+  onNavigateToMapping,
+  bpmnSavedColors,
+  onSaveBpmnColor,
+  onDeleteBpmnColor,
+  innovationConfig,
+  onUpdateInnovationConfig
+}: InnovationViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProject, setSelectedProject] = useState<InnovationProject | null>(null);
   const [showDetail, setShowDetail] = useState(false);
+  const [viewingBpmn, setViewingBpmn] = useState<{ projectId: string, subtaskId: string } | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [visibleStatuses, setVisibleStatuses] = useState<InnovationStatus[]>([]);
+  const [visibleCollaborators, setVisibleCollaborators] = useState<string[]>([]);
+  const [groupBy, setGroupBy] = useState<'status' | 'collaborator'>('status');
   const [projectToDelete, setProjectToDelete] = useState<InnovationProject | null>(null);
+  const [projectToEdit, setProjectToEdit] = useState<InnovationProject | null>(null);
+
+  // Effect to automatically update status and progress for all projects
+  useEffect(() => {
+    const updateOutdatedProjects = async () => {
+      for (const project of innovationProjects) {
+        const { status: autoStatus, progress: autoProgress } = calculateInnovationStatusAndProgress(project);
+        
+        // Check if update is needed (status changed or progress changed or status is old 'entregue')
+        const isEntregue = (project.status as string) === 'entregue';
+        const statusChanged = project.status !== autoStatus || isEntregue;
+        const progressChanged = project.progress !== autoProgress;
+
+        if (statusChanged || progressChanged) {
+          try {
+            const projectRef = doc(db, 'innovationProjects', project.id);
+            await setDoc(projectRef, { 
+              ...project, 
+              status: autoStatus, 
+              progress: autoProgress,
+              updatedAt: new Date().toISOString() 
+            });
+            
+            if (statusChanged) {
+              await logStatusChange({ ...project, status: autoStatus }, project.status, autoStatus);
+            }
+          } catch (error) {
+            console.error("Error auto-updating project:", project.id, error);
+          }
+        }
+      }
+    };
+
+    if (innovationProjects.length > 0) {
+      updateOutdatedProjects();
+    }
+  }, [innovationProjects]);
+
+  // Keep selectedProject in sync with prop if it changes externally
+  useEffect(() => {
+    if (selectedProject) {
+      const updated = innovationProjects.find(p => p.id === selectedProject.id);
+      if (updated && JSON.stringify(updated) !== JSON.stringify(selectedProject)) {
+        setSelectedProject(updated);
+      }
+    }
+  }, [innovationProjects, selectedProject]);
 
   const filteredProjects = useMemo(() => {
     return innovationProjects.filter(p => !p.deleted).filter(p => {
@@ -66,9 +145,28 @@ export default function InnovationView({ innovationProjects, projects, users, on
                             (p.projectName || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                             (p.processName || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStatus = visibleStatuses.length === 0 || visibleStatuses.includes(p.status);
-      return matchesSearch && matchesStatus;
+      const matchesCollaborator = visibleCollaborators.length === 0 || (p.responsibleId && visibleCollaborators.includes(p.responsibleId));
+      return matchesSearch && matchesStatus && matchesCollaborator;
     });
-  }, [innovationProjects, searchTerm, visibleStatuses]);
+  }, [innovationProjects, searchTerm, visibleStatuses, visibleCollaborators]);
+
+  const columns = useMemo(() => {
+    if (groupBy === 'status') {
+      return visibleStatuses.length === 0 ? statusColumns : statusColumns.filter(c => visibleStatuses.includes(c.id));
+    } else {
+      // In collaborator view, only show users who have projects or those selected in filter
+      const relevantUsers = visibleCollaborators.length === 0 
+        ? users.filter(u => innovationProjects.some(p => p.responsibleId === u.id && !p.deleted))
+        : users.filter(u => visibleCollaborators.includes(u.id));
+      
+      return relevantUsers.map(u => ({
+        id: u.id as any, // casting to keep logic similar
+        label: u.name,
+        color: 'bg-indigo-400',
+        user: u
+      }));
+    }
+  }, [groupBy, visibleStatuses, visibleCollaborators, innovationProjects, users]);
 
   const logStatusChange = async (innovationProject: InnovationProject, previousStatus: InnovationStatus | '', newStatus: InnovationStatus) => {
     if (newStatus === previousStatus) return;
@@ -119,40 +217,36 @@ export default function InnovationView({ innovationProjects, projects, users, on
     if (!selectedProject) return;
     try {
       const previousStatus = selectedProject.status;
-      const projectRef = doc(db, 'innovationProjects', selectedProject.id);
-      const fullUpdate = { ...selectedProject, ...updates, updatedAt: new Date().toISOString() };
-      await setDoc(projectRef, fullUpdate);
       
-      if (updates.status && updates.status !== previousStatus) {
-        await logStatusChange(fullUpdate, previousStatus, updates.status as InnovationStatus);
+      // Automatic status and progress calculation
+      const projectWithUpdates = { ...selectedProject, ...updates };
+      const { status: autoStatus, progress: autoProgress } = calculateInnovationStatusAndProgress(projectWithUpdates);
+      
+      const finalUpdates = { ...updates, status: autoStatus, progress: autoProgress };
+
+      if (onUpdateInnovationProject) {
+        await onUpdateInnovationProject(selectedProject.id, finalUpdates);
+      } else {
+        const projectRef = doc(db, 'innovationProjects', selectedProject.id);
+        const fullUpdate = { ...selectedProject, ...finalUpdates, updatedAt: new Date().toISOString() };
+        await setDoc(projectRef, fullUpdate);
       }
       
-      setSelectedProject(fullUpdate);
+      if (finalUpdates.status && finalUpdates.status !== previousStatus) {
+        const fullUpdate = { ...selectedProject, ...finalUpdates };
+        await logStatusChange(fullUpdate, previousStatus, finalUpdates.status as InnovationStatus);
+      }
+      
+      // The useEffect will handle syncing selectedProject from props
     } catch (error) {
       handleFirestoreError(error, OperationType.WRITE, `innovationProjects/${selectedProject.id}`);
     }
   };
 
   const handleUpdateStatus = async (projectId: string, newStatus: InnovationStatus) => {
-    try {
-      const innovationProject = innovationProjects.find(p => p.id === projectId);
-      if (!innovationProject) return;
-
-      const previousStatus = innovationProject.status;
-      
-      const projectRef = doc(db, 'innovationProjects', projectId);
-      const updatedProject = { 
-        ...innovationProject, 
-        status: newStatus,
-        updatedAt: new Date().toISOString()
-      };
-      await setDoc(projectRef, updatedProject);
-
-      // Log the change in PDCA
-      await logStatusChange(updatedProject, previousStatus, newStatus);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `innovationProjects/${projectId}`);
-    }
+    // Disabled as requested: status is now automatic
+    console.log("Manual status update disabled for", projectId, "to", newStatus);
+    return;
   };
 
   const handleDeleteInnovation = async (id: string) => {
@@ -161,6 +255,50 @@ export default function InnovationView({ innovationProjects, projects, users, on
       setProjectToDelete(null);
     }
   };
+
+  if (viewingBpmn) {
+    const project = projects.find(p => p.id === viewingBpmn.projectId);
+    const subtask = project?.subtasks.find(s => s.id === viewingBpmn.subtaskId);
+
+    if (!project || !subtask) {
+      setViewingBpmn(null);
+      return null;
+    }
+
+    return (
+      <div className="flex flex-col gap-6 h-screen -mt-4 bg-slate-50">
+        <div className="flex items-center justify-between px-8 py-4 bg-white border-b border-slate-100 shadow-sm">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setViewingBpmn(null)}
+              className="w-10 h-10 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-all"
+            >
+              <ArrowRight size={20} className="rotate-180" />
+            </button>
+            <div>
+              <h3 className="text-lg font-black text-slate-900 leading-none">Mapeamento do Processo</h3>
+              <p className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider mt-1">{project.scope.title} / {subtask.title}</p>
+            </div>
+          </div>
+          <div className="px-4 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-[10px] font-black uppercase tracking-widest border border-amber-200">
+            Modo Visualização (Read-Only)
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-hidden">
+          <MappingTab 
+            project={project}
+            subtask={subtask}
+            onUpdateSubtask={() => {}} // Read-only
+            savedColors={bpmnSavedColors}
+            onSaveGlobalColor={onSaveBpmnColor}
+            onDeleteGlobalColor={onDeleteBpmnColor}
+            readOnly={true}
+          />
+        </div>
+      </div>
+    );
+  }
 
   if (showDetail && selectedProject) {
     return (
@@ -173,6 +311,8 @@ export default function InnovationView({ innovationProjects, projects, users, on
           setSelectedProject(null);
         }}
         onUpdate={handleUpdateInnovation}
+        onNavigateToMapping={(pid, sid) => setViewingBpmn({ projectId: pid, subtaskId: sid })}
+        innovationConfig={innovationConfig}
       />
     );
   }
@@ -216,9 +356,13 @@ export default function InnovationView({ innovationProjects, projects, users, on
       </AnimatePresence>
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-3xl font-bold text-slate-900">Projetos</h2>
-          <p className="text-slate-500 mt-1">Gerenciamento técnico de soluções tecnológicas.</p>
+        <div className="flex items-center gap-8">
+          <div>
+            <h2 className="text-3xl font-bold text-slate-900">Inovação</h2>
+            <p className="text-slate-500 mt-1">
+              Visualizando por {groupBy === 'status' ? 'status' : 'colaborador'}.
+            </p>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -232,21 +376,45 @@ export default function InnovationView({ innovationProjects, projects, users, on
             />
           </div>
 
+          <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+            <button 
+              onClick={() => setGroupBy('status')}
+              className={cn(
+                "px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2",
+                groupBy === 'status' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              <Target size={16} />
+              Status
+            </button>
+            <button 
+              onClick={() => setGroupBy('collaborator')}
+              className={cn(
+                "px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2",
+                groupBy === 'collaborator' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
+              )}
+            >
+              <Users size={16} />
+              Colaborador
+            </button>
+          </div>
+
           <div className="relative">
             <button 
               onClick={() => setIsFilterOpen(!isFilterOpen)}
               className={cn(
                 "flex items-center gap-2 px-4 py-3 rounded-xl font-bold text-sm transition-all border shadow-sm relative",
-                isFilterOpen || visibleStatuses.length > 0 ? "bg-indigo-50 border-indigo-200 text-indigo-600" : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+                isFilterOpen || (visibleStatuses.length + visibleCollaborators.length) > 0 ? "bg-indigo-50 border-indigo-200 text-indigo-600" : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
               )}
             >
               <Filter size={18} />
               <span>Filtros</span>
-              {visibleStatuses.length > 0 && (
+              {(visibleStatuses.length + visibleCollaborators.length) > 0 && (
                 <span className="absolute -top-2 -right-2 w-5 h-5 bg-indigo-600 text-white text-[10px] flex items-center justify-center rounded-full border-2 border-white font-black">
-                  {visibleStatuses.length}
+                  {visibleStatuses.length + visibleCollaborators.length}
                 </span>
               )}
+              <ChevronDown size={16} className={cn("transition-transform", isFilterOpen && "rotate-180")} />
             </button>
 
             <AnimatePresence>
@@ -255,10 +423,16 @@ export default function InnovationView({ innovationProjects, projects, users, on
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute right-0 mt-2 w-64 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 p-5 space-y-4"
+                  className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-100 z-50 p-5 space-y-6"
                 >
                   <div className="space-y-3">
-                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Filtrar Status</h4>
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Filtrar Status</h4>
+                      <div className="flex gap-2">
+                        <button onClick={() => setVisibleStatuses(statusColumns.map(c => c.id))} className="text-[9px] font-bold text-indigo-600 hover:underline">Todos</button>
+                        <button onClick={() => setVisibleStatuses([])} className="text-[9px] font-bold text-slate-400 hover:underline">Nenhum</button>
+                      </div>
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {statusColumns.map(col => (
                         <button 
@@ -278,8 +452,54 @@ export default function InnovationView({ innovationProjects, projects, users, on
                       ))}
                     </div>
                   </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">Filtrar Colaboradores</h4>
+                      <div className="flex gap-2">
+                        <button onClick={() => setVisibleCollaborators(users.map(u => u.id))} className="text-[9px] font-bold text-indigo-600 hover:underline">Todos</button>
+                        <button onClick={() => setVisibleCollaborators([])} className="text-[9px] font-bold text-slate-400 hover:underline">Nenhum</button>
+                      </div>
+                    </div>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                      {users.map(u => (
+                        <button 
+                          key={u.id}
+                          onClick={() => setVisibleCollaborators(prev => 
+                            prev.includes(u.id) ? prev.filter(id => id !== u.id) : [...prev, u.id]
+                          )}
+                          className={cn(
+                            "w-full flex items-center gap-3 p-2 rounded-xl border transition-all text-left",
+                            visibleCollaborators.includes(u.id)
+                              ? "bg-indigo-50 border-indigo-200"
+                              : "bg-white border-slate-100 hover:border-slate-200"
+                          )}
+                        >
+                          <div className={cn(
+                            "w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold uppercase",
+                            visibleCollaborators.includes(u.id) ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-400"
+                          )}>
+                            {u.name.split(' ').map(n => n[0]).join('')}
+                          </div>
+                          <span className={cn(
+                            "text-xs font-bold truncate",
+                            visibleCollaborators.includes(u.id) ? "text-indigo-600" : "text-slate-500"
+                          )}>{u.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="pt-2 border-t border-slate-100 flex justify-between">
-                    <button onClick={() => setVisibleStatuses([])} className="text-[10px] font-bold text-indigo-600 hover:underline">Limpar</button>
+                    <button 
+                      onClick={() => {
+                        setVisibleStatuses([]);
+                        setVisibleCollaborators([]);
+                      }} 
+                      className="text-[10px] font-bold text-indigo-600 hover:underline"
+                    >
+                      Limpar
+                    </button>
                     <button onClick={() => setIsFilterOpen(false)} className="text-[10px] font-bold text-slate-400 hover:text-slate-600">Fechar</button>
                   </div>
                 </motion.div>
@@ -290,14 +510,22 @@ export default function InnovationView({ innovationProjects, projects, users, on
       </div>
 
       <div className="flex flex-col lg:flex-row gap-6 overflow-x-auto pb-4 min-h-[600px] custom-scrollbar">
-        {statusColumns.map(column => {
-          const columnProjects = filteredProjects.filter(p => p.status === column.id);
+        {columns.map(column => {
+          const columnProjects = filteredProjects.filter(p => 
+            groupBy === 'status' ? p.status === column.id : p.responsibleId === column.id
+          );
           
           return (
             <div key={column.id} className="flex flex-col gap-4 min-w-[320px] flex-1">
               <div className="flex items-center justify-between px-2">
                 <div className="flex items-center gap-3">
-                  <div className={cn("w-3 h-3 rounded-full", column.color)} />
+                  {groupBy === 'status' ? (
+                    <div className={cn("w-3 h-3 rounded-full", column.color)} />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-[10px] uppercase">
+                      {(column as any).user?.name.split(' ').map((n: string) => n[0]).join('')}
+                    </div>
+                  )}
                   <h3 className="font-bold text-slate-700">{column.label}</h3>
                   <span className="bg-slate-200 text-slate-600 text-xs px-2 py-0.5 rounded-full font-medium">
                     {columnProjects.length}
@@ -315,6 +543,7 @@ export default function InnovationView({ innovationProjects, projects, users, on
                       setShowDetail(true);
                     }}
                     onDelete={() => setProjectToDelete(project)}
+                    onEdit={() => setProjectToEdit(project)}
                   />
                 ))}
                 
@@ -337,11 +566,202 @@ export default function InnovationView({ innovationProjects, projects, users, on
         projects={projects}
         onUpdateProject={handleUpdateInnovation}
       />
+
+      <EditInnovationCardModal 
+        project={projectToEdit}
+        onClose={() => setProjectToEdit(null)}
+        users={users}
+        onUpdate={async (updates) => {
+          if (projectToEdit) {
+             // We need to use handlesUpdateInnovation-like logic but for projectToEdit
+             try {
+                const previousStatus = projectToEdit.status;
+                const projectWithUpdates = { ...projectToEdit, ...updates };
+                const { status: autoStatus, progress: autoProgress } = calculateInnovationStatusAndProgress(projectWithUpdates);
+                
+                const finalUpdates = { ...updates, status: autoStatus, progress: autoProgress };
+
+                if (onUpdateInnovationProject) {
+                  await onUpdateInnovationProject(projectToEdit.id, finalUpdates);
+                } else {
+                  const projectRef = doc(db, 'innovationProjects', projectToEdit.id);
+                  const fullUpdate = { ...projectToEdit, ...finalUpdates, updatedAt: new Date().toISOString() };
+                  await setDoc(projectRef, fullUpdate);
+                }
+                
+                if (finalUpdates.status && finalUpdates.status !== previousStatus) {
+                  const fullUpdate = { ...projectToEdit, ...finalUpdates };
+                  await logStatusChange(fullUpdate, previousStatus, finalUpdates.status as InnovationStatus);
+                }
+                setProjectToEdit(null);
+             } catch (error) {
+                handleFirestoreError(error, OperationType.WRITE, `innovationProjects/${projectToEdit.id}`);
+             }
+          }
+        }}
+      />
     </div>
   );
 }
 
-function InnovationCard({ project, onClick, onDelete }: { project: InnovationProject, onClick: () => void, onDelete: () => void | Promise<void>, key?: any }) {
+function EditInnovationCardModal({ 
+  project, 
+  onClose, 
+  users, 
+  onUpdate 
+}: { 
+  project: InnovationProject | null, 
+  onClose: () => void,
+  users: User[],
+  onUpdate: (updates: Partial<InnovationProject>) => Promise<void>
+}) {
+  const [responsibleId, setResponsibleId] = useState('');
+  const [priority, setPriority] = useState<ProjectPriority>('Média');
+  const [deadline, setDeadline] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+
+  useEffect(() => {
+    if (project) {
+      setResponsibleId(project.responsibleId || '');
+      setPriority(project.priority || 'Média');
+      setDeadline(project.deadline || '');
+      setShowSuccess(false);
+    }
+  }, [project]);
+
+  if (!project) return null;
+
+  const handleSave = async () => {
+    if (!responsibleId) return;
+    setIsSaving(true);
+    try {
+      const user = users.find(u => u.id === responsibleId);
+      await onUpdate({
+        responsibleId,
+        responsibleName: user?.name,
+        priority,
+        deadline
+      });
+      setShowSuccess(true);
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 20 }}
+          className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {showSuccess && (
+            <motion.div 
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute inset-x-0 top-0 z-50 p-4 bg-emerald-500 text-white text-center font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2"
+            >
+              <CheckCircle2 size={16} />
+              Card atualizado com sucesso!
+            </motion.div>
+          )}
+
+          <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg">
+                <Edit size={22} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Editar Card</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Ajuste rápido</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-white rounded-xl transition-all text-slate-400">
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="p-8 space-y-6">
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1 flex items-center gap-1.5">
+                <UserIcon size={14} className="text-indigo-500" />
+                Responsável <span className="text-rose-500">*</span>
+              </label>
+              <select 
+                value={responsibleId}
+                onChange={(e) => setResponsibleId(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+              >
+                <option value="">Selecione um responsável...</option>
+                {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1 flex items-center gap-1.5">
+                <Target size={14} className="text-indigo-500" />
+                Prioridade
+              </label>
+              <select 
+                value={priority}
+                onChange={(e) => setPriority(e.target.value as any)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+              >
+                <option value="Baixa">Baixa</option>
+                <option value="Média">Média</option>
+                <option value="Alta">Alta</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1 flex items-center gap-1.5">
+                <Calendar size={14} className="text-indigo-500" />
+                Prazo de Conclusão
+              </label>
+              <input 
+                type="date"
+                value={deadline}
+                onChange={(e) => setDeadline(e.target.value)}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+              />
+            </div>
+          </div>
+
+          <div className="p-8 bg-slate-50 border-t border-slate-100 flex gap-3">
+             <button 
+              onClick={onClose}
+              className="flex-1 px-6 py-3 bg-white border border-slate-200 text-slate-500 rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-slate-100 transition-all font-black"
+            >
+              Cancelar
+            </button>
+             <button 
+              onClick={handleSave}
+              disabled={isSaving || !responsibleId}
+              className={cn(
+                "flex-1 px-6 py-3 text-white rounded-xl text-xs font-bold uppercase tracking-widest transition-all shadow-lg font-black flex items-center justify-center gap-2",
+                isSaving || !responsibleId ? "bg-slate-300 shadow-none cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100"
+              )}
+            >
+              {isSaving ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+              Salvar
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+}
+
+function InnovationCard({ project, onClick, onDelete, onEdit }: { project: InnovationProject, onClick: () => void, onDelete: () => void | Promise<void>, onEdit: () => void, key?: any }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -355,11 +775,28 @@ function InnovationCard({ project, onClick, onDelete }: { project: InnovationPro
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const complexityStyles: Record<string, string> = {
-    'Baixa': 'bg-emerald-100 text-emerald-700 border-emerald-200',
-    'Média': 'bg-amber-100 text-amber-700 border-amber-200',
-    'Alta': 'bg-rose-100 text-rose-700 border-rose-200',
-    'Muito Alta': 'bg-purple-100 text-purple-700 border-purple-200'
+  const statusColors = {
+    'backlog': 'bg-slate-100 text-slate-700 border-slate-200',
+    'análise': 'bg-amber-100 text-amber-700 border-amber-200',
+    'planejamento': 'bg-blue-100 text-blue-700 border-blue-200',
+    'desenvolvimento': 'bg-indigo-100 text-indigo-700 border-indigo-200',
+    'teste': 'bg-purple-100 text-purple-700 border-purple-200',
+    'concluído': 'bg-emerald-100 text-emerald-700 border-emerald-200'
+  };
+
+  const statusLabels = {
+    'backlog': 'Backlog',
+    'análise': 'Análise',
+    'planejamento': 'Planejamento',
+    'desenvolvimento': 'Desenvolvimento',
+    'teste': 'Teste',
+    'concluído': 'Concluído'
+  };
+
+  const priorityColors = {
+    'Baixa': 'bg-slate-100 text-slate-600',
+    'Média': 'bg-indigo-100 text-indigo-600',
+    'Alta': 'bg-rose-100 text-rose-600'
   };
 
   return (
@@ -372,9 +809,15 @@ function InnovationCard({ project, onClick, onDelete }: { project: InnovationPro
         <div className="flex flex-wrap gap-2">
           <span className={cn(
             "text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-md border",
-            complexityStyles[project.complexity as string] || 'bg-slate-100 text-slate-600 border-slate-200'
+            statusColors[project.status]
           )}>
-            {project.complexity || 'N/A'}
+            {statusLabels[project.status]}
+          </span>
+          <span className={cn(
+            "text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-md",
+            priorityColors[project.priority || 'Baixa']
+          )}>
+            {project.priority || 'Baixa'}
           </span>
           {project.type && (
             <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-1 rounded-md border bg-indigo-50 text-indigo-600 border-indigo-100">
@@ -386,7 +829,7 @@ function InnovationCard({ project, onClick, onDelete }: { project: InnovationPro
         <div className="relative" ref={menuRef} onClick={e => e.stopPropagation()}>
           <button 
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 group-hover:text-slate-600 transition-colors"
+            className="text-slate-300 hover:text-slate-500 p-1 rounded-lg hover:bg-slate-50 transition-colors"
           >
             <MoreVertical size={16} />
           </button>
@@ -408,6 +851,16 @@ function InnovationCard({ project, onClick, onDelete }: { project: InnovationPro
                 >
                   <FolderOpen size={16} />
                   Abrir Detalhes
+                </button>
+                <button 
+                  onClick={() => {
+                    onEdit();
+                    setIsMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                >
+                  <Edit size={16} />
+                  Editar card
                 </button>
                 <button 
                   onClick={(e) => {
@@ -438,35 +891,70 @@ function InnovationCard({ project, onClick, onDelete }: { project: InnovationPro
         </div>
       </div>
 
-      <h4 className="font-bold text-slate-800 leading-tight mb-4 line-clamp-2">
+      <h4 className="font-bold text-slate-800 leading-tight mb-4 line-clamp-2 group-hover:text-indigo-600 transition-colors">
         {project.title}
       </h4>
 
-      <div className="space-y-3 mb-4">
-        <div className="flex items-center gap-2 text-slate-400">
-          <Briefcase size={12} className="shrink-0" />
-          <span className="text-[10px] font-bold truncate tracking-wide">{project.projectName}</span>
-        </div>
-        {project.processName && (
-          <div className="flex items-center gap-2 text-slate-400">
-            <RefreshCw size={12} className="shrink-0" />
-            <span className="text-[10px] font-bold truncate tracking-wide">{project.processName}</span>
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-[10px] bg-slate-50 p-2 rounded-lg border border-slate-100">
+            <span className="font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Responsável:</span>
+            <span className="font-bold text-slate-700 truncate">{project.responsibleName || 'Pendente'}</span>
           </div>
-        )}
-      </div>
+          <div className="flex items-center gap-2 text-[10px] bg-slate-50 p-2 rounded-lg border border-slate-100">
+            <span className="font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Projeto:</span>
+            <span className="font-bold text-slate-700 truncate">{project.projectName}</span>
+          </div>
+          {/* Opcional: Processo se houver */}
+          {project.processName && (
+            <div className="flex items-center gap-2 text-[10px] bg-slate-50 p-2 rounded-lg border border-slate-100">
+              <span className="font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Processo:</span>
+              <span className="font-bold text-slate-700 truncate">{project.processName}</span>
+            </div>
+          )}
+        </div>
 
-      <div className="flex items-center justify-between pt-4 border-t border-slate-50">
-        <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-[8px] uppercase">
-            {(project.responsibleName || 'SR').split(' ').map(n => n[0]).join('')}
+        <div className="flex items-center gap-4 text-[10px] text-slate-500">
+          <div className="flex items-center gap-1.5">
+            <Calendar size={12} className="text-indigo-500" />
+            <div className="flex flex-col">
+              <span className="text-[8px] uppercase font-bold text-slate-400">Criado em</span>
+              <span>{format(new Date(project.createdAt), 'dd/MM/yyyy')}</span>
+            </div>
           </div>
-          <span className="text-[10px] font-bold text-slate-500 truncate max-w-[100px]">
-            {project.responsibleName || 'Pendente'}
-          </span>
+          {project.deadline && (
+            <div className="flex items-center gap-1.5">
+              <CheckCircle2 size={12} className="text-emerald-500" />
+              <div className="flex flex-col">
+                <span className="text-[8px] uppercase font-bold text-slate-400">Prazo</span>
+                <span>{format(new Date(project.deadline + 'T12:00:00'), 'dd/MM/yyyy')}</span>
+              </div>
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-1.5 text-slate-400">
-          <Calendar size={12} />
-          <span className="text-[10px] font-bold">{format(new Date(project.updatedAt), 'dd/MM', { locale: ptBR })}</span>
+
+        <div className="flex items-center justify-between text-xs text-slate-500">
+          <div className="flex items-center gap-1.5">
+            <Clock size={14} />
+            <span>{project.progress || 0}%</span>
+          </div>
+          <div className="flex items-center gap-1.5 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
+            <div className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[8px] font-bold uppercase text-center">
+              {(project.responsibleName || 'SR').split(' ').map(n => n[0]).join('')}
+            </div>
+            <span className="text-[9px] font-medium truncate max-w-[60px]">{project.responsibleName?.split(' ')[0] || 'Pendente'}</span>
+          </div>
+        </div>
+
+        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <motion.div 
+            initial={{ width: 0 }}
+            animate={{ width: `${project.progress || 0}%` }}
+            className={cn(
+              "h-full rounded-full transition-all duration-1000",
+              (project.progress || 0) === 100 ? "bg-emerald-500" : (project.progress || 0) > 30 ? "bg-indigo-500" : "bg-amber-500"
+            )}
+          />
         </div>
       </div>
     </motion.div>
@@ -504,7 +992,7 @@ function InnovationDetailModal({
               </div>
               <div>
                 <h3 className="text-xl font-bold text-slate-900">Detalhes da Inovação</h3>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Gestão de Pipeline</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Gestão de Inovações</p>
               </div>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-white rounded-xl transition-all text-slate-400">
@@ -525,28 +1013,16 @@ function InnovationDetailModal({
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Status</label>
-                  <select 
-                    value={project.status}
-                    onChange={(e) => onUpdateProject({ status: e.target.value as InnovationStatus })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                  >
-                    {statusColumns.map(col => <option key={col.id} value={col.id}>{col.label}</option>)}
-                  </select>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Status (Automático)</label>
+                  <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 text-slate-400 font-bold text-sm cursor-not-allowed">
+                    {statusColumns.find(c => c.id === project.status)?.label || project.status}
+                  </div>
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Tipo de Solução</label>
-                  <select 
-                    value={project.type || ''}
-                    onChange={(e) => onUpdateProject({ type: e.target.value as InnovationSolutionType })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                  >
-                    <option value="">Selecione...</option>
-                    <option value="RPA">RPA</option>
-                    <option value="Sistema">Sistema / Web App</option>
-                    <option value="Integração">Integração (API)</option>
-                    <option value="BI">Business Intelligence (BI)</option>
-                  </select>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Progresso</label>
+                  <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 text-indigo-600 font-black text-sm cursor-not-allowed text-center">
+                    {project.progress || 0}%
+                  </div>
                 </div>
               </div>
 
@@ -609,3 +1085,4 @@ function InnovationDetailModal({
     </AnimatePresence>
   );
 }
+

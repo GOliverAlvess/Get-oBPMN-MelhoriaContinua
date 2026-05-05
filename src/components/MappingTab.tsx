@@ -8,16 +8,19 @@ export default function MappingTab({
   onUpdateSubtask,
   savedColors,
   onSaveGlobalColor,
-  onDeleteGlobalColor
+  onDeleteGlobalColor,
+  readOnly = false
 }: { 
   project: Project, 
   subtask: Subtask, 
   onUpdateSubtask: (s: Subtask) => void,
   savedColors: SavedColor[],
   onSaveGlobalColor: (color: SavedColor) => void,
-  onDeleteGlobalColor: (id: string) => void
+  onDeleteGlobalColor: (id: string) => void,
+  readOnly?: boolean
 }) {
   const handleUpdateMapping = (updatedMapping: any) => {
+    if (readOnly) return;
     onUpdateSubtask({
       ...subtask,
       mapping: updatedMapping
@@ -33,6 +36,7 @@ export default function MappingTab({
         savedColors={savedColors}
         onSaveGlobalColor={onSaveGlobalColor}
         onDeleteGlobalColor={onDeleteGlobalColor}
+        readOnly={readOnly}
       />
     </div>
   );

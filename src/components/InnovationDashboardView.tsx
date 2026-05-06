@@ -12,11 +12,7 @@ import {
   Cell,
   Legend,
   LabelList,
-  Label,
-  LineChart,
-  Line,
-  AreaChart,
-  Area
+  Label
 } from 'recharts';
 import { 
   Target, 
@@ -96,13 +92,14 @@ export default function InnovationDashboardView({ innovationProjects, users }: I
       return acc;
     }, {} as Record<string, number>);
 
-    const collaboratorChartData = Object.entries(collaboratorCounts)
-      .map(([id, count]) => ({
-        name: users.find(u => u.id === id)?.name || 'Desconhecido',
-        count
+    const collaboratorRanking = users
+      .filter(u => filteredProjects.some(p => p.responsibleId === u.id))
+      .map(u => ({
+        name: u.name,
+        count: collaboratorCounts[u.id] || 0
       }))
-      .sort((a: any, b: any) => b.count - a.count)
-      .slice(0, 8);
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
 
     const technologyCounts: Record<string, number> = {};
     filteredProjects.forEach(p => {
@@ -146,24 +143,57 @@ export default function InnovationDashboardView({ innovationProjects, users }: I
       });
     });
 
-    // Progress data
-    const progressRanges = [
-      { name: '0-25%', count: 0, color: '#f87171' },
-      { name: '26-50%', count: 0, color: '#fbbf24' },
-      { name: '51-75%', count: 0, color: '#60a5fa' },
-      { name: '76-100%', count: 0, color: '#34d399' }
-    ];
-
-    filteredProjects.forEach(p => {
+    // Project Progress List
+    const projectProgressList = filteredProjects.map(p => {
       const totalActions = p.developmentActions?.length || 0;
       const completedActions = p.developmentActions?.filter(a => a.status === 'Concluído').length || 0;
-      const progress = totalActions > 0 ? (completedActions / totalActions) * 100 : 0;
+      const progress = totalActions > 0 ? Math.round((completedActions / totalActions) * 100) : 0;
       
-      if (progress <= 25) progressRanges[0].count++;
-      else if (progress <= 50) progressRanges[1].count++;
-      else if (progress <= 75) progressRanges[2].count++;
-      else progressRanges[3].count++;
+      return {
+        id: p.id,
+        name: p.title,
+        priority: p.priority || 'Baixa',
+        progress
+      };
+    }).sort((a, b) => {
+      const priorityOrder = { 'Alta': 0, 'Média': 1, 'Baixa': 2 };
+      const valA = (priorityOrder as any)[a.priority] ?? 3;
+      const valB = (priorityOrder as any)[b.priority] ?? 3;
+      
+      if (valA !== valB) return valA - valB;
+      return b.progress - a.progress;
     });
+
+    const avgProgress = total > 0 
+      ? Math.round(projectProgressList.reduce((sum, p) => sum + p.progress, 0) / total) 
+      : 0;
+
+    // Recent Activity (Moved from activityData chart logic)
+    const activities: { type: string, title: string, date: string, projectName: string }[] = [];
+    innovationProjects.forEach(p => {
+      if (p.createdAt) {
+        activities.push({
+          type: 'Projeto Criado',
+          title: p.title,
+          date: p.createdAt,
+          projectName: p.title
+        });
+      }
+      p.developmentActions?.forEach(a => {
+        if (a.deadline) { // Using deadline as activity date for simulation if no updatedAt
+          activities.push({
+            type: a.status === 'Concluído' ? 'Ação Concluída' : 'Ação Registrada',
+            title: a.description,
+            date: a.deadline,
+            projectName: p.title
+          });
+        }
+      });
+    });
+
+    const recentActivities = activities
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+      .slice(0, 6);
 
     const completionRate = total > 0 ? Math.round((byStatus['concluído'] / total) * 100) : 0;
 
@@ -171,12 +201,13 @@ export default function InnovationDashboardView({ innovationProjects, users }: I
       total,
       byStatus,
       statusChartData,
-      collaboratorChartData,
+      collaboratorRanking,
       technologyChartData,
       delayedProjectsCount: delayedProjects.length,
       completionRate,
-      activityData: last30Days,
-      progressData: progressRanges
+      avgProgress,
+      projectProgressList,
+      recentActivities
     };
   }, [filteredProjects, users, innovationProjects]);
 
@@ -228,86 +259,153 @@ export default function InnovationDashboardView({ innovationProjects, users }: I
               <StatCard title="Backlog" value={stats.byStatus['backlog']} icon={<Clock size={22} />} color="bg-slate-400" />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Activity Chart */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              {/* Projects by Status (Donut) */}
               <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Últimas Atualizações</h3>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Últimos 30 dias</span>
-                </div>
+                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Distribuição de Status</h3>
                 <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={stats.activityData}>
-                      <defs>
-                        <linearGradient id="colorActivity" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
-                          <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                      <XAxis dataKey="date" tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }} />
-                      <Area type="monotone" dataKey="count" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorActivity)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* Progress Chart */}
-              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
-                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Progresso dos Projetos</h3>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={stats.progressData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                      <XAxis type="number" hide />
-                      <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                      <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '12px', border: 'none' }} />
-                      <Bar dataKey="count" radius={[0, 8, 8, 0]} barSize={32}>
-                        {stats.progressData.map((entry, index) => (
+                    <PieChart>
+                      <Pie
+                        data={stats.statusChartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={5}
+                        dataKey="value"
+                        label={({ percent }: any) => `${(percent * 100).toFixed(0)}%`}
+                      >
+                        {stats.statusChartData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
                         ))}
-                        <LabelList dataKey="count" position="right" style={{ fontSize: 12, fontWeight: 900, fill: '#64748b' }} offset={10} />
-                      </Bar>
-                    </BarChart>
+                        <Label 
+                          value={stats.total} 
+                          position="center" 
+                          style={{ fontSize: '24px', fontWeight: 900, fill: '#0f172a' }} 
+                        />
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                      />
+                      <Legend verticalAlign="bottom" height={36}/>
+                    </PieChart>
                   </ResponsiveContainer>
                 </div>
               </div>
 
-              {/* Ranking of Collaborators */}
+              {/* Ranking of Collaborators (List Pattern) */}
               <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
-                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Ranking de Colaboradores</h3>
-                <div className="h-[350px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={stats.collaboratorChartData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                      <XAxis type="number" hide />
-                      <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                      <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '12px', border: 'none' }} />
-                      <Bar dataKey="count" fill="#818cf8" radius={[0, 8, 8, 0]} barSize={24}>
-                        <LabelList dataKey="count" position="right" style={{ fontSize: 11, fontWeight: 900, fill: '#1e40af' }} offset={10} />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
+                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Ranking Colaboradores</h3>
+                <div className="space-y-4">
+                  {stats.collaboratorRanking.map((collab, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-xs">
+                          {idx + 1}
+                        </div>
+                        <span className="font-bold text-slate-700">{collab.name}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-xl font-black text-indigo-600">{collab.count}</span>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Projetos</p>
+                      </div>
+                    </div>
+                  ))}
+                  {stats.collaboratorRanking.length === 0 && (
+                    <p className="text-slate-400 text-sm italic text-center py-10">Nenhum colaborador com projetos.</p>
+                  )}
                 </div>
               </div>
 
-              {/* Technologies Usage */}
+              {/* Technologies Usage (Keep as is) */}
               <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
                 <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Tecnologias mais Utilizadas</h3>
-                <div className="h-[350px] w-full">
+                <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={stats.technologyChartData} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                       <XAxis type="number" hide />
-                      <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                      <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
                       <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '12px', border: 'none' }} />
                       <Bar dataKey="count" fill="#60a5fa" radius={[0, 8, 8, 0]} barSize={24}>
                         <LabelList dataKey="count" position="right" style={{ fontSize: 11, fontWeight: 900, fill: '#1e40af' }} offset={10} />
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Project Progress (List with Progress Bars) */}
+              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Progresso dos Projetos</h3>
+                  <div className="text-right">
+                    <span className="text-2xl font-black text-indigo-600">{stats.avgProgress}%</span>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Média Geral</p>
+                  </div>
+                </div>
+                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                  {stats.projectProgressList.map((p) => (
+                    <div 
+                      key={p.id} 
+                      className="group p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-indigo-200 transition-all"
+                    >
+                      <div className="flex items-center justify-between mb-2 min-w-0 gap-2">
+                        <span className="font-bold text-slate-700 truncate">{p.name}</span>
+                        <span className="text-xs font-black text-slate-500 shrink-0">{p.progress}%</span>
+                      </div>
+                      <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${p.progress}%` }}
+                          className={cn(
+                            "h-full transition-all duration-1000",
+                            p.progress === 100 ? "bg-emerald-500" : "bg-indigo-600"
+                          )}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Recent Activity (Timeline/List) */}
+              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
+                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Atividade Recente</h3>
+                <div className="space-y-6">
+                  {stats.recentActivities.map((activity, idx) => (
+                    <div key={idx} className="flex gap-4 relative">
+                      {idx !== stats.recentActivities.length - 1 && (
+                        <div className="absolute left-5 top-10 bottom-0 w-0.5 bg-slate-100" />
+                      )}
+                      <div className={cn(
+                        "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm",
+                        activity.type.includes('Concluída') ? "bg-emerald-100 text-emerald-600" : "bg-indigo-100 text-indigo-600"
+                      )}>
+                        {activity.type.includes('Concluída') ? <CheckCircle2 size={20} /> : <TrendingUp size={20} />}
+                      </div>
+                      <div className="space-y-1 min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-black text-slate-400 uppercase tracking-widest truncate">{activity.type}</span>
+                          <span className="text-[10px] text-slate-300">•</span>
+                          <span className="text-[10px] font-bold text-slate-400 shrink-0">{format(new Date(activity.date), "dd/MM HH:mm")}</span>
+                        </div>
+                        <p className="font-bold text-slate-800 break-words line-clamp-2" title={activity.title}>{activity.title}</p>
+                        <p className="text-xs text-slate-500 font-medium truncate">Projeto: {activity.projectName}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {stats.recentActivities.length === 0 && (
+                    <div className="py-20 text-center space-y-4">
+                      <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-200">
+                        <TrendingUp size={32} />
+                      </div>
+                      <p className="text-slate-400 text-sm italic">Nenhuma atividade recente registrada.</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -568,38 +666,65 @@ function DevelopmentPanel({ innovationProjects, users }: { innovationProjects: I
   );
 }
 
+function formatCompactNumber(number: number) {
+  if (number < 1000) return number.toString();
+  if (number >= 1000 && number < 1000000) return (number / 1000).toFixed(number % 1000 === 0 ? 0 : 1) + 'K';
+  if (number >= 1000000) return (number / 1000000).toFixed(number % 1000000 === 0 ? 0 : 1) + 'M';
+  return number.toString();
+}
+
 function StatCard({ 
   title, 
   value, 
   icon, 
   color, 
-  highlight 
+  highlight,
+  isCurrency = false
 }: { 
   title: string, 
   value: string | number, 
   icon: React.ReactNode, 
   color: string,
-  highlight?: boolean
+  highlight?: boolean,
+  isCurrency?: boolean
 }) {
+  const displayValue = typeof value === 'number' ? formatCompactNumber(value) : value;
+  const finalValue = isCurrency ? `R$ ${displayValue}` : displayValue;
+
   return (
     <motion.div 
-      whileHover={{ y: -2 }}
+      whileHover={{ y: -3 }}
       className={cn(
-        "p-4 rounded-2xl border shadow-sm flex items-center gap-4 transition-all min-w-[140px]",
+        "p-4 rounded-[1.5rem] border shadow-sm flex items-center justify-between gap-3 transition-all min-h-[80px] min-w-0",
         highlight 
-          ? "bg-rose-50 border-rose-200 ring-4 ring-rose-500/10" 
-          : "bg-white border-slate-200"
+          ? "bg-slate-900 border-slate-800 text-white" 
+          : "bg-white border-slate-200 text-slate-900"
       )}
     >
-      <div className={cn(
-        "w-10 h-10 rounded-xl flex items-center justify-center text-white shrink-0 shadow-sm", 
-        color
-      )}>
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 truncate">{title}</p>
-        <h4 className="text-lg font-black text-slate-900 tracking-tight truncate">{value}</h4>
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className={cn(
+          "w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md shrink-0", 
+          color
+        )}>
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1 overflow-hidden">
+          <p className={cn(
+            "text-[9px] font-black uppercase tracking-widest text-slate-400 truncate"
+          )} title={title}>{title}</p>
+          <h4 
+            className="font-black tracking-tight"
+            style={{ 
+              fontSize: 'clamp(14px, 1.5vw, 20px)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis'
+            }}
+            title={value.toString()}
+          >
+            {finalValue}
+          </h4>
+        </div>
       </div>
     </motion.div>
   );

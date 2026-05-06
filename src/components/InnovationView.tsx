@@ -20,6 +20,7 @@ import {
   Trash2,
   Calendar,
   Edit,
+  FileText,
   ChevronRight,
   Save,
   CheckCircle2
@@ -58,6 +59,7 @@ interface InnovationViewProps {
   onDeleteBpmnColor: (id: string) => void;
   innovationConfig: InnovationConfig;
   onUpdateInnovationConfig: (config: InnovationConfig) => void;
+  onAddInnovationProject?: (data: any) => Promise<string>;
 }
 
 const statusColumns: { id: InnovationStatus; label: string; color: string }[] = [
@@ -80,7 +82,8 @@ export default function InnovationView({
   onSaveBpmnColor,
   onDeleteBpmnColor,
   innovationConfig,
-  onUpdateInnovationConfig
+  onUpdateInnovationConfig,
+  onAddInnovationProject
 }: InnovationViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProject, setSelectedProject] = useState<InnovationProject | null>(null);
@@ -92,6 +95,7 @@ export default function InnovationView({
   const [groupBy, setGroupBy] = useState<'status' | 'collaborator'>('status');
   const [projectToDelete, setProjectToDelete] = useState<InnovationProject | null>(null);
   const [projectToEdit, setProjectToEdit] = useState<InnovationProject | null>(null);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Effect to automatically update status and progress for all projects
   useEffect(() => {
@@ -266,8 +270,8 @@ export default function InnovationView({
     }
 
     return (
-      <div className="flex flex-col gap-6 h-screen -mt-4 bg-slate-50">
-        <div className="flex items-center justify-between px-8 py-4 bg-white border-b border-slate-100 shadow-sm">
+      <div className="flex flex-col gap-6 h-screen -mt-4 bg-theme-background transition-colors duration-300">
+        <div className="flex items-center justify-between px-8 py-4 bg-theme-card border-b border-theme-border shadow-sm">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => setViewingBpmn(null)}
@@ -327,13 +331,13 @@ export default function InnovationView({
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden p-8 text-center"
+              className="bg-theme-card w-full max-w-md rounded-[2rem] shadow-2xl overflow-hidden p-8 text-center border border-theme-border"
             >
-              <div className="w-16 h-16 bg-rose-50 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+              <div className="w-16 h-16 bg-rose-500/10 text-rose-500 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
                 <Trash2 size={32} />
               </div>
-              <h3 className="text-xl font-bold text-slate-900 mb-2">Excluir Projeto de Inovação?</h3>
-              <p className="text-slate-500 mb-8 leading-relaxed">
+              <h3 className="text-xl font-bold text-theme-foreground mb-2">Excluir Projeto de Inovação?</h3>
+              <p className="text-slate-400 mb-8 leading-relaxed">
                 Tem certeza que deseja excluir este card de inovação? Esta ação não poderá ser desfeita.
               </p>
               <div className="flex gap-3">
@@ -358,30 +362,38 @@ export default function InnovationView({
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div className="flex items-center gap-8">
           <div>
-            <h2 className="text-3xl font-bold text-slate-900">Inovação</h2>
-            <p className="text-slate-500 mt-1">
+            <h2 className="text-3xl font-bold text-theme-foreground">Inovação</h2>
+            <p className="text-slate-400 mt-1">
               Visualizando por {groupBy === 'status' ? 'status' : 'colaborador'}.
             </p>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          <button 
+            onClick={() => setIsCreateModalOpen(true)}
+            className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
+          >
+            <Plus size={20} />
+            <span>Adicionar Projeto</span>
+          </button>
+
           <div className="relative flex-1 min-w-[240px]">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input 
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar título, projeto ou processo..."
-              className="w-full bg-white border border-slate-200 rounded-xl pl-11 pr-4 py-3 text-sm text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
+              className="w-full bg-theme-card border border-theme-border rounded-xl pl-11 pr-4 py-3 text-sm text-theme-foreground focus:ring-2 focus:ring-indigo-500 outline-none transition-all shadow-sm"
             />
           </div>
 
-          <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+          <div className="flex bg-theme-card p-1 rounded-xl border border-theme-border shadow-sm">
             <button 
               onClick={() => setGroupBy('status')}
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2",
-                groupBy === 'status' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
+                groupBy === 'status' ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-100/10"
               )}
             >
               <Target size={16} />
@@ -391,7 +403,7 @@ export default function InnovationView({
               onClick={() => setGroupBy('collaborator')}
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2",
-                groupBy === 'collaborator' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
+                groupBy === 'collaborator' ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-100/10"
               )}
             >
               <Users size={16} />
@@ -600,6 +612,19 @@ export default function InnovationView({
           }
         }}
       />
+
+      <CreateInnovationProjectModal 
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        users={users}
+        projects={projects}
+        onCreate={async (data) => {
+          if (onAddInnovationProject) {
+            await onAddInnovationProject(data);
+            setIsCreateModalOpen(false);
+          }
+        }}
+      />
     </div>
   );
 }
@@ -618,6 +643,7 @@ function EditInnovationCardModal({
   const [responsibleId, setResponsibleId] = useState('');
   const [priority, setPriority] = useState<ProjectPriority>('Média');
   const [deadline, setDeadline] = useState('');
+  const [description, setDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
@@ -626,6 +652,7 @@ function EditInnovationCardModal({
       setResponsibleId(project.responsibleId || '');
       setPriority(project.priority || 'Média');
       setDeadline(project.deadline || '');
+      setDescription(project.description || '');
       setShowSuccess(false);
     }
   }, [project]);
@@ -641,7 +668,8 @@ function EditInnovationCardModal({
         responsibleId,
         responsibleName: user?.name,
         priority,
-        deadline
+        deadline,
+        description
       });
       setShowSuccess(true);
       setTimeout(() => {
@@ -704,6 +732,22 @@ function EditInnovationCardModal({
                 <option value="">Selecione um responsável...</option>
                 {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
               </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1 flex items-center gap-1.5">
+                <FileText size={14} className="text-indigo-500" />
+                Descrição do Projeto
+              </label>
+              <textarea 
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={500}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium h-24 resize-none text-sm"
+              />
+              <div className="flex justify-end pr-1">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{description.length}/500</span>
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -891,9 +935,15 @@ function InnovationCard({ project, onClick, onDelete, onEdit }: { project: Innov
         </div>
       </div>
 
-      <h4 className="font-bold text-slate-800 leading-tight mb-4 line-clamp-2 group-hover:text-indigo-600 transition-colors">
+      <h4 className="font-bold text-slate-800 leading-tight mb-2 line-clamp-2 group-hover:text-indigo-600 transition-colors">
         {project.title}
       </h4>
+
+      {project.description && (
+        <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed mb-4">
+          {project.description}
+        </p>
+      )}
 
       <div className="space-y-4">
         <div className="space-y-2">
@@ -1011,6 +1061,19 @@ function InnovationDetailModal({
                 />
               </div>
 
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Descrição do projeto</label>
+                <textarea 
+                  value={project.description || ''}
+                  onChange={(e) => onUpdateProject({ description: e.target.value })}
+                  maxLength={500}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium h-24 resize-none text-sm"
+                />
+                <div className="flex justify-end pr-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{(project.description || '').length}/500</span>
+                </div>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Status (Automático)</label>
@@ -1078,6 +1141,248 @@ function InnovationDetailModal({
               className="px-8 py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg"
             >
               Fechar
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    </AnimatePresence>
+  );
+}
+
+function CreateInnovationProjectModal({ 
+  isOpen, 
+  onClose, 
+  users, 
+  projects,
+  onCreate 
+}: { 
+  isOpen: boolean, 
+  onClose: () => void,
+  users: User[],
+  projects: Project[],
+  onCreate: (data: any) => Promise<void>
+}) {
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [responsibleId, setResponsibleId] = useState('');
+  const [priority, setPriority] = useState<ProjectPriority>('Média');
+  const [deadline, setDeadline] = useState('');
+  const [complexity, setComplexity] = useState<InnovationComplexity>('Média');
+  const [solutionType, setSolutionType] = useState<InnovationSolutionType | ''>('');
+  
+  const [selectedProjectId, setSelectedProjectId] = useState('');
+  const [selectedSubtaskId, setSelectedSubtaskId] = useState('');
+  
+  const [isSaving, setIsSaving] = useState(false);
+
+  if (!isOpen) return null;
+
+  const handleCreate = async () => {
+    if (!title || !responsibleId) return;
+    setIsSaving(true);
+    try {
+      const respUser = users.find(u => u.id === responsibleId);
+      const proj = projects.find(p => p.id === selectedProjectId);
+      const subtask = proj?.subtasks.find(s => s.id === selectedSubtaskId);
+
+      await onCreate({
+        title,
+        description,
+        responsibleId,
+        responsibleName: respUser?.name || 'Sem resp.',
+        priority,
+        deadline,
+        complexity,
+        type: solutionType,
+        status: 'backlog',
+        progress: 0,
+        projectId: selectedProjectId,
+        projectName: proj?.name || '',
+        pdcaId: '', 
+        actionId: '',
+        processName: subtask?.title || '',
+      });
+      setTitle('');
+      setDescription('');
+      setResponsibleId('');
+      setPriority('Média');
+      setDeadline('');
+      setComplexity('Média');
+      setSolutionType('');
+      setSelectedProjectId('');
+      setSelectedSubtaskId('');
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.9, y: 20 }}
+          className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-emerald-600 flex items-center justify-center text-white shadow-lg">
+                <Plus size={24} />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">Novo Projeto de Inovação</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">Criar manualmente</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="p-2 hover:bg-white rounded-xl transition-all text-slate-400">
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="md:col-span-2 space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Título da Inovação <span className="text-rose-500">*</span></label>
+                <input 
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  placeholder="Ex: Novo sistema de triagem automática"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium"
+                />
+              </div>
+
+              <div className="md:col-span-2 space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1 text-[11px]">Descrição do projeto</label>
+                <textarea 
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Breve descrição dos objetivos e escopo da inovação..."
+                  maxLength={500}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium h-32 resize-none"
+                />
+                <div className="flex justify-end">
+                  <span className={cn(
+                    "text-[10px] font-bold uppercase tracking-widest",
+                    description.length > 450 ? "text-rose-500" : "text-slate-400"
+                  )}>
+                    {description.length} / 500
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Responsável <span className="text-rose-500">*</span></label>
+                <select 
+                  value={responsibleId}
+                  onChange={(e) => setResponsibleId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                >
+                  <option value="">Selecione o responsável...</option>
+                  {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Prioridade</label>
+                <select 
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as any)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                >
+                  <option value="Baixa">Baixa</option>
+                  <option value="Média">Média</option>
+                  <option value="Alta">Alta</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Tipo de Solução</label>
+                <select 
+                  value={solutionType}
+                  onChange={(e) => setSolutionType(e.target.value as any)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                >
+                  <option value="">Selecione...</option>
+                  <option value="RPA">RPA</option>
+                  <option value="Sistema">Sistema</option>
+                  <option value="Integração">Integração</option>
+                  <option value="BI">BI</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Complexidade estimada</label>
+                <select 
+                  value={complexity}
+                  onChange={(e) => setComplexity(e.target.value as any)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                >
+                  <option value="Baixa">Baixa</option>
+                  <option value="Média">Média</option>
+                  <option value="Alta">Alta</option>
+                  <option value="Muito Alta">Muito Alta</option>
+                </select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Prazo de Conclusão</label>
+                <input 
+                  type="date"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Vincular a Projeto (Opcional)</label>
+                <select 
+                  value={selectedProjectId}
+                  onChange={(e) => setSelectedProjectId(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                >
+                  <option value="">Nenhum</option>
+                  {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </div>
+
+              {selectedProjectId && (
+                <div className="md:col-span-2 space-y-1.5 animate-in fade-in slide-in-from-top-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Vincular a Etapa/Processo (Opcional)</label>
+                  <select 
+                    value={selectedSubtaskId}
+                    onChange={(e) => setSelectedSubtaskId(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                  >
+                    <option value="">Nenhum</option>
+                    {projects.find(p => p.id === selectedProjectId)?.subtasks.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="p-8 bg-slate-50 border-t border-slate-100 flex gap-3">
+             <button 
+              onClick={onClose}
+              className="flex-1 px-8 py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl text-xs font-black uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
+            >
+              Cancelar
+            </button>
+             <button 
+              onClick={handleCreate}
+              disabled={isSaving || !title || !responsibleId}
+              className={cn(
+                "flex-[2] px-8 py-4 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all shadow-xl flex items-center justify-center gap-2",
+                isSaving || !title || !responsibleId ? "bg-slate-300 shadow-none cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100"
+              )}
+            >
+              {isSaving ? <RefreshCw size={18} className="animate-spin" /> : <Save size={18} />}
+              Criar Projeto de Inovação
             </button>
           </div>
         </motion.div>

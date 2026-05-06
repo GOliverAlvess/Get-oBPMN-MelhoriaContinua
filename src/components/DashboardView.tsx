@@ -220,16 +220,16 @@ export default function DashboardView({ projects, users, actions, onProjectClick
     <div className="space-y-8 pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 min-w-0">
         <div className="min-w-0 flex-1">
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight truncate">Dashboard Executivo</h2>
-          <p className="text-slate-500 mt-1 truncate">Visão estratégica e financeira do sistema.</p>
+          <h2 className="text-3xl font-black text-theme-foreground tracking-tight truncate">Dashboard Executivo</h2>
+          <p className="text-slate-400 mt-1 truncate">Visão estratégica e financeira do sistema.</p>
         </div>
         <div className="flex items-center gap-4 shrink-0 flex-wrap md:flex-nowrap">
-          <div className="bg-white p-1 rounded-xl border border-slate-200 shadow-sm flex items-center">
+          <div className="bg-theme-card p-1 rounded-xl border border-theme-border shadow-sm flex items-center">
             <button 
               onClick={() => setActiveTab('projects')}
               className={cn(
                 "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
-                activeTab === 'projects' ? "bg-[#003489] text-white shadow-md" : "text-slate-400 hover:bg-slate-50"
+                activeTab === 'projects' ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-50"
               )}
             >
               Projetos
@@ -238,13 +238,13 @@ export default function DashboardView({ projects, users, actions, onProjectClick
               onClick={() => setActiveTab('actions')}
               className={cn(
                 "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
-                activeTab === 'actions' ? "bg-[#003489] text-white shadow-md" : "text-slate-400 hover:bg-slate-50"
+                activeTab === 'actions' ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-50"
               )}
             >
               Ações
             </button>
           </div>
-          <div className="bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm flex items-center gap-2 hidden md:flex">
+          <div className="bg-theme-card px-4 py-2 rounded-xl border border-theme-border shadow-sm flex items-center gap-2 hidden md:flex">
             <Clock size={16} className="text-slate-400" />
             <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">
               {format(new Date(), "dd 'de' MMMM, yyyy", { locale: ptBR })}
@@ -263,7 +263,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
             className="space-y-8"
           >
             {/* Filtros Dropdown */}
-            <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm">
+            <div className="bg-theme-card p-6 rounded-3xl border border-theme-border shadow-sm">
               <div className="flex items-center gap-2 text-slate-400 mb-4">
                 <Filter size={16} />
                 <span className="text-xs font-black uppercase tracking-widest">Filtros Estratégicos</span>
@@ -342,33 +342,40 @@ export default function DashboardView({ projects, users, actions, onProjectClick
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* 2. Impacto de Ganho por Projeto */}
-              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
+              <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Ganhos por Projeto</h3>
+                  <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Ganhos por Projeto</h3>
                   <TrendingUp size={20} className="text-emerald-500" />
                 </div>
                 <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={stats.projectGains} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
                       <XAxis type="number" hide />
                       <YAxis 
                         dataKey="name" 
                         type="category" 
                         width={100} 
-                        tick={{ fontSize: 10, fontWeight: 700, fill: '#64748b' }}
+                        tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
                       />
                       <Tooltip 
-                        cursor={{ fill: '#f8fafc' }}
-                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                        cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                        contentStyle={{ 
+                          backgroundColor: 'var(--card)', 
+                          borderRadius: '12px', 
+                          border: '1px solid var(--border)', 
+                          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)',
+                          color: 'var(--foreground)'
+                        }}
+                        itemStyle={{ color: 'var(--foreground)' }}
                         formatter={(value: number) => [`R$ ${value.toLocaleString()}`, 'Ganho']}
                       />
-                      <Bar dataKey="gain" fill="#003489" radius={[0, 8, 8, 0]} barSize={20}>
+                      <Bar dataKey="gain" fill="#3b82f6" radius={[0, 8, 8, 0]} barSize={20}>
                         <LabelList 
                           dataKey="gain" 
                           position="right" 
                           formatter={(value: number) => `R$ ${value.toLocaleString()}`}
-                          style={{ fontSize: 9, fontWeight: 800, fill: '#64748b' }}
+                          style={{ fontSize: 9, fontWeight: 800, fill: '#94a3b8' }}
                           offset={10}
                         />
                       </Bar>
@@ -378,8 +385,8 @@ export default function DashboardView({ projects, users, actions, onProjectClick
               </div>
 
               {/* 3. Status dos Processos */}
-              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
-                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Distribuição de Status</h3>
+              <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
+                <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Distribuição de Status</h3>
                 <div className="h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -391,7 +398,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                         outerRadius={100}
                         paddingAngle={5}
                         dataKey="value"
-                        label={renderCustomPieLabel}
+                        label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}
                       >
                         {stats.processStatusData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={entry.color} />
@@ -399,11 +406,16 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                         <Label 
                           value={stats.total} 
                           position="center" 
-                          style={{ fontSize: '24px', fontWeight: 900, fill: '#0f172a' }} 
+                          style={{ fontSize: '24px', fontWeight: 900, fill: 'var(--foreground)' }} 
                         />
                       </Pie>
                       <Tooltip 
-                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                         contentStyle={{ 
+                          backgroundColor: 'var(--card)', 
+                          borderRadius: '12px', 
+                          border: '1px solid var(--border)',
+                          color: 'var(--foreground)'
+                        }} 
                       />
                       <Legend verticalAlign="bottom" height={36}/>
                     </PieChart>
@@ -412,16 +424,16 @@ export default function DashboardView({ projects, users, actions, onProjectClick
               </div>
 
               {/* 4. Colaboradores */}
-              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
-                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Ranking Colaboradores</h3>
+              <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
+                <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Ranking Colaboradores</h3>
                 <div className="space-y-4">
                   {stats.collaboratorRanking.map((collab, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div key={idx} className="flex items-center justify-between p-4 bg-theme-background rounded-2xl border border-theme-border">
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-xs">
                           {idx + 1}
                         </div>
-                        <span className="font-bold text-slate-700">{collab.name}</span>
+                        <span className="font-bold text-theme-foreground">{collab.name}</span>
                       </div>
                       <div className="text-right">
                         <span className="text-xl font-black text-indigo-600">{collab.count}</span>
@@ -437,39 +449,44 @@ export default function DashboardView({ projects, users, actions, onProjectClick
             </div>
 
             {/* 4.5 Análise por Setores Envolvidos */}
-            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
+            <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
               <div className="flex items-center justify-between">
                 <div className="space-y-1">
-                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Setores Envolvidos</h3>
-                  <p className="text-xs text-slate-500 font-medium">Recorrência de setores nos escopos dos projetos ativos.</p>
+                  <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Setores Envolvidos</h3>
+                  <p className="text-xs text-slate-400 font-medium">Recorrência de setores nos escopos dos projetos ativos.</p>
                 </div>
-                <div className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                  <Users size={20} className="text-[#003489]" />
+                <div className="p-3 bg-theme-background rounded-2xl border border-theme-border">
+                  <Users size={20} className="text-indigo-400" />
                 </div>
               </div>
               <div className="h-[350px] w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={stats.sectorDistribution} layout="vertical" margin={{ left: 40, right: 30 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
                     <XAxis type="number" hide />
                     <YAxis 
                       dataKey="name" 
                       type="category" 
                       width={120} 
-                      tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }}
+                      tick={{ fontSize: 11, fontWeight: 700, fill: '#94a3b8' }}
                       axisLine={false}
                       tickLine={false}
                     />
                     <Tooltip 
-                      cursor={{ fill: '#f8fafc' }}
-                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                      cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                      contentStyle={{ 
+                        backgroundColor: 'var(--card)', 
+                        borderRadius: '12px', 
+                        border: '1px solid var(--border)',
+                        color: 'var(--foreground)'
+                      }}
                       formatter={(value: number) => [`${value} projeto(s)`, 'Ocorrência']}
                     />
                     <Bar dataKey="count" fill="#EABE41" radius={[0, 8, 8, 0]} barSize={24}>
                       <LabelList 
                         dataKey="count" 
                         position="right" 
-                        style={{ fontSize: 11, fontWeight: 900, fill: '#003489' }}
+                        style={{ fontSize: 11, fontWeight: 900, fill: '#EABE41' }}
                         offset={10}
                       />
                     </Bar>
@@ -477,7 +494,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                 </ResponsiveContainer>
               </div>
               {stats.sectorDistribution.length === 0 && (
-                <div className="py-20 text-center space-y-4 bg-slate-50 rounded-3xl border border-dashed border-slate-200 mx-auto max-w-sm">
+                <div className="py-20 text-center space-y-4 bg-theme-background rounded-3xl border border-dashed border-theme-border mx-auto max-w-sm">
                   <p className="text-slate-400 text-sm font-medium">Nenhum setor informado nos escopos.</p>
                 </div>
               )}
@@ -485,11 +502,11 @@ export default function DashboardView({ projects, users, actions, onProjectClick
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* 5. Progresso dos Projetos */}
-              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
+              <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Progresso dos Projetos</h3>
+                  <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Progresso dos Projetos</h3>
                   <div className="text-right">
-                    <span className="text-2xl font-black text-indigo-600">{stats.avgProgress}%</span>
+                    <span className="text-2xl font-black text-indigo-400">{stats.avgProgress}%</span>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Média Geral</p>
                   </div>
                 </div>
@@ -498,19 +515,19 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                     <div 
                       key={p.id} 
                       onClick={() => onProjectClick(p.id)}
-                      className="group p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-indigo-200 transition-all cursor-pointer"
+                      className="group p-4 bg-theme-background rounded-2xl border border-theme-border hover:border-indigo-400 transition-all cursor-pointer"
                     >
                       <div className="flex items-center justify-between mb-2 min-w-0 gap-2">
-                        <span className="font-bold text-slate-700 group-hover:text-indigo-600 transition-colors truncate">{p.name}</span>
-                        <span className="text-xs font-black text-slate-500 shrink-0">{p.progress}%</span>
+                        <span className="font-bold text-theme-foreground group-hover:text-indigo-400 transition-colors truncate">{p.name}</span>
+                        <span className="text-xs font-black text-slate-400 shrink-0">{p.progress}%</span>
                       </div>
-                      <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                      <div className="w-full h-2 bg-theme-card rounded-full overflow-hidden border border-theme-border">
                         <motion.div 
                           initial={{ width: 0 }}
                           animate={{ width: `${p.progress}%` }}
                           className={cn(
                             "h-full transition-all duration-1000",
-                            p.progress === 100 ? "bg-emerald-500" : "bg-indigo-600"
+                            p.progress === 100 ? "bg-emerald-500" : "bg-indigo-500"
                           )}
                         />
                       </div>
@@ -520,34 +537,34 @@ export default function DashboardView({ projects, users, actions, onProjectClick
               </div>
 
               {/* 6. Atividade Recente */}
-              <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
-                <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Atividade Recente</h3>
+              <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
+                <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Atividade Recente</h3>
                 <div className="space-y-6">
                   {stats.recentActivities.map((activity, idx) => (
                     <div key={idx} className="flex gap-4 relative">
                       {idx !== stats.recentActivities.length - 1 && (
-                        <div className="absolute left-5 top-10 bottom-0 w-0.5 bg-slate-100" />
+                        <div className="absolute left-5 top-10 bottom-0 w-0.5 bg-theme-border" />
                       )}
                       <div className={cn(
                         "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm",
-                        activity.type.includes('Concluído') ? "bg-emerald-100 text-emerald-600" : "bg-indigo-100 text-indigo-600"
+                        activity.type.includes('Concluído') ? "bg-emerald-500/10 text-emerald-500" : "bg-indigo-500/10 text-indigo-400"
                       )}>
                         {activity.type.includes('Concluído') ? <CheckCircle2 size={20} /> : <TrendingUp size={20} />}
                       </div>
                       <div className="space-y-1 min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-black text-slate-400 uppercase tracking-widest truncate">{activity.type}</span>
-                          <span className="text-[10px] text-slate-300">•</span>
+                          <span className="text-[10px] text-slate-500">•</span>
                           <span className="text-[10px] font-bold text-slate-400 shrink-0">{format(new Date(activity.date), "dd/MM HH:mm")}</span>
                         </div>
-                        <p className="font-bold text-slate-800 break-words line-clamp-2" title={activity.title}>{activity.title}</p>
-                        <p className="text-xs text-slate-500 font-medium truncate">Projeto: {activity.projectName}</p>
+                        <p className="font-bold text-theme-foreground break-words line-clamp-2" title={activity.title}>{activity.title}</p>
+                        <p className="text-xs text-slate-400 font-medium truncate">Projeto: {activity.projectName}</p>
                       </div>
                     </div>
                   ))}
                   {stats.recentActivities.length === 0 && (
                     <div className="py-20 text-center space-y-4">
-                      <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto text-slate-200">
+                      <div className="w-16 h-16 bg-theme-background rounded-full flex items-center justify-center mx-auto text-slate-500">
                         <Activity size={32} />
                       </div>
                       <p className="text-slate-400 text-sm italic">Nenhuma atividade recente registrada.</p>
@@ -603,8 +620,8 @@ function StatCard({
       className={cn(
         "p-4 rounded-[1.5rem] border shadow-sm flex items-center justify-between gap-3 transition-all min-h-[80px] min-w-0",
         highlight 
-          ? "bg-slate-900 border-slate-800 text-white" 
-          : "bg-white border-slate-200 text-slate-900"
+          ? "bg-slate-900 dark:bg-black border-slate-800 dark:border-slate-800 text-white" 
+          : "bg-theme-card border-theme-border text-theme-foreground"
       )}
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">

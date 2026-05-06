@@ -82,10 +82,10 @@ export default function FilterDropdown({
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 10 }}
-            className="absolute z-50 top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-xl overflow-hidden"
+            className="absolute z-50 top-full left-0 right-0 mt-2 bg-theme-card border border-theme-border rounded-2xl shadow-xl overflow-hidden"
           >
             {showSearch && (
-              <div className="p-3 border-b border-slate-100">
+              <div className="p-3 border-b border-theme-border">
                 <div className="relative">
                   <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input 

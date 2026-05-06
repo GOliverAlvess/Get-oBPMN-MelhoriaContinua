@@ -165,7 +165,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
       </div>
 
       {/* Filtros */}
-      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm space-y-4">
+      <div className="bg-theme-card p-6 rounded-3xl border border-theme-border shadow-sm space-y-4">
         <div className="flex items-center gap-2 text-slate-400 mb-2">
           <Filter size={16} />
           <span className="text-xs font-black uppercase tracking-widest">Filtros de Busca</span>
@@ -178,14 +178,14 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
               placeholder="Buscar ação..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              className="w-full pl-10 pr-4 py-2.5 bg-theme-background border border-theme-border text-theme-foreground rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
             />
           </div>
           
           <select 
             value={filterProject}
             onChange={(e) => setFilterProject(e.target.value)}
-            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+            className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
           >
             <option value="">Todos os Projetos</option>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
@@ -194,7 +194,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
           <select 
             value={filterResponsible}
             onChange={(e) => setFilterResponsible(e.target.value)}
-            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+            className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
           >
             <option value="">Todos os Responsáveis</option>
             {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
@@ -203,7 +203,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
           <select 
             value={filterStatus}
             onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+            className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
           >
             <option value="">Todos os Status</option>
             <option value="Pendente">Pendente</option>
@@ -214,7 +214,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
           <select 
             value={filterPriority}
             onChange={(e) => setFilterPriority(e.target.value)}
-            className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+            className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
           >
             <option value="">Todas as Prioridades</option>
             <option value="Baixa">Baixa</option>
@@ -225,11 +225,11 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
       </div>
 
       {/* Listagem */}
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-theme-card rounded-3xl border border-theme-border shadow-sm overflow-hidden">
         <div className="overflow-x-auto custom-scrollbar">
           <table className="w-full text-left border-separate border-spacing-0 min-w-[1600px]">
             <thead>
-              <tr className="bg-[#003489]">
+              <tr className="bg-indigo-600 dark:bg-indigo-900">
                 <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[200px]">Projeto</th>
                 <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px]">Subtarefa</th>
                 <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px]">Responsável</th>
@@ -242,7 +242,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
                 <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest w-32 text-right">Ações</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-50">
+            <tbody className="divide-y divide-theme-border">
               {filteredActions.map((action) => {
                 const isEditing = editingActionId === action.id;
                 const currentStatus = isEditing ? (tempUpdates.status || action.status) : action.status;
@@ -252,36 +252,36 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
                 return (
                   <tr key={action.id} className={cn(
                     "group transition-all duration-300",
-                    isEditing ? "bg-indigo-50" : "hover:bg-slate-50/50"
+                    isEditing ? "bg-indigo-500/5" : "hover:bg-theme-background/50"
                   )}>
                     <td className={cn(
-                      "px-6 py-4 min-w-0 transition-all",
-                      isEditing && "border-l-4 border-[#003489]"
+                      "px-6 py-4 min-w-0 transition-all text-theme-foreground",
+                      isEditing && "border-l-4 border-indigo-500"
                     )}>
-                      <span className="font-bold text-slate-700 text-[13px] break-words line-clamp-2" title={action.projectName}>{action.projectName}</span>
+                      <span className="font-bold text-[13px] break-words line-clamp-2" title={action.projectName}>{action.projectName}</span>
                     </td>
                     <td className="px-6 py-4 min-w-0">
-                      <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider break-words line-clamp-2" title={action.subtaskTitle}>{action.subtaskTitle}</span>
+                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider break-words line-clamp-2" title={action.subtaskTitle}>{action.subtaskTitle}</span>
                     </td>
                     <td className="px-6 py-4 min-w-0">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black shrink-0">
+                        <div className="w-7 h-7 rounded-full bg-indigo-500/10 text-indigo-400 flex items-center justify-center text-[10px] font-black shrink-0">
                           {action.responsibleName.charAt(0)}
                         </div>
-                        <span className="text-[13px] font-bold text-slate-600 truncate">{action.responsibleName}</span>
+                        <span className="text-[13px] font-bold text-slate-400 truncate">{action.responsibleName}</span>
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 group-hover:bg-white transition-colors">
-                        <p className="text-[13px] text-slate-600 leading-relaxed min-h-[40px]">{action.action}</p>
+                      <div className="bg-theme-background p-3 rounded-xl border border-theme-border group-hover:bg-theme-card transition-colors">
+                        <p className="text-[13px] text-theme-foreground leading-relaxed min-h-[40px]">{action.action}</p>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className={cn(
                         "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider inline-block",
-                        action.priority === 'Alta' ? "bg-rose-100 text-rose-600" :
-                        action.priority === 'Média' ? "bg-indigo-100 text-indigo-600" :
-                        "bg-slate-200 text-slate-600"
+                        action.priority === 'Alta' ? "bg-rose-500/10 text-rose-500" :
+                        action.priority === 'Média' ? "bg-indigo-500/10 text-indigo-400" :
+                        "bg-theme-background border border-theme-border text-slate-400"
                       )}>
                         {action.priority}
                       </span>
@@ -292,10 +292,10 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
                         value={currentStatus}
                         onChange={(e) => setTempUpdates(prev => ({ ...prev, status: e.target.value as any }))}
                         className={cn(
-                          "w-full px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider outline-none border border-transparent focus:border-indigo-300 disabled:cursor-not-allowed transition-all",
-                          currentStatus === 'Concluído' ? "bg-emerald-50 text-emerald-600" :
-                          currentStatus === 'Em andamento' ? "bg-amber-50 text-amber-600" :
-                          "bg-slate-100 text-slate-500"
+                          "w-full px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider outline-none border border-transparent focus:border-indigo-400 disabled:cursor-not-allowed transition-all text-theme-foreground",
+                          currentStatus === 'Concluído' ? "bg-emerald-500/10 text-emerald-500" :
+                          currentStatus === 'Em andamento' ? "bg-amber-500/10 text-amber-500" :
+                          "bg-theme-background text-slate-400"
                         )}
                       >
                         <option value="Pendente">Pendente</option>

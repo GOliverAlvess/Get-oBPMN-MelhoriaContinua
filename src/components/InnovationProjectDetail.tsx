@@ -213,6 +213,15 @@ export default function InnovationProjectDetail({
                       <ReadOnlyField label="Responsável" value={project.responsibleName || 'Não atribuído'} icon={<UserIcon size={14} />} />
                     </div>
 
+                    {project.description && (
+                      <div className="mt-8 pt-6 border-t border-slate-100">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1 mb-2">Descrição do Projeto</label>
+                        <div className="w-full p-6 bg-slate-50 border border-slate-200 rounded-[1.5rem] text-slate-600 text-sm leading-relaxed whitespace-pre-wrap">
+                          {project.description}
+                        </div>
+                      </div>
+                    )}
+
                     {pdcaSubtask && (
                       <div className="mt-8 pt-6 border-t border-slate-100">
                         <button 

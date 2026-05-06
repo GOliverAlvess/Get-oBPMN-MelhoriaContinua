@@ -264,9 +264,88 @@
   --color-lime-800: #3f6212;
   --color-lime-900: #365314;
   --color-lime-950: #1a2e05;
+
+  --background: var(--color-slate-50);
+  --foreground: var(--color-slate-900);
+  --card: #ffffff;
+  --card-foreground: var(--color-slate-900);
+  --border: var(--color-slate-200);
+
+  --color-theme-background: var(--background);
+  --color-theme-foreground: var(--foreground);
+  --color-theme-card: var(--card);
+  --color-theme-border: var(--border);
+}
+
+[data-theme="dark"] {
+  --background: #0b0f19;
+  --foreground: #ffffff;
+  --card: #111827;
+  --card-foreground: #f3f4f6;
+  --border: #1f2937;
+  
+  --color-slate-50: #111827;
+  --color-slate-100: #1f2937;
+  --color-slate-200: #374151;
+  --color-slate-300: #4b5563;
+  --color-slate-400: #9ca3af;
+  --color-slate-500: #d1d5db;
+  --color-slate-600: #e5e7eb;
+  --color-slate-700: #f3f4f6;
+  --color-slate-800: #f9fafb;
+  --color-slate-900: #ffffff;
+
+  --color-indigo-50: rgba(59, 130, 246, 0.1);
+  --color-indigo-100: rgba(59, 130, 246, 0.2);
+  --color-indigo-200: rgba(59, 130, 246, 0.3);
+  
+  --color-emerald-50: rgba(16, 185, 129, 0.1);
+  --color-amber-50: rgba(234, 190, 65, 0.1);
+  --color-rose-50: rgba(244, 63, 94, 0.1);
+
+  /* Force critical background overrides */
+  .bg-white, .bg-slate-50, .bg-white\/50, .bg-slate-50\/50, .bg-slate-100 {
+    background-color: var(--card) !important;
+  }
+  
+  .bg-slate-50\/50, .bg-slate-100\/10 {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+  }
+
+  /* Force border overrides */
+  .border-slate-100, .border-slate-200, .border-slate-300 {
+    border-color: var(--border) !important;
+  }
+
+  /* Force text color overrides for titles and content */
+  .text-slate-900, .text-slate-800, .text-slate-700 {
+    color: var(--foreground) !important;
+  }
+
+  .text-slate-600, .text-slate-500 {
+    color: var(--color-slate-400) !important;
+  }
+
+  input, textarea, select {
+    background-color: #0f172a !important;
+    color: #ffffff !important;
+    border-color: #374151 !important;
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: #6b7280 !important;
+  }
 }
 
 @layer base {
+  * {
+    @apply border-theme-border;
+  }
+  body {
+    @apply bg-theme-background text-theme-foreground;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
   @media print {
     body * {
       visibility: hidden;

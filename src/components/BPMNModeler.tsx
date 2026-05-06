@@ -380,12 +380,12 @@ export default function BPMNModeler({
   }) : null;
 
   return (
-    <div className="h-[800px] flex flex-col relative bg-white font-sans overflow-hidden">
+    <div className="h-[800px] flex flex-col relative bg-theme-background font-sans overflow-hidden mapeamento-container">
       {/* Header Toolbar */}
-      <div className="h-14 bg-white border-b border-slate-200 flex items-center justify-between px-6 z-20 shadow-sm">
+      <div className="h-14 bg-theme-card border-b border-theme-border flex items-center justify-between px-6 z-20 shadow-sm">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-auto h-10 bg-white rounded-lg flex items-center justify-center shadow-md border border-slate-100 p-1">
+            <div className="w-auto h-10 bg-white rounded-lg flex items-center justify-center shadow-md border border-slate-100 p-1 dark:bg-slate-100">
               <img 
                 src="/assets/logo-flowprocess.svg" 
                 alt="Logo" 
@@ -394,54 +394,54 @@ export default function BPMNModeler({
               />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-800 leading-none">{projectName}</h3>
+              <h3 className="text-sm font-bold text-theme-foreground leading-none">{projectName}</h3>
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Mapeamento BPMN</p>
             </div>
           </div>
 
-          <div className="h-6 w-px bg-slate-200" />
+          <div className="h-6 w-px bg-theme-border" />
 
           {!readOnly && (
-            <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
-              <button onClick={undo} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Desfazer">
+            <div className="flex items-center gap-1 bg-theme-background p-1 rounded-lg border border-theme-border">
+              <button onClick={undo} className="p-1.5 hover:bg-theme-card rounded text-slate-400 transition-all" title="Desfazer">
                 <Undo2 size={16} />
               </button>
-              <button onClick={redo} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Refazer">
+              <button onClick={redo} className="p-1.5 hover:bg-theme-card rounded text-slate-400 transition-all" title="Refazer">
                 <Redo2 size={16} />
               </button>
             </div>
           )}
 
-          <div className="h-6 w-px bg-slate-200" />
+          <div className="h-6 w-px bg-theme-border" />
 
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
-            <button onClick={zoomOut} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Diminuir Zoom">
+          <div className="flex items-center gap-1 bg-theme-background p-1 rounded-lg border border-theme-border">
+            <button onClick={zoomOut} className="p-1.5 hover:bg-theme-card rounded text-slate-400 transition-all" title="Diminuir Zoom">
               <Minus size={16} />
             </button>
-            <button onClick={zoomReset} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Ajustar Visualização">
+            <button onClick={zoomReset} className="p-1.5 hover:bg-theme-card rounded text-slate-400 transition-all" title="Ajustar Visualização">
               <Maximize2 size={16} />
             </button>
-            <button onClick={zoomIn} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Aumentar Zoom">
+            <button onClick={zoomIn} className="p-1.5 hover:bg-theme-card rounded text-slate-400 transition-all" title="Aumentar Zoom">
               <Plus size={16} />
             </button>
           </div>
 
-          <div className="h-6 w-px bg-slate-200" />
+          <div className="h-6 w-px bg-theme-border" />
 
-          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
-            <button onClick={activateHandTool} className="p-1.5 hover:bg-white rounded text-slate-500 transition-all" title="Mover Fluxograma (Arrastar)">
+          <div className="flex items-center gap-1 bg-theme-background p-1 rounded-lg border border-theme-border">
+            <button onClick={activateHandTool} className="p-1.5 hover:bg-theme-card rounded text-slate-400 transition-all" title="Mover Fluxograma (Arrastar)">
               <Move size={16} />
             </button>
           </div>
 
-          <div className="h-6 w-px bg-slate-200" />
+          <div className="h-6 w-px bg-theme-border" />
 
-          <div className="flex items-center gap-4 px-4 border-l border-slate-200">
+          <div className="flex items-center gap-4 px-4 border-l border-theme-border">
             <div className="flex flex-col">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tempo Total</span>
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Tempo Total</span>
               <div className="flex items-center gap-1.5">
-                <Clock size={14} className="text-indigo-600" />
-                <span className="text-sm font-black text-slate-700">{totalTime} min</span>
+                <Clock size={14} className="text-indigo-400" />
+                <span className="text-sm font-black text-theme-foreground">{totalTime} min</span>
               </div>
             </div>
           </div>

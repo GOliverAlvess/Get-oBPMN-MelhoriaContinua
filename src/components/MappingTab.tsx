@@ -28,7 +28,7 @@ export default function MappingTab({
   };
 
   return (
-    <div className="h-full flex flex-col bg-slate-50">
+    <div className="h-full flex flex-col bg-theme-background">
       <BPMNModeler 
         mapping={subtask.mapping} 
         onUpdateMapping={handleUpdateMapping} 

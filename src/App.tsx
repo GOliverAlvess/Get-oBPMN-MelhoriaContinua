@@ -33,7 +33,9 @@ import {
   ShieldCheck,
   Briefcase,
   History,
-  Download
+  Download,
+  Sun,
+  Moon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -184,7 +186,17 @@ function isValidDate(dateStr: string) {
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('flowprocess_theme');
+    if (saved === 'dark' || saved === 'light') return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
   const [projects, setProjects] = useState<Project[]>([]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('flowprocess_theme', theme);
+  }, [theme]);
   const [users, setUsers] = useState<User[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'scope' | 'mapping' | 'pdca'>('scope');
@@ -199,6 +211,19 @@ export default function App() {
   const [globalConfig, setGlobalConfig] = useState<{ sectors: string[], tools: string[] }>({ sectors: [], tools: [] });
   const [bpmnSavedColors, setBpmnSavedColors] = useState<SavedColor[]>([]);
 
+  const [hasChanges, setHasChanges] = useState(false);
+  const [showUnsavedModal, setShowUnsavedModal] = useState(false);
+  const [pendingNavigationAction, setPendingNavigationAction] = useState<(() => void) | null>(null);
+
+  const handleNavigation = (action: () => void) => {
+    if (hasChanges) {
+      setPendingNavigationAction(() => action);
+      setShowUnsavedModal(true);
+    } else {
+      action();
+    }
+  };
+
   const currentUserProfile = users.find(u => u.id === user?.uid);
 
   // Listen for Module Restrictions
@@ -212,6 +237,19 @@ export default function App() {
       }
     }
   }, [user, currentUserProfile, mode]);
+
+  // Prevent accidental close
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasChanges) {
+        e.preventDefault();
+        e.returnValue = "Salve as últimas alterações para que não sejam perdidas";
+        return e.returnValue;
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [hasChanges]);
 
   // Auth State Listener
   useEffect(() => {
@@ -369,7 +407,29 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
-  const [hasChanges, setHasChanges] = useState(false);
+  const handleConfirmNavigation = () => {
+    setHasChanges(false);
+    setShowUnsavedModal(false);
+    if (pendingNavigationAction) {
+      pendingNavigationAction();
+      setPendingNavigationAction(null);
+    }
+  };
+
+  const handleSaveAndExitNavigation = async () => {
+    if (selectedProjectId) {
+      const proj = projects.find(p => p.id === selectedProjectId);
+      if (proj) {
+        await persistProject(proj, true);
+      }
+    }
+    setHasChanges(false);
+    setShowUnsavedModal(false);
+    if (pendingNavigationAction) {
+      pendingNavigationAction();
+      setPendingNavigationAction(null);
+    }
+  };
 
   // Unified save function
   const persistProject = async (projectToSync: Project, isManual: boolean = false) => {
@@ -602,7 +662,7 @@ export default function App() {
     }
   };
 
-  const handleCreateProject = async (data: { name: string, priority: ProjectPriority, assignedTo: string }) => {
+  const handleCreateProject = async (data: { name: string, description: string, priority: ProjectPriority, assignedTo: string }) => {
     if (!user) return;
     const newId = uuidv4();
     const assignedUser = users.find(u => u.id === data.assignedTo);
@@ -610,6 +670,7 @@ export default function App() {
     const newProject: Project = {
       id: newId,
       name: data.name,
+      description: data.description,
       createdAt: new Date().toISOString(),
       progress: 0,
       status: 'Planejamento',
@@ -665,14 +726,15 @@ export default function App() {
   };
 
   const handleBackToKanban = () => {
-    if (!confirmNavigation()) return;
-    setSelectedProjectId(null);
-    setHasChanges(false);
+    handleNavigation(() => {
+      setSelectedProjectId(null);
+      setHasChanges(false);
+    });
   };
 
   const confirmNavigation = () => {
     if (hasChanges) {
-      return confirm("Você possui alterações não salvas. Deseja sair mesmo assim?");
+      return confirm("Salve as últimas alterações para que não sejam perdidas");
     }
     return true;
   };
@@ -794,7 +856,7 @@ export default function App() {
 
           <div className="text-center pt-8">
             <button 
-              onClick={handleLogout}
+              onClick={() => handleNavigation(handleLogout)}
               className="text-slate-400 font-bold hover:text-red-500 transition-colors flex items-center gap-2 mx-auto"
             >
               <LogOut size={18} />
@@ -808,16 +870,31 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans">
+      <div className="min-h-screen bg-theme-background text-theme-foreground font-sans transition-colors duration-300">
+        {/* Theme Toggle Floating */}
+        <div className="fixed top-4 right-4 z-[60] flex items-center gap-3">
+          <button 
+            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+            className="p-3 bg-theme-card border border-theme-border rounded-2xl shadow-xl text-slate-400 hover:text-indigo-600 transition-all active:scale-95 group"
+            title={theme === 'light' ? "Ativar Modo Escuro" : "Ativar Modo Claro"}
+          >
+            {theme === 'light' ? (
+              <Moon size={20} className="group-hover:rotate-12 transition-transform" />
+            ) : (
+              <Sun size={20} className="group-hover:rotate-90 transition-transform text-amber-400" />
+            )}
+          </button>
+        </div>
+
         {/* Sidebar */}
         <aside className={cn(
-          "fixed left-0 top-0 h-full bg-white border-r border-slate-200 z-50 hidden lg:flex flex-col transition-all duration-300",
+          "fixed left-0 top-0 h-full bg-theme-card border-r border-theme-border z-50 hidden lg:flex flex-col transition-all duration-300",
           isSidebarCollapsed ? "w-20" : "w-64"
         )}>
-          <div className="p-4 border-b border-slate-100 flex flex-col items-center gap-4 shrink-0">
+          <div className="p-4 border-b border-theme-border flex flex-col items-center gap-4 shrink-0">
             <div className="flex items-center justify-between w-full min-w-0">
               <div className={cn("flex items-center gap-3 overflow-hidden transition-all duration-300", isSidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100 min-w-0 flex-1")}>
-                <div className="w-auto h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-slate-100 p-1 flex-shrink-0">
+                <div className="w-auto h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-slate-100 p-1 flex-shrink-0 dark:bg-slate-100">
                   <img 
                     src="/assets/logo-flowprocess.svg" 
                     alt="Logo" 
@@ -825,7 +902,7 @@ export default function App() {
                     referrerPolicy="no-referrer"
                   />
                 </div>
-                <h1 className="font-bold text-lg tracking-tight text-[#003489] whitespace-nowrap truncate">FlowProcess</h1>
+                <h1 className="font-bold text-lg tracking-tight text-indigo-700 dark:text-indigo-400 whitespace-nowrap truncate">FlowProcess</h1>
               </div>
               <button 
                 onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -837,7 +914,7 @@ export default function App() {
             </div>
             
             {isSidebarCollapsed && (
-              <div className="w-auto h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-slate-100 p-1 shrink-0">
+              <div className="w-auto h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-slate-100 p-1 shrink-0 dark:bg-slate-100">
                 <img 
                   src="/assets/logo-flowprocess.svg" 
                   alt="Logo" 
@@ -853,36 +930,33 @@ export default function App() {
               <>
                 <SidebarItem 
                   active={activeView === 'dashboard'}
-                  onClick={() => {
-                    if (!confirmNavigation()) return;
+                  onClick={() => handleNavigation(() => {
                     setActiveView('dashboard');
                     setSelectedProjectId(null);
                     setHasChanges(false);
-                  }}
+                  })}
                   icon={<LayoutDashboard size={20} />}
                   label="Dashboard"
                   collapsed={isSidebarCollapsed}
                 />
                 <SidebarItem 
                   active={activeView === 'kanban'}
-                  onClick={() => {
-                    if (!confirmNavigation()) return;
+                  onClick={() => handleNavigation(() => {
                     setActiveView('kanban');
                     setSelectedProjectId(null);
                     setHasChanges(false);
-                  }}
+                  })}
                   icon={<GitBranch size={20} />}
                   label="Projetos"
                   collapsed={isSidebarCollapsed}
                 />
                 <SidebarItem 
                   active={activeView === 'actions'}
-                  onClick={() => {
-                    if (!confirmNavigation()) return;
+                  onClick={() => handleNavigation(() => {
                     setActiveView('actions');
                     setSelectedProjectId(null);
                     setHasChanges(false);
-                  }}
+                  })}
                   icon={<History size={20} />}
                   label="Histórico de Ações"
                   collapsed={isSidebarCollapsed}
@@ -894,24 +968,22 @@ export default function App() {
               <>
                 <SidebarItem 
                   active={activeView === 'innovation_dashboard'}
-                  onClick={() => {
-                    if (!confirmNavigation()) return;
+                  onClick={() => handleNavigation(() => {
                     setActiveView('innovation_dashboard');
                     setSelectedProjectId(null);
                     setHasChanges(false);
-                  }}
+                  })}
                   icon={<LayoutDashboard size={20} />}
                   label="Dashboard"
                   collapsed={isSidebarCollapsed}
                 />
                 <SidebarItem 
                   active={activeView === 'innovation'}
-                  onClick={() => {
-                    if (!confirmNavigation()) return;
+                  onClick={() => handleNavigation(() => {
                     setActiveView('innovation');
                     setSelectedProjectId(null);
                     setHasChanges(false);
-                  }}
+                  })}
                   icon={<Target size={20} />}
                   label="Projetos"
                   collapsed={isSidebarCollapsed}
@@ -921,11 +993,10 @@ export default function App() {
 
             <SidebarItem 
               active={activeView === 'settings'}
-              onClick={() => {
-                if (!confirmNavigation()) return;
+              onClick={() => handleNavigation(() => {
                 setActiveView('settings');
                 setHasChanges(false);
-              }}
+              })}
               icon={<Settings size={20} />}
               label="Configurações"
               collapsed={isSidebarCollapsed}
@@ -934,11 +1005,10 @@ export default function App() {
             {(!currentUserProfile?.module) && (
               <div className="pt-4 mt-4 border-t border-slate-100 italic">
                 <button 
-                  onClick={() => {
-                    if (!confirmNavigation()) return;
+                  onClick={() => handleNavigation(() => {
                     setMode(null);
                     localStorage.removeItem('flowprocess_mode');
-                  }}
+                  })}
                   className="w-full flex items-center gap-2 p-3 text-slate-400 hover:text-indigo-600 transition-colors text-xs font-black uppercase tracking-widest"
                 >
                   {!isSidebarCollapsed && <RefreshCw size={14} />}
@@ -949,9 +1019,9 @@ export default function App() {
             )}
           </nav>
 
-          <div className="p-4 border-t border-slate-100">
+          <div className="p-4 border-t border-theme-border">
             <div className={cn("flex items-center gap-3 px-4 py-3 transition-all duration-300 min-w-0 w-full", isSidebarCollapsed ? "justify-center" : "")}>
-              <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0">
+              <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden flex-shrink-0 border border-theme-border">
                 <img src={user.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.uid}`} alt="User" />
               </div>
               {!isSidebarCollapsed && (
@@ -963,7 +1033,7 @@ export default function App() {
               {!isSidebarCollapsed && (
                 <LogOut 
                   size={18} 
-                  className="text-slate-400 hover:text-red-500 cursor-pointer shrink-0" 
+                  className="text-slate-400 hover:text-red-500 cursor-pointer shrink-0 transition-colors" 
                   onClick={handleLogout}
                 />
               )}
@@ -1044,6 +1114,7 @@ export default function App() {
                 users={users}
                 onDeleteInnovationProject={handleDeleteInnovationProject}
                 onUpdateInnovationProject={handleUpdateInnovationProject}
+                onAddInnovationProject={handleAddInnovationProject}
                 bpmnSavedColors={bpmnSavedColors}
                 onSaveBpmnColor={(color) => setBpmnSavedColors(prev => [...prev, color])}
                 onDeleteBpmnColor={(id) => setBpmnSavedColors(prev => prev.filter(c => c.id !== id))}
@@ -1105,6 +1176,56 @@ export default function App() {
           onCreate={handleCreateProject}
           users={users}
         />
+
+        {showUnsavedModal && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-200"
+            >
+              <div className="p-8 space-y-6">
+                <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <AlertCircle size={32} />
+                </div>
+                
+                <div className="text-center space-y-2">
+                  <h3 className="text-xl font-black text-slate-900 tracking-tight">Alterações não salvas</h3>
+                  <p className="text-slate-500 font-medium leading-relaxed">
+                    Salve as últimas alterações para que não sejam perdidas
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 gap-3">
+                  <button 
+                    onClick={handleSaveAndExitNavigation}
+                    className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+                  >
+                    <Save size={18} />
+                    Salvar e Sair
+                  </button>
+                  
+                  <button 
+                    onClick={handleConfirmNavigation}
+                    className="w-full bg-slate-50 text-slate-600 py-3 rounded-2xl font-bold hover:bg-slate-100 transition-all border border-slate-200"
+                  >
+                    Sair sem Salvar
+                  </button>
+
+                  <button 
+                    onClick={() => {
+                      setShowUnsavedModal(false);
+                      setPendingNavigationAction(null);
+                    }}
+                    className="w-full text-slate-400 py-2 rounded-2xl font-bold hover:text-slate-600 transition-all text-sm"
+                  >
+                    Permanecer na Tela
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </div>
     </ErrorBoundary>
   );
@@ -1547,9 +1668,15 @@ function ProjectCard({ project, users, onClick, onDelete }: { project: Project, 
         </div>
       </div>
 
-      <h4 className="font-bold text-slate-800 leading-tight mb-4 group-hover:text-indigo-600 transition-colors">
+      <h4 className="font-bold text-slate-800 leading-tight mb-2 group-hover:text-indigo-600 transition-colors">
         {project.name}
       </h4>
+
+      {project.description && (
+        <p className="text-[11px] text-slate-500 mb-4 line-clamp-2 leading-relaxed">
+          {project.description}
+        </p>
+      )}
 
       <div className="space-y-4">
         <div className="space-y-2">
@@ -1686,32 +1813,32 @@ function ProjectDetailView({
       <motion.div 
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
-        className="flex flex-col h-full bg-slate-50"
+        className="flex flex-col h-full bg-theme-background"
       >
         {/* Subtask Header */}
-        <div className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between sticky top-0 z-10">
+        <div className="bg-theme-card border-b border-theme-border px-8 py-4 flex items-center justify-between sticky top-0 z-10 transition-colors">
           <div className="flex items-center gap-4">
             <button 
               onClick={() => {
                 setSelectedSubtaskId(null);
                 setActiveTab('scope');
               }}
-              className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500 flex items-center gap-2 font-bold text-sm"
+              className="p-2 hover:bg-theme-background rounded-lg transition-colors text-slate-400 flex items-center gap-2 font-bold text-sm"
             >
               <ChevronRight size={20} className="rotate-180" />
               Voltar ao Escopo
             </button>
-            <div className="h-6 w-px bg-slate-200" />
+            <div className="h-6 w-px bg-theme-border" />
             <div>
-              <h3 className="text-lg font-bold text-slate-900">
+              <h3 className="text-lg font-bold text-theme-foreground">
                 Execução: {selectedSubtask.title}
               </h3>
-              <p className="text-xs text-slate-500 font-medium">Projeto: {project.scope.title}</p>
+              <p className="text-xs text-slate-500 font-medium font-sans">Projeto: {project.scope.title}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+            <div className="flex bg-theme-background p-1 rounded-xl border border-theme-border">
               <TabButton 
                 active={activeTab === 'mapping'} 
                 onClick={() => setActiveTab('mapping')} 
@@ -1748,7 +1875,7 @@ function ProjectDetailView({
           </div>
         </div>
 
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1">
           {activeTab === 'mapping' && (
             <MappingTab 
               project={project} 
@@ -1789,7 +1916,7 @@ function ProjectDetailView({
         <div className="flex items-center gap-4">
           <button 
             onClick={onBack}
-            className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500"
+            className="p-2 hover:bg-theme-card rounded-lg transition-colors text-slate-400"
           >
             <ChevronRight size={24} className="rotate-180" />
           </button>
@@ -1802,37 +1929,37 @@ function ProjectDetailView({
                   name: e.target.value,
                   scope: { ...project.scope, title: e.target.value }
                 })}
-                className="text-2xl font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-200 focus:border-indigo-500 outline-none transition-all"
+                className="text-2xl font-bold text-theme-foreground bg-transparent border-b border-transparent hover:border-theme-border focus:border-indigo-500 outline-none transition-all"
               />
               {isSaving && (
                 <span className={cn(
                   "flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest animate-pulse",
-                  saveStatus === 'error' ? "text-rose-500" : "text-indigo-500"
+                  saveStatus === 'error' ? "text-rose-500" : "text-indigo-400"
                 )}>
                   <RefreshCw size={10} className={cn(saveStatus === 'saving' && "animate-spin")} />
                   {saveStatus === 'saving' ? 'Salvando...' : saveStatus === 'success' ? 'Salvo!' : saveStatus === 'error' ? 'Erro!' : 'Salvando...'}
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-3 mt-1 text-sm text-slate-500">
+            <div className="flex items-center gap-3 mt-1 text-sm text-slate-400">
               <span className="flex items-center gap-1">
                 <Users size={14} />
                 {project.scope.responsible}
               </span>
-              <span className="w-1 h-1 bg-slate-300 rounded-full" />
+              <span className="w-1 h-1 bg-theme-border rounded-full" />
               <span className="flex items-center gap-1">
                 <Clock size={14} />
                 Iniciado em {isValidDate(project.createdAt) ? format(new Date(project.createdAt), 'dd/MM/yyyy') : 'Data Inválida'}
               </span>
-              <span className="w-1 h-1 bg-slate-300 rounded-full" />
+              <span className="w-1 h-1 bg-theme-border rounded-full" />
               <select 
                 value={project.priority || 'Média'}
                 onChange={(e) => setProjects({ ...project, priority: e.target.value as ProjectPriority })}
                 className={cn(
                   "text-[10px] uppercase font-bold px-2 py-0.5 rounded-md border outline-none transition-all",
-                  project.priority === 'Alta' ? "bg-rose-50 text-rose-600 border-rose-100" :
-                  project.priority === 'Média' ? "bg-indigo-50 text-indigo-600 border-indigo-100" :
-                  "bg-slate-50 text-slate-600 border-slate-100"
+                  project.priority === 'Alta' ? "bg-rose-500/10 text-rose-500 border-rose-500/20" :
+                  project.priority === 'Média' ? "bg-indigo-500/10 text-indigo-400 border-indigo-500/20" :
+                  "bg-theme-background text-slate-400 border-theme-border"
                 )}
               >
                 <option value="Baixa">Baixa</option>
@@ -1846,21 +1973,21 @@ function ProjectDetailView({
         <div className="flex items-center gap-6">
           <div className="hidden md:flex flex-col items-end gap-1">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-black text-slate-400 uppercase tracking-widest">Progresso</span>
-              <span className="text-lg font-black text-indigo-600">{calculateProjectProgress(project)}%</span>
+              <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Progresso</span>
+              <span className="text-lg font-black text-indigo-400">{calculateProjectProgress(project)}%</span>
             </div>
-            <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div className="w-32 h-2 bg-theme-border rounded-full overflow-hidden">
               <motion.div 
                 initial={{ width: 0 }}
                 animate={{ width: `${calculateProjectProgress(project)}%` }}
-                className="h-full bg-indigo-600 rounded-full"
+                className="h-full bg-indigo-500 rounded-full"
               />
             </div>
           </div>
           <button 
             onClick={() => onSave(project)}
             disabled={isSaving}
-            className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-xl font-bold text-sm hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-500 text-white rounded-xl font-bold text-sm hover:bg-emerald-600 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save size={18} />
             {isSaving ? 'Salvando...' : 'Salvar Alterações'}
@@ -1868,7 +1995,7 @@ function ProjectDetailView({
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm min-h-[600px] overflow-hidden">
+      <div className="bg-theme-card rounded-2xl border border-theme-border shadow-sm min-h-[600px] overflow-hidden">
         {activeTab === 'scope' && (
           <ScopeTab 
             project={project} 
@@ -1893,8 +2020,8 @@ function TabButton({ active, onClick, icon, label }: { active: boolean, onClick:
       className={cn(
         "flex items-center gap-2 px-4 py-2 rounded-lg transition-all font-bold text-xs uppercase tracking-wider",
         active 
-          ? "bg-white text-indigo-600 shadow-sm" 
-          : "text-slate-500 hover:bg-white/50 hover:text-slate-700"
+          ? "bg-theme-card text-indigo-400 shadow-sm border border-theme-border" 
+          : "text-slate-500 hover:bg-theme-card/50 hover:text-slate-400"
       )}
     >
       {icon}
@@ -2008,6 +2135,13 @@ function ScopeTab({
               label="Título do Projeto" 
               value={project.scope.title} 
               onChange={(v) => updateScope('title', v)}
+            />
+            <FormField 
+              label="Descrição do projeto" 
+              value={project.description || ''} 
+              type="textarea"
+              placeholder="Descreva brevemente o objetivo deste projeto..."
+              onChange={(v) => setProjects({ ...project, description: v.slice(0, 300) })}
             />
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Responsável</label>
@@ -2643,7 +2777,7 @@ function FormField({
           value={value || ''}
           placeholder={placeholder}
           onChange={(e) => onChange?.(e.target.value)}
-          className="w-full p-4 bg-white border border-slate-200 rounded-xl text-slate-700 min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm leading-relaxed"
+          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm leading-relaxed"
         />
       ) : (
         <input 
@@ -2651,7 +2785,7 @@ function FormField({
           value={value || ''}
           placeholder={placeholder}
           onChange={(e) => onChange?.(e.target.value)}
-          className="w-full p-4 bg-white border border-slate-200 rounded-xl text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm"
+          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 transition-all text-sm"
         />
       )}
     </div>
@@ -2663,10 +2797,11 @@ function FormField({
 function CreateProjectModal({ isOpen, onClose, onCreate, users }: { 
   isOpen: boolean, 
   onClose: () => void, 
-  onCreate: (data: { name: string, priority: ProjectPriority, assignedTo: string }) => void,
+  onCreate: (data: { name: string, description: string, priority: ProjectPriority, assignedTo: string }) => void,
   users: User[]
 }) {
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<ProjectPriority>('Média');
   const [assignedTo, setAssignedTo] = useState('');
 
@@ -2683,7 +2818,7 @@ function CreateProjectModal({ isOpen, onClose, onCreate, users }: {
       <motion.div 
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="bg-white w-full max-w-md rounded-3xl shadow-2xl overflow-hidden"
+        className="bg-theme-card w-full max-w-md rounded-3xl shadow-2xl overflow-hidden border border-theme-border"
       >
         <div className="p-8 space-y-6">
           <div className="flex justify-between items-center">
@@ -2703,6 +2838,24 @@ function CreateProjectModal({ isOpen, onClose, onCreate, users }: {
                 placeholder="Ex: Melhoria no Processo de Vendas"
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-700 ml-1">Descrição do projeto</label>
+              <textarea 
+                value={description}
+                onChange={(e) => setDescription(e.target.value.slice(0, 300))}
+                placeholder="Descreva brevemente o objetivo deste projeto..."
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all h-24 resize-none"
+              />
+              <div className="flex justify-end pr-1">
+                <span className={cn(
+                  "text-[10px] font-bold uppercase tracking-widest",
+                  description.length >= 300 ? "text-rose-500" : "text-slate-400"
+                )}>
+                  {description.length}/300
+                </span>
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -2741,7 +2894,7 @@ function CreateProjectModal({ isOpen, onClose, onCreate, users }: {
 
           <button 
             disabled={!name.trim()}
-            onClick={() => onCreate({ name, priority, assignedTo })}
+            onClick={() => onCreate({ name, description, priority, assignedTo })}
             className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Criar Projeto

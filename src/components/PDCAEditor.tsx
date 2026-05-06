@@ -1026,95 +1026,99 @@ export default function PDCAEditor({
   }
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
-      {/* Header */}
-      <div className="bg-white border-b border-slate-200 p-4 flex items-center justify-between z-10">
-        <div className="flex items-center gap-4">
-          <button onClick={() => setShowDashboard(true)} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500">
-            <ChevronRight size={24} className="rotate-180" />
-          </button>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-              <RefreshCw size={24} />
-            </div>
-            <div>
-              <h3 className="font-bold text-slate-800 truncate max-w-[300px]">{activeCycle?.title}</h3>
-              <div className="flex items-center gap-2">
-                <StatusBadge status={activeCycle?.status || 'Ativo'} />
-                <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                  {activeCycle && format(new Date(activeCycle.createdAt), 'dd/MM/yyyy')}
-                </span>
+    <div className="flex flex-col min-h-full bg-theme-background transition-colors duration-300">
+      {/* Combined Sticky Header */}
+      <div className="sticky top-[73.5px] z-[100] bg-theme-card border-b border-theme-border shadow-sm transition-colors duration-300">
+        {/* Cycle Info Header */}
+        <div className="p-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setShowDashboard(true)} className="p-2 hover:bg-slate-100/10 rounded-lg text-slate-400">
+              <ChevronRight size={24} className="rotate-180" />
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+                <RefreshCw size={24} />
+              </div>
+              <div>
+                <h3 className="font-bold text-theme-foreground truncate max-w-[300px]">{activeCycle?.title}</h3>
+                <div className="flex items-center gap-2">
+                  <StatusBadge status={activeCycle?.status || 'Ativo'} />
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    {activeCycle && format(new Date(activeCycle.createdAt), 'dd/MM/yyyy')}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
+
+          <div className="flex items-center gap-3">
+            {saveFeedback && (
+              <motion.div 
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg"
+              >
+                <CheckCircle2 size={16} />
+                {saveFeedback}
+              </motion.div>
+            )}
+            <select 
+              value={activeCycle?.status}
+              onChange={(e) => updateCycle({ status: e.target.value as any })}
+              className="bg-slate-100 border-none text-xs font-black uppercase tracking-widest px-4 py-2 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="Ativo">Ativo</option>
+              <option value="Concluído">Concluído</option>
+            </select>
+          </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {saveFeedback && (
-            <motion.div 
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              className="bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-2 shadow-lg"
-            >
-              <CheckCircle2 size={16} />
-              {saveFeedback}
-            </motion.div>
-          )}
-          <select 
-            value={activeCycle?.status}
-            onChange={(e) => updateCycle({ status: e.target.value as any })}
-            className="bg-slate-100 border-none text-xs font-black uppercase tracking-widest px-4 py-2 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="Ativo">Ativo</option>
-            <option value="Concluído">Concluído</option>
-          </select>
-        </div>
+        {activeCycle && (
+          <div className="px-8 flex gap-8 border-t border-theme-border">
+            <PhaseTab active={activePhase === 'PLAN'} onClick={() => handlePhaseChange('PLAN')} label="PLAN (P)" color="indigo" />
+            <PhaseTab 
+              active={activePhase === 'DO'} 
+              onClick={() => handlePhaseChange('DO')} 
+              label="DO (D)" 
+              color="amber" 
+              disabled={!isPlanPhaseValid}
+              icon={!isPlanPhaseValid ? <Lock size={12} /> : undefined}
+              lockTooltip={!isPlanPhaseValid ? "Finalize a etapa PLAN para desbloquear" : undefined}
+            />
+            <PhaseTab 
+              active={activePhase === 'CHECK'} 
+              onClick={() => handlePhaseChange('CHECK')} 
+              label="CHECK (C)" 
+              color="emerald" 
+              disabled={!isDoPhaseValid}
+              icon={!isDoPhaseValid ? <Lock size={12} /> : undefined}
+              lockTooltip={!isDoPhaseValid ? "Pelo menos um plano deve ser concluído no DO para liberar o CHECK" : undefined}
+            />
+            <PhaseTab 
+              active={activePhase === 'ACT'} 
+              onClick={() => handlePhaseChange('ACT')} 
+              label="ACT (A)" 
+              color="rose" 
+              disabled={!isCheckPhaseValid}
+              icon={!isCheckPhaseValid ? <Lock size={12} /> : undefined}
+              lockTooltip={!isCheckPhaseValid ? "Pelo menos um plano deve concluir o CHECK para liberar o ACT" : undefined}
+            />
+            <PhaseTab 
+              active={activePhase === 'REPORT'} 
+              onClick={() => handlePhaseChange('REPORT')} 
+              label="RELATÓRIO PDCA" 
+              color="slate" 
+            />
+          </div>
+        )}
       </div>
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col">
         {activeCycle ? (
           <>
-            {/* Phase Tabs */}
-            <div className="bg-white border-b border-slate-200 px-8 flex gap-8">
-              <PhaseTab active={activePhase === 'PLAN'} onClick={() => handlePhaseChange('PLAN')} label="PLAN (P)" color="indigo" />
-              <PhaseTab 
-                active={activePhase === 'DO'} 
-                onClick={() => handlePhaseChange('DO')} 
-                label="DO (D)" 
-                color="amber" 
-                disabled={!isPlanPhaseValid}
-                icon={!isPlanPhaseValid ? <Lock size={12} /> : undefined}
-                lockTooltip={!isPlanPhaseValid ? "Finalize a etapa PLAN para desbloquear" : undefined}
-              />
-              <PhaseTab 
-                active={activePhase === 'CHECK'} 
-                onClick={() => handlePhaseChange('CHECK')} 
-                label="CHECK (C)" 
-                color="emerald" 
-                disabled={!isDoPhaseValid}
-                icon={!isDoPhaseValid ? <Lock size={12} /> : undefined}
-                lockTooltip={!isDoPhaseValid ? "Pelo menos um plano deve ser concluído no DO para liberar o CHECK" : undefined}
-              />
-              <PhaseTab 
-                active={activePhase === 'ACT'} 
-                onClick={() => handlePhaseChange('ACT')} 
-                label="ACT (A)" 
-                color="rose" 
-                disabled={!isCheckPhaseValid}
-                icon={!isCheckPhaseValid ? <Lock size={12} /> : undefined}
-                lockTooltip={!isCheckPhaseValid ? "Pelo menos um plano deve concluir o CHECK para liberar o ACT" : undefined}
-              />
-              <PhaseTab 
-                active={activePhase === 'REPORT'} 
-                onClick={() => handlePhaseChange('REPORT')} 
-                label="RELATÓRIO PDCA" 
-                color="slate" 
-              />
-            </div>
-
             {/* Phase Content */}
-            <div className="flex-1 overflow-y-auto p-8">
+            <div className="flex-1 p-8">
               <AnimatePresence mode="wait">
                 {activePhase === 'PLAN' && (
                   <motion.div 
@@ -1133,7 +1137,7 @@ export default function PDCAEditor({
                             placeholder="Descreva o problema de forma clara..."
                             value={activeCycle.plan.problemDescription || ''}
                             onChange={(e) => updatePlan({ problemDescription: e.target.value })}
-                            className="w-full p-6 bg-white border border-slate-200 rounded-3xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all min-h-[120px] text-slate-700 font-medium shadow-sm"
+                            className="w-full p-6 bg-theme-background border border-theme-border rounded-3xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all min-h-[120px] text-theme-foreground font-medium shadow-sm"
                           />
                         </section>
                         
@@ -1141,14 +1145,13 @@ export default function PDCAEditor({
                         <section className="space-y-6">
                           <div className="flex items-center justify-between">
                             <SectionHeader number="2" title="Análise de Causa Raiz" />
-                            <div className="flex bg-slate-100 p-1 rounded-xl">
+                            <div className="flex bg-theme-background p-1 rounded-xl border border-theme-border">
                               <button 
                                 onClick={() => updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, type: '5whys' } })}
                                 className={cn(
                                   "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                                  activeCycle.plan.rootCauseAnalysis.type === '5whys' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400"
-                                )}
-                              >
+                                  activeCycle.plan.rootCauseAnalysis.type === '5whys' ? "bg-theme-card text-indigo-400 shadow-sm" : "text-slate-400"
+                                )}>
                                 5 Porquês
                               </button>
                               <button 
@@ -1161,18 +1164,16 @@ export default function PDCAEditor({
                                 })}
                                 className={cn(
                                   "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                                  activeCycle.plan.rootCauseAnalysis.type === 'ishikawa' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400"
-                                )}
-                              >
+                                  activeCycle.plan.rootCauseAnalysis.type === 'ishikawa' ? "bg-theme-card text-indigo-400 shadow-sm" : "text-slate-400"
+                                )}>
                                 Ishikawa
                               </button>
                               <button 
                                 onClick={() => updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, type: 'list' } })}
                                 className={cn(
                                   "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                                  activeCycle.plan.rootCauseAnalysis.type === 'list' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400"
-                                )}
-                              >
+                                  activeCycle.plan.rootCauseAnalysis.type === 'list' ? "bg-theme-card text-indigo-400 shadow-sm" : "text-slate-400"
+                                )}>
                                 Lista de Causas
                               </button>
                             </div>
@@ -1183,10 +1184,10 @@ export default function PDCAEditor({
                               <>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {(activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories).map((cat, catIdx) => (
-                                  <div key={cat.id} className="bg-white p-6 rounded-2xl border border-slate-200 space-y-4 min-w-0">
+                                  <div key={cat.id} className="bg-theme-card p-6 rounded-2xl border border-theme-border space-y-4 min-w-0">
                                     <div className="flex items-center justify-between gap-2 min-w-0">
                                       <div className="min-w-0 flex-1">
-                                        <h5 className="font-black text-slate-800 text-xs uppercase tracking-widest truncate">{cat.name}</h5>
+                                        <h5 className="font-black text-theme-foreground text-xs uppercase tracking-widest truncate">{cat.name}</h5>
                                         <p className="text-[10px] text-slate-400 font-medium truncate">{cat.description}</p>
                                       </div>
                                       <button 
@@ -1270,7 +1271,7 @@ export default function PDCAEditor({
                                         </div>
                                       </div>
 
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 px-1">
                                         {allIshikawaCauses.length === 0 ? (
                                           <p className="text-slate-500 text-xs italic">Preencha as causas no diagrama acima para priorizar.</p>
                                         ) : (
@@ -1469,9 +1470,9 @@ export default function PDCAEditor({
                                   <motion.div 
                                     initial={{ opacity: 0, height: 0 }}
                                     animate={{ opacity: 1, height: 'auto' }}
-                                    className="space-y-6 pt-6 border-t border-slate-100 w-full overflow-hidden"
+                                    className="space-y-6 pt-6 border-t border-slate-100 w-full"
                                   >
-                                    <div className="grid grid-cols-1 md:grid-cols-6 gap-4 w-full">
+                                    <div className="grid grid-cols-1 md:grid-cols-6 gap-4 w-full px-1">
                                       {/* What - Full Width */}
                                       <div className="md:col-span-6 space-y-1 min-w-0">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">What (O que será feito?)</label>
@@ -1660,12 +1661,12 @@ export default function PDCAEditor({
                     exit={{ opacity: 0 }}
                     className="max-w-5xl mx-auto space-y-8"
                   >
-                    <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
-                      <div className="p-8 border-b border-slate-100 bg-slate-50/50">
-                        <h4 className="text-xl font-black text-slate-800 tracking-tight">Execução e Histórico</h4>
-                        <p className="text-slate-500 text-sm mt-1">Registre cada atualização das ações planejadas.</p>
+                    <div className="bg-theme-card rounded-[2.5rem] border border-theme-border shadow-sm overflow-hidden">
+                      <div className="p-8 border-b border-theme-border bg-theme-background/50">
+                        <h4 className="text-xl font-black text-theme-foreground tracking-tight">Execução e Histórico</h4>
+                        <p className="text-slate-400 text-sm mt-1">Registre cada atualização das ações planejadas.</p>
                       </div>
-                      <div className="divide-y divide-slate-100">
+                      <div className="divide-y divide-theme-border">
                         {activeCycle.plan.actionPlan.length === 0 ? (
                           <div className="p-20 text-center text-slate-400 italic">
                             Nenhuma ação planejada (PLAN).
@@ -1770,7 +1771,7 @@ export default function PDCAEditor({
                                       animate={{ height: 'auto', opacity: 1 }}
                                       exit={{ height: 0, opacity: 0 }}
                                       transition={{ duration: 0.3, ease: 'easeInOut' }}
-                                      className="overflow-hidden"
+                                      className=""
                                     >
                                       <div className="px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-1 duration-300">
                                         {/* History Log */}
@@ -1917,7 +1918,7 @@ export default function PDCAEditor({
                                                   <h6 className="text-[10px] font-black uppercase tracking-widest">Nova Atualização</h6>
                                                 </div>
 
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 px-1">
                                                   <div className="space-y-2">
                                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Novo Status</label>
                                                     <select 
@@ -2158,10 +2159,10 @@ export default function PDCAEditor({
                                       animate={{ height: 'auto', opacity: 1 }}
                                       exit={{ height: 0, opacity: 0 }}
                                       transition={{ duration: 0.3, ease: 'easeInOut' }}
-                                      className="overflow-hidden"
+                                      className=""
                                     >
                                       <div className="px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-1 duration-300 pt-4 border-t border-slate-50">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 px-1">
                                           {/* Linha 1 */}
                                           <div className="space-y-1">
                                             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Modo de Acompanhamento</label>
@@ -2397,7 +2398,7 @@ export default function PDCAEditor({
                                       <div className="flex items-center gap-2">
                                         <h5 className={cn(
                                           "font-bold text-lg truncate transition-colors",
-                                          isCheckDone ? "text-slate-800 group-hover:text-indigo-600" : "text-slate-400"
+                                          isCheckDone ? "text-theme-foreground group-hover:text-indigo-400" : "text-slate-400"
                                         )}>
                                           {item.what || 'Ação sem descrição'}
                                         </h5>
@@ -2452,10 +2453,10 @@ export default function PDCAEditor({
                                       animate={{ height: 'auto', opacity: 1 }}
                                       exit={{ height: 0, opacity: 0 }}
                                       transition={{ duration: 0.3, ease: 'easeInOut' }}
-                                      className="overflow-hidden"
+                                      className=""
                                     >
                                       <div className="px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-1 duration-300 pt-4 border-t border-slate-50">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 px-1">
                                           <div className="space-y-4">
                                             <div className="space-y-1">
                                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Status Final do Problema</label>
@@ -2464,7 +2465,7 @@ export default function PDCAEditor({
                                                 onChange={(e) => updateActionPlan(item.id, { finalProblemStatus: e.target.value as any })}
                                                 disabled={!isCheckDone}
                                                 className={cn(
-                                                  "w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all",
+                                                  "w-full bg-theme-background px-4 py-3 rounded-xl text-xs font-bold outline-none border border-theme-border focus:ring-2 focus:ring-indigo-500 transition-all text-theme-foreground",
                                                   !isCheckDone && "opacity-50 cursor-not-allowed"
                                                 )}
                                               >
@@ -2479,7 +2480,7 @@ export default function PDCAEditor({
                                                 onChange={(e) => updateActionPlan(item.id, { finalAction: e.target.value as any })}
                                                 disabled={!isCheckDone}
                                                 className={cn(
-                                                  "w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all",
+                                                  "w-full bg-theme-background px-4 py-3 rounded-xl text-xs font-bold outline-none border border-theme-border focus:ring-2 focus:ring-indigo-500 transition-all text-theme-foreground",
                                                   !isCheckDone && "opacity-50 cursor-not-allowed"
                                                 )}
                                               >
@@ -3036,7 +3037,7 @@ function ReportSection({ title, color, children }: { title: string, color: strin
     amber: "bg-amber-50 border-amber-100 text-amber-800",
     emerald: "bg-emerald-50 border-emerald-100 text-emerald-800",
     rose: "bg-rose-50 border-rose-100 text-rose-800",
-    slate: "bg-slate-50 border-slate-100 text-slate-800"
+    slate: "bg-theme-background border-theme-border text-theme-foreground"
   };
 
   return (

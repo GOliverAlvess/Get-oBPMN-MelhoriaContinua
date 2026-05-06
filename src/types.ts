@@ -312,6 +312,7 @@ export interface InnovationProject {
   pdcaId: string;
   actionId: string;
   title: string;
+  description?: string;
   type: InnovationSolutionType | '';
   status: InnovationStatus;
   complexity: InnovationComplexity | '';

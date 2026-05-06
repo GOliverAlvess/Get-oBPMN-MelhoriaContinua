@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { 
   ArrowLeft, 
   Settings, 
+  Target,
   Clock, 
   GitBranch, 
   Briefcase, 
@@ -11,6 +12,7 @@ import {
   FileText,
   CheckCircle2,
   AlertCircle,
+  ChevronRight,
   FileCode,
   Link as LinkIcon,
   Paperclip,
@@ -23,7 +25,6 @@ import {
   ExternalLink,
   Github,
   Globe,
-  ChevronRight,
   Users,
   Calendar
 } from 'lucide-react';
@@ -206,6 +207,64 @@ export default function InnovationProjectDetail({
             {activeTab === 'overview' && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
+                  <Section title="Classificação e Ganhos" icon={<Target size={20} />}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Tipo de Inovação</label>
+                        <select 
+                          value={project.innovationType || ''}
+                          onChange={(e) => onUpdate({ innovationType: e.target.value as any })}
+                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                        >
+                          <option value="">Selecione...</option>
+                          <option value="Incremental">Incremental</option>
+                          <option value="Radical">Radical</option>
+                          <option value="Disruptiva">Disruptiva</option>
+                          <option value="Arquitetural">Arquitetural</option>
+                        </select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Área / Setor</label>
+                        <input 
+                          type="text"
+                          value={project.sector || ''}
+                          onChange={(e) => onUpdate({ sector: e.target.value })}
+                          placeholder="Ex: Comercial, Operações..."
+                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Ganho Estimado (R$)</label>
+                        <input 
+                          type="number"
+                          value={project.estimatedGain || ''}
+                          onChange={(e) => onUpdate({ estimatedGain: Number(e.target.value) })}
+                          placeholder="0,00"
+                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Ganho Real (R$)</label>
+                        <input 
+                          type="number"
+                          value={project.realGain || ''}
+                          onChange={(e) => onUpdate({ realGain: Number(e.target.value) })}
+                          placeholder="0,00"
+                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Data de Conclusão</label>
+                        <input 
+                          type="date"
+                          value={project.completionDate || ''}
+                          onChange={(e) => onUpdate({ completionDate: e.target.value })}
+                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold"
+                        />
+                      </div>
+                    </div>
+                  </Section>
+
                   <Section title="Resumo do projeto" icon={<Briefcase size={20} />}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <ReadOnlyField label="Projeto Relacionado" value={pdcaProject?.name || project.projectName} icon={<Layers size={14} />} />

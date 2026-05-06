@@ -348,6 +348,11 @@ export interface InnovationProject {
     };
   };
   progress?: number;
+  innovationType?: 'Incremental' | 'Radical' | 'Disruptiva' | 'Arquitetural';
+  estimatedGain?: number;
+  realGain?: number;
+  sector?: string;
+  completionDate?: string;
 }
 
 export interface InnovationConfig {

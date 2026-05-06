@@ -82,6 +82,7 @@ import PDCAEditor from './components/PDCAEditor';
 import DashboardView from './components/DashboardView';
 import OperationalActionsTab from './components/OperationalActionsTab';
 import ReportsTab from './components/ReportsTab';
+import InnovationReportsTab from './components/InnovationReportsTab';
 import ProjectFilesSection from './components/ProjectFilesSection';
 import InnovationView from './components/InnovationView';
 import InnovationDashboardView from './components/InnovationDashboardView';
@@ -379,11 +380,7 @@ export default function App() {
   const handleSelectMode = (m: 'processos' | 'inovacao') => {
     setMode(m);
     localStorage.setItem('flowprocess_mode', m);
-    if (m === 'inovacao') {
-      setActiveView('innovation_dashboard');
-    } else {
-      setActiveView('home');
-    }
+    setActiveView('home');
   };
 
   const handleLogout = () => auth.signOut();
@@ -1068,7 +1065,9 @@ export default function App() {
                     <div className="space-y-4">
                       <h2 className="text-5xl font-black text-[#003489] tracking-tighter" translate="no">FlowProcess</h2>
                       <div className="h-1.5 w-24 bg-indigo-600 mx-auto rounded-full" />
-                      <p className="text-slate-400 text-lg font-medium tracking-wide">Gestão Inteligente de Processos</p>
+                      <p className="text-slate-400 text-lg font-medium tracking-wide">
+                        {mode === 'inovacao' ? 'Gestão Inteligente de Inovações' : 'Gestão Inteligente de Processos'}
+                      </p>
                     </div>
                  </div>
               </motion.div>
@@ -1085,6 +1084,7 @@ export default function App() {
                   const configRef = doc(db, 'config', 'innovation');
                   setDoc(configRef, config).catch(e => handleFirestoreError(e, OperationType.WRITE, 'config/innovation'));
                 }}
+                innovationProjects={innovationProjects}
               />
             ) : activeView === 'dashboard' ? (
               <DashboardView 
@@ -2907,7 +2907,7 @@ function CreateProjectModal({ isOpen, onClose, onCreate, users }: {
 
 // --- SETTINGS VIEW ---
 
-function SettingsView({ users, globalConfig, projects, actions, mode, innovationConfig, onUpdateInnovationConfig }: { 
+function SettingsView({ users, globalConfig, projects, actions, mode, innovationConfig, onUpdateInnovationConfig, innovationProjects }: { 
   users: User[], 
   globalConfig: { sectors: string[], tools: string[] }, 
   projects: Project[],
@@ -2915,6 +2915,7 @@ function SettingsView({ users, globalConfig, projects, actions, mode, innovation
   mode: 'processos' | 'inovacao' | null,
   innovationConfig: InnovationConfig,
   onUpdateInnovationConfig: (config: InnovationConfig) => void,
+  innovationProjects: InnovationProject[],
   key?: string 
 }) {
   const [activeSubTab, setActiveSubTab] = useState<'cadastros' | 'setores-ferramentas' | 'relatorios' | 'tecnologias'>('cadastros');
@@ -2986,7 +2987,11 @@ function SettingsView({ users, globalConfig, projects, actions, mode, innovation
                 onUpdateConfig={onUpdateInnovationConfig} 
               />
             )}
-            {activeSubTab === 'relatorios' && <ReportsTab projects={projects} users={users} actions={actions} />}
+            {activeSubTab === 'relatorios' && (
+              mode === 'inovacao' 
+                ? <InnovationReportsTab projects={innovationProjects} users={users} />
+                : <ReportsTab projects={projects} users={users} actions={actions} />
+            )}
           </motion.div>
         </AnimatePresence>
       </div>

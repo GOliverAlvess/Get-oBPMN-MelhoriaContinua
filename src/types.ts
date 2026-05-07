@@ -139,7 +139,7 @@ export interface ActionPlanItem {
   worked?: 'Sim' | 'Não' | 'Parcial';
   failureReason?: string; // Motivo da falha ou resultado parcial
   evidence?: string;
-  gainImpact?: number; // New field
+  realGains?: GainsStructure;
   
   // ACT
   finalProblemStatus?: 'Resolvido' | 'Não resolvido';
@@ -184,6 +184,7 @@ export interface PDCACycle {
       description: string;
       value: number;
       goal: number; // %
+      expectedGains?: GainsStructure;
     };
     actionPlan: ActionPlanItem[];
   };
@@ -286,6 +287,25 @@ export interface InnovationTeamLogEntry {
 
 export type InnovationActionType = 'Alinhamento' | 'Ajustes' | 'Decisão' | 'Testes' | 'Implementação';
 
+export interface TangibleGain {
+  id: string;
+  type: string;
+  value: number;
+  unit: string;
+}
+
+export interface IntangibleGain {
+  id: string;
+  type: string;
+  description: string;
+  impactLevel: 'Baixo' | 'Médio' | 'Alto' | 'Muito Alto' | '';
+}
+
+export interface GainsStructure {
+  tangible: TangibleGain[];
+  intangible: IntangibleGain[];
+}
+
 export interface InnovationAction {
   id: string;
   type: InnovationActionType;
@@ -346,6 +366,7 @@ export interface InnovationProject {
       repositories: { id: string; name: string; url: string }[];
       externalTools: { id: string; name: string; url: string }[];
     };
+    refinedGains?: GainsStructure;
   };
   progress?: number;
   innovationType?: 'Incremental' | 'Radical' | 'Disruptiva' | 'Arquitetural';
@@ -357,4 +378,35 @@ export interface InnovationProject {
 
 export interface InnovationConfig {
   technologies: string[];
+}
+
+export interface TangibleGainType {
+  id: string;
+  name: string;
+  units: string[];
+  active: boolean;
+}
+
+export interface IntangibleGainType {
+  id: string;
+  name: string;
+  active: boolean;
+}
+
+export interface UnitMeasure {
+  id: string;
+  symbol: string;
+  description?: string;
+  active: boolean;
+}
+
+export interface GlobalConfig {
+  sectors: string[];
+  tools: string[];
+  tangibleGainTypes: string[];
+  intangibleGainTypes: string[];
+  units: string[];
+  structuredTangibleGains?: TangibleGainType[];
+  structuredIntangibleGains?: IntangibleGainType[];
+  structuredUnits?: UnitMeasure[];
 }

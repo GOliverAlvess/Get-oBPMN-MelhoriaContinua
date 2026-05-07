@@ -22,12 +22,19 @@ import {
   Save,
   Trash2,
   Edit,
+  Edit2,
   Filter,
   ChevronDown,
   X,
+  Check,
   Activity,
   ExternalLink,
   Globe,
+  TrendingUp,
+  Zap,
+  Award,
+  CheckCircle,
+  XCircle,
   Leaf,
   Heart,
   ShieldCheck,
@@ -74,7 +81,11 @@ import {
   UserProfile,
   InnovationProject,
   InnovationLog,
-  InnovationConfig
+  InnovationConfig,
+  GlobalConfig,
+  TangibleGainType,
+  IntangibleGainType,
+  UnitMeasure
 } from './types';
 import { cn, isValidUrl, formatUrl, cleanObject } from './lib/utils';
 import MappingTab from './components/MappingTab';
@@ -209,7 +220,13 @@ export default function App() {
   const [innovationConfig, setInnovationConfig] = useState<InnovationConfig>({ technologies: [] });
   const [targetSubtaskId, setTargetSubtaskId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [globalConfig, setGlobalConfig] = useState<{ sectors: string[], tools: string[] }>({ sectors: [], tools: [] });
+  const [globalConfig, setGlobalConfig] = useState<GlobalConfig>({ 
+    sectors: [], 
+    tools: [],
+    tangibleGainTypes: [],
+    intangibleGainTypes: [],
+    units: ['R$ (Reais)', 'Horas', '% (Percentual)', 'Unidades']
+  });
   const [bpmnSavedColors, setBpmnSavedColors] = useState<SavedColor[]>([]);
 
   const [hasChanges, setHasChanges] = useState(false);
@@ -1123,6 +1140,7 @@ export default function App() {
                   const configRef = doc(db, 'config', 'innovation');
                   setDoc(configRef, config).catch(e => handleFirestoreError(e, OperationType.WRITE, 'config/innovation'));
                 }}
+                globalConfig={globalConfig}
               />
             ) : !selectedProjectId ? (
               <KanbanView 
@@ -1774,7 +1792,7 @@ function ProjectDetailView({
   onSave: (p: Project) => void,
   isSaving: boolean,
   users: User[],
-  globalConfig: { sectors: string[], tools: string[] },
+  globalConfig: GlobalConfig,
   savedColors: SavedColor[],
   onSaveGlobalColor: (color: SavedColor) => void,
   onDeleteGlobalColor: (id: string) => void,
@@ -1894,6 +1912,7 @@ function ProjectDetailView({
               onAddInnovationProject={onAddInnovationProject}
               onUpdateInnovationProject={onUpdateInnovationProject}
               innovationProjects={innovationProjects}
+              globalConfig={globalConfig}
               onBack={() => {
                 setSelectedSubtaskId(null);
                 setActiveTab('scope');
@@ -2042,7 +2061,7 @@ function ScopeTab({
   project: Project, 
   setProjects: (p: Project) => void, 
   users: User[], 
-  globalConfig: { sectors: string[], tools: string[] },
+  globalConfig: GlobalConfig,
   onSelectSubtask: (taskId: string) => void
 }) {
   const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false);
@@ -2909,7 +2928,7 @@ function CreateProjectModal({ isOpen, onClose, onCreate, users }: {
 
 function SettingsView({ users, globalConfig, projects, actions, mode, innovationConfig, onUpdateInnovationConfig, innovationProjects }: { 
   users: User[], 
-  globalConfig: { sectors: string[], tools: string[] }, 
+  globalConfig: GlobalConfig, 
   projects: Project[],
   actions: OperationalAction[],
   mode: 'processos' | 'inovacao' | null,
@@ -2918,7 +2937,7 @@ function SettingsView({ users, globalConfig, projects, actions, mode, innovation
   innovationProjects: InnovationProject[],
   key?: string 
 }) {
-  const [activeSubTab, setActiveSubTab] = useState<'cadastros' | 'setores-ferramentas' | 'relatorios' | 'tecnologias'>('cadastros');
+  const [activeSubTab, setActiveSubTab] = useState<'cadastros' | 'setores-ferramentas' | 'relatorios' | 'tecnologias' | 'ganhos'>('cadastros');
 
   const menuItems = [
     { id: 'cadastros', label: 'Cadastros', icon: <Users size={18} /> },
@@ -2927,6 +2946,7 @@ function SettingsView({ users, globalConfig, projects, actions, mode, innovation
       label: mode === 'inovacao' ? 'Tecnologias e automações' : 'Setores e Ferramentas', 
       icon: <Settings size={18} /> 
     },
+    { id: 'ganhos', label: 'Tipos de Ganhos', icon: <TrendingUp size={18} /> },
     { id: 'relatorios', label: 'Relatórios', icon: <FileText size={18} /> },
   ] as const;
 
@@ -2981,6 +3001,7 @@ function SettingsView({ users, globalConfig, projects, actions, mode, innovation
           >
             {activeSubTab === 'cadastros' && <UserRegistrationTab users={users} currentUser={users.find(u => u.id === auth.currentUser?.uid)} />}
             {activeSubTab === 'setores-ferramentas' && mode !== 'inovacao' && <GlobalConfigTab config={globalConfig} />}
+            {activeSubTab === 'ganhos' && <GainTypesTab config={globalConfig} />}
             {activeSubTab === 'tecnologias' && mode === 'inovacao' && (
               <InnovationConfigTab 
                 config={innovationConfig} 
@@ -3131,9 +3152,13 @@ function InnovationConfigTab({ config, onUpdateConfig }: {
   );
 }
 
-function GlobalConfigTab({ config }: { config: { sectors: string[], tools: string[] } }) {
+function GlobalConfigTab({ config }: { 
+  config: GlobalConfig
+}) {
   const [newSector, setNewSector] = useState('');
   const [newTool, setNewTool] = useState('');
+  const [newTangibleType, setNewTangibleType] = useState('');
+  const [newIntangibleType, setNewIntangibleType] = useState('');
 
   const updateConfig = async (updates: any) => {
     try {
@@ -3143,87 +3168,705 @@ function GlobalConfigTab({ config }: { config: { sectors: string[], tools: strin
     }
   };
 
-  return (
-    <div className="p-6 space-y-12 w-full">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="space-y-8">
-          <div>
-            <h3 className="text-xl font-bold text-slate-900">Setores</h3>
-            <p className="text-slate-500 text-sm mt-1">Gerencie os setores disponíveis para seleção.</p>
-          </div>
-          <div className="flex gap-2">
-            <input 
-              value={newSector}
-              onChange={(e) => setNewSector(e.target.value)}
-              placeholder="Novo setor..."
-              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-            />
+  const ConfigSection = ({ title, description, items, newValue, setNewValue, field, placeholder }: {
+    title: string,
+    description: string,
+    items: string[],
+    newValue: string,
+    setNewValue: (v: string) => void,
+    field: string,
+    placeholder: string
+  }) => (
+    <div className="space-y-6">
+      <div>
+        <h3 className="text-xl font-bold text-slate-900">{title}</h3>
+        <p className="text-slate-500 text-sm mt-1">{description}</p>
+      </div>
+      <div className="flex gap-2">
+        <input 
+          value={newValue}
+          onChange={(e) => setNewValue(e.target.value)}
+          placeholder={placeholder}
+          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+        <button 
+          onClick={() => {
+            const trimmed = newValue.trim();
+            if (trimmed && !items.includes(trimmed)) {
+              updateConfig({ [field]: [...items, trimmed] });
+              setNewValue('');
+            }
+          }}
+          className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all"
+        >
+          Adicionar
+        </button>
+      </div>
+      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+        {items.map(item => (
+          <div key={item} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 group hover:border-indigo-200 transition-all">
+            <span className="text-sm font-medium text-slate-700">{item}</span>
             <button 
-              onClick={() => {
-                if (newSector && !config.sectors.includes(newSector)) {
-                  updateConfig({ sectors: [...config.sectors, newSector] });
-                  setNewSector('');
-                }
-              }}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all"
+              onClick={() => updateConfig({ [field]: items.filter(i => i !== item) })}
+              className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
             >
-              Adicionar
+              <Trash2 size={14} />
             </button>
           </div>
-          <div className="space-y-2">
-            {config.sectors.map(s => (
-              <div key={s} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-sm font-medium text-slate-700">{s}</span>
-                <button 
-                  onClick={() => updateConfig({ sectors: config.sectors.filter(item => item !== s) })}
-                  className="text-slate-400 hover:text-rose-500 p-1"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
+        ))}
+        {items.length === 0 && (
+          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center py-4 border-2 border-dashed border-slate-100 rounded-xl">
+            Vazio
+          </p>
+        )}
+      </div>
+    </div>
+  );
 
-        <div className="space-y-8">
-          <div>
-            <h3 className="text-xl font-bold text-slate-900">Ferramentas</h3>
-            <p className="text-slate-500 text-sm mt-1">Gerencie as ferramentas disponíveis para seleção.</p>
-          </div>
-          <div className="flex gap-2">
-            <input 
-              value={newTool}
-              onChange={(e) => setNewTool(e.target.value)}
-              placeholder="Nova ferramenta..."
-              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-            />
-            <button 
-              onClick={() => {
-                if (newTool && !config.tools.includes(newTool)) {
-                  updateConfig({ tools: [...config.tools, newTool] });
-                  setNewTool('');
-                }
-              }}
-              className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all"
-            >
-              Adicionar
-            </button>
-          </div>
-          <div className="space-y-2">
-            {config.tools.map(t => (
-              <div key={t} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-sm font-medium text-slate-700">{t}</span>
-                <button 
-                  onClick={() => updateConfig({ tools: config.tools.filter(item => item !== t) })}
-                  className="text-slate-400 hover:text-rose-500 p-1"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
+  return (
+    <div className="p-8 space-y-12 w-full overflow-y-auto max-h-[85vh] custom-scrollbar">
+      <div className="flex items-center gap-4 border-b border-slate-100 pb-8">
+        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner">
+          <Settings size={24} />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-slate-900 leading-tight">Geral e Processos</h3>
+          <p className="text-slate-500 text-sm mt-1">Gerencie os parâmetros globais do sistema de processos.</p>
         </div>
       </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+        <ConfigSection 
+          title="Setores" 
+          description="Gerencie os setores disponíveis para seleção."
+          items={config.sectors || []}
+          newValue={newSector}
+          setNewValue={setNewSector}
+          field="sectors"
+          placeholder="Novo setor..."
+        />
+        <ConfigSection 
+          title="Ferramentas" 
+          description="Gerencie as ferramentas disponíveis para seleção."
+          items={config.tools || []}
+          newValue={newTool}
+          setNewValue={setNewTool}
+          field="tools"
+          placeholder="Nova ferramenta..."
+        />
+        <ConfigSection 
+          title="Tipos de Ganho Tangível" 
+          description="Opções para o cálculo de impacto financeiro/quantitativo."
+          items={config.tangibleGainTypes || []}
+          newValue={newTangibleType}
+          setNewValue={setNewTangibleType}
+          field="tangibleGainTypes"
+          placeholder="Ex: Redução de Custo..."
+        />
+        <ConfigSection 
+          title="Tipos de Ganho Intangível" 
+          description="Opções para avaliação qualitativa."
+          items={config.intangibleGainTypes || []}
+          newValue={newIntangibleType}
+          setNewValue={setNewIntangibleType}
+          field="intangibleGainTypes"
+          placeholder="Ex: Satisfação do Cliente..."
+        />
+      </div>
+    </div>
+  );
+}
+
+function GainTypesTab({ config }: { config: GlobalConfig }) {
+  const [activeTab, setActiveTab] = useState<'tangible' | 'intangible' | 'unit'>('tangible');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<TangibleGainType | IntangibleGainType | UnitMeasure | null>(null);
+  
+  // Form state
+  const [name, setName] = useState('');
+  const [selectedUnits, setSelectedUnits] = useState<string[]>([]); // Used for tangible gain type
+  const [symbol, setSymbol] = useState(''); // Used for unit measure
+  const [description, setDescription] = useState(''); // Used for unit measure description
+  const [active, setActive] = useState(true);
+
+  // Deletion confirmation state
+  const [idToDelete, setIdToDelete] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (editingItem) {
+      setName((editingItem as any).name || '');
+      setSelectedUnits((editingItem as TangibleGainType).units || ((editingItem as any).unit ? [(editingItem as any).unit] : []));
+      setSymbol((editingItem as UnitMeasure).symbol || '');
+      setDescription((editingItem as UnitMeasure).description || '');
+      setActive(editingItem.active);
+    } else {
+      setName('');
+      setSelectedUnits([]);
+      setSymbol('');
+      setDescription('');
+      setActive(true);
+    }
+  }, [editingItem, isModalOpen]);
+
+  const updateConfig = async (updates: any) => {
+    try {
+      await setDoc(doc(db, 'config', 'global'), { ...config, ...updates }, { merge: true });
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, 'config/global');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!idToDelete) return;
+
+    if (activeTab === 'tangible') {
+      const next = (config.structuredTangibleGains || []).filter(i => i.id !== idToDelete);
+      await updateConfig({ structuredTangibleGains: next });
+    } else if (activeTab === 'intangible') {
+      const next = (config.structuredIntangibleGains || []).filter(i => i.id !== idToDelete);
+      await updateConfig({ structuredIntangibleGains: next });
+    } else {
+      const next = (config.structuredUnits || []).filter(i => i.id !== idToDelete);
+      await updateConfig({ structuredUnits: next });
+    }
+    setIdToDelete(null);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (activeTab !== 'unit' && !name) return;
+    if (activeTab === 'unit' && !symbol) return;
+
+    if (activeTab === 'tangible') {
+      const current = config.structuredTangibleGains || [];
+      const data: TangibleGainType = { id: editingItem?.id || uuidv4(), name, units: selectedUnits, active };
+      let next: TangibleGainType[];
+      if (editingItem) {
+        next = current.map(item => item.id === editingItem.id ? data : item);
+      } else {
+        next = [...current, data];
+      }
+      await updateConfig({ structuredTangibleGains: next });
+    } else if (activeTab === 'intangible') {
+      const current = config.structuredIntangibleGains || [];
+      const data = { id: editingItem?.id || uuidv4(), name, active };
+      let next: IntangibleGainType[];
+      if (editingItem) {
+        next = current.map(item => item.id === editingItem.id ? data : item);
+      } else {
+        next = [...current, data];
+      }
+      await updateConfig({ structuredIntangibleGains: next });
+    } else {
+      const current = config.structuredUnits || [];
+      const data = { id: editingItem?.id || uuidv4(), symbol, description, active };
+      let next: UnitMeasure[];
+      if (editingItem) {
+        next = current.map(item => item.id === editingItem.id ? data : item);
+      } else {
+        next = [...current, data];
+      }
+      await updateConfig({ structuredUnits: next });
+    }
+
+    setIsModalOpen(false);
+    setEditingItem(null);
+  };
+
+  const toggleStatus = async (item: TangibleGainType | IntangibleGainType | UnitMeasure) => {
+    if (activeTab === 'tangible') {
+      const next = (config.structuredTangibleGains || []).map(i => i.id === item.id ? { ...i, active: !i.active } : i);
+      await updateConfig({ structuredTangibleGains: next });
+    } else if (activeTab === 'intangible') {
+      const next = (config.structuredIntangibleGains || []).map(i => i.id === item.id ? { ...i, active: !i.active } : i);
+      await updateConfig({ structuredIntangibleGains: next });
+    } else {
+      const next = (config.structuredUnits || []).map(i => i.id === item.id ? { ...i, active: !i.active } : i);
+      await updateConfig({ structuredUnits: next });
+    }
+  };
+
+  return (
+    <div className="flex-1 flex flex-col min-h-0 bg-slate-50/30">
+      <div className="p-8 border-b border-slate-100 bg-white">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shadow-inner">
+              <TrendingUp size={24} />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-slate-900 leading-tight">Tipos de Ganhos</h3>
+              <p className="text-slate-500 text-sm mt-1">Configure os tipos de ganhos para uso no PDCA.</p>
+            </div>
+          </div>
+          
+          <button 
+            onClick={() => {
+              setEditingItem(null);
+              setIsModalOpen(true);
+            }}
+            className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all"
+          >
+            <Plus size={18} />
+            {activeTab === 'tangible' ? 'Novo Ganho Tangível' : activeTab === 'intangible' ? 'Novo Ganho Intangível' : 'Nova Unidade'}
+          </button>
+        </div>
+
+        <div className="flex gap-2 mt-8 p-1 bg-slate-100 rounded-2xl w-fit">
+          <button 
+            onClick={() => setActiveTab('tangible')}
+            className={cn(
+              "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+              activeTab === 'tangible' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+            )}
+          >
+            Tangíveis
+          </button>
+          <button 
+            onClick={() => setActiveTab('intangible')}
+            className={cn(
+              "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+              activeTab === 'intangible' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+            )}
+          >
+            Intangíveis
+          </button>
+          <button 
+            onClick={() => setActiveTab('unit')}
+            className={cn(
+              "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
+              activeTab === 'unit' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
+            )}
+          >
+            Unidades de Medida
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 p-8 overflow-y-auto">
+        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/50 border-b border-slate-100">
+                {activeTab === 'unit' ? (
+                  <>
+                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Sigla</th>
+                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome</th>
+                    {activeTab === 'tangible' && (
+                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Unidade</th>
+                    )}
+                  </>
+                )}
+                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {activeTab === 'tangible' ? (
+                (config.structuredTangibleGains || []).length > 0 ? (
+                  config.structuredTangibleGains?.map(item => (
+                    <tr key={item.id} className="group hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-bold text-slate-700">{item.name}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {item.units && item.units.length > 0 ? item.units.map(u => (
+                            <span key={u} className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">{u}</span>
+                          )) : <span className="text-[10px] text-slate-400">Nenhuma</span>}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider",
+                          item.active 
+                            ? "bg-emerald-50 text-emerald-600" 
+                            : "bg-slate-100 text-slate-400 line-through"
+                        )}>
+                          {item.active ? <CheckCircle size={10} /> : <XCircle size={10} />}
+                          {item.active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => toggleStatus(item)}
+                            title={item.active ? 'Inativar' : 'Ativar'}
+                            className={cn(
+                              "p-2 rounded-xl transition-all",
+                              item.active ? "text-slate-400 hover:text-rose-500 hover:bg-rose-50" : "text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50"
+                            )}
+                          >
+                            {item.active ? <XCircle size={18} /> : <CheckCircle size={18} />}
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setEditingItem(item);
+                              setIsModalOpen(true);
+                            }}
+                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                          <button 
+                            onClick={() => setIdToDelete(item.id)}
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center gap-2 text-slate-400">
+                        <Zap size={32} strokeWidth={1} />
+                        <span className="text-sm font-medium">Nenhum ganho tangível cadastrado</span>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              ) : activeTab === 'intangible' ? (
+                (config.structuredIntangibleGains || []).length > 0 ? (
+                  config.structuredIntangibleGains?.map(item => (
+                    <tr key={item.id} className="group hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-bold text-slate-700">{item.name}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider",
+                          item.active 
+                            ? "bg-emerald-50 text-emerald-600" 
+                            : "bg-slate-100 text-slate-400 line-through"
+                        )}>
+                          {item.active ? <CheckCircle size={10} /> : <XCircle size={10} />}
+                          {item.active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => toggleStatus(item)}
+                            title={item.active ? 'Inativar' : 'Ativar'}
+                            className={cn(
+                              "p-2 rounded-xl transition-all",
+                              item.active ? "text-slate-400 hover:text-rose-500 hover:bg-rose-50" : "text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50"
+                            )}
+                          >
+                            {item.active ? <XCircle size={18} /> : <CheckCircle size={18} />}
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setEditingItem(item);
+                              setIsModalOpen(true);
+                            }}
+                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                          <button 
+                            onClick={() => setIdToDelete(item.id)}
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={3} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center gap-2 text-slate-400">
+                        <Award size={32} strokeWidth={1} />
+                        <span className="text-sm font-medium">Nenhum ganho intangível cadastrado</span>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              ) : (
+                (config.structuredUnits || []).length > 0 ? (
+                  config.structuredUnits?.map(item => (
+                    <tr key={item.id} className="group hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-bold text-slate-900 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">{item.symbol}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-sm font-medium text-slate-600">{item.description || '-'}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider",
+                          item.active 
+                            ? "bg-emerald-50 text-emerald-600" 
+                            : "bg-slate-100 text-slate-400 line-through"
+                        )}>
+                          {item.active ? <CheckCircle size={10} /> : <XCircle size={10} />}
+                          {item.active ? 'Ativo' : 'Inativo'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => toggleStatus(item)}
+                            title={item.active ? 'Inativar' : 'Ativar'}
+                            className={cn(
+                              "p-2 rounded-xl transition-all",
+                              item.active ? "text-slate-400 hover:text-rose-500 hover:bg-rose-50" : "text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50"
+                            )}
+                          >
+                            {item.active ? <XCircle size={18} /> : <CheckCircle size={18} />}
+                          </button>
+                          <button 
+                            onClick={() => {
+                              setEditingItem(item);
+                              setIsModalOpen(true);
+                            }}
+                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
+                          >
+                            <Edit2 size={18} />
+                          </button>
+                          <button 
+                            onClick={() => setIdToDelete(item.id)}
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-12 text-center">
+                      <div className="flex flex-col items-center gap-2 text-slate-400">
+                        <Globe size={32} strokeWidth={1} />
+                        <span className="text-sm font-medium">Nenhuma unidade de medida cadastrada</span>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Modal / Sidebar Formulário */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsModalOpen(false)}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100]"
+            />
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-[101] flex flex-col"
+            >
+              <div className="p-8 border-b border-slate-100 flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900">
+                  {editingItem ? 'Editar Tipo de Ganho' : 'Novo Tipo de Ganho'}
+                </h3>
+                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-all">
+                  <X size={20} />
+                </button>
+              </div>
+
+              <form onSubmit={handleSave} className="flex-1 p-8 space-y-6 overflow-y-auto">
+                {activeTab !== 'unit' && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Nome do tipo de ganho</label>
+                    <input 
+                      required
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Ex: Redução de Custos"
+                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                    />
+                  </div>
+                )}
+
+                {activeTab === 'tangible' && (
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Unidades de medida vinculadas</label>
+                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
+                      {(config.structuredUnits?.filter(u => u.active).map(u => u.symbol) || config.units || []).map(u => {
+                        const isSelected = selectedUnits.includes(u);
+                        return (
+                          <label 
+                            key={u} 
+                            className={cn(
+                              "flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer",
+                              isSelected 
+                                ? "bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm" 
+                                : "bg-white border-transparent text-slate-500 hover:bg-slate-100"
+                            )}
+                          >
+                            <input 
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => {
+                                if (isSelected) {
+                                  setSelectedUnits(selectedUnits.filter(curr => curr !== u));
+                                } else {
+                                  setSelectedUnits([...selectedUnits, u]);
+                                }
+                              }}
+                              className="hidden"
+                            />
+                            <div className={cn(
+                              "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all",
+                              isSelected ? "bg-indigo-600 border-indigo-600" : "bg-white border-slate-200"
+                            )}>
+                              {isSelected && <Check size={12} className="text-white" />}
+                            </div>
+                            <span className="text-sm font-bold">{u}</span>
+                          </label>
+                        );
+                      })}
+                      {(config.structuredUnits?.filter(u => u.active).length || 0) === 0 && (
+                        <div className="col-span-2 py-4 text-center text-slate-400 text-xs italic">
+                          Nenhuma unidade cadastrada. Cadastre em "Unidades de Medida" primeiro.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'unit' && (
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Sigla (Obrigatório)</label>
+                      <input 
+                        required
+                        value={symbol}
+                        onChange={(e) => setSymbol(e.target.value)}
+                        placeholder="Ex: R$, %, h"
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Descrição (Opcional)</label>
+                      <input 
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        placeholder="Ex: Reais"
+                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-4 pt-4">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Status</label>
+                  <div className="flex gap-4">
+                    <button 
+                      type="button"
+                      onClick={() => setActive(true)}
+                      className={cn(
+                        "flex-1 p-4 rounded-2xl border-2 transition-all flex items-center justify-center gap-2 font-bold text-sm",
+                        active ? "bg-emerald-50 border-emerald-500 text-emerald-700" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
+                      )}
+                    >
+                      <CheckCircle size={18} />
+                      Ativo
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setActive(false)}
+                      className={cn(
+                        "flex-1 p-4 rounded-2xl border-2 transition-all flex items-center justify-center gap-2 font-bold text-sm",
+                        !active ? "bg-rose-50 border-rose-500 text-rose-700" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
+                      )}
+                    >
+                      <XCircle size={18} />
+                      Inativo
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              <div className="p-8 border-t border-slate-100 flex gap-4 bg-slate-50/50">
+                <button 
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="flex-1 py-4 px-6 border border-slate-200 rounded-2xl font-bold text-slate-600 hover:bg-white transition-all"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={handleSave}
+                  className="flex-1 py-4 px-6 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                >
+                  Salvar
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Confirmação de Exclusão */}
+      <AnimatePresence>
+        {idToDelete && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIdToDelete(null)}
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110]"
+            />
+            <div className="fixed inset-0 flex items-center justify-center p-4 z-[111]">
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-white rounded-[2.5rem] p-10 max-w-sm w-full shadow-2xl border border-slate-100 space-y-6"
+              >
+                <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                  <Trash2 size={32} />
+                </div>
+                
+                <div className="text-center space-y-2">
+                  <h3 className="text-xl font-bold text-slate-900">Confirmar exclusão?</h3>
+                  <p className="text-slate-500 text-sm">
+                    Deseja realmente excluir este registro? Essa ação não poderá ser desfeita.
+                  </p>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    onClick={() => setIdToDelete(null)}
+                    className="flex-1 py-4 px-6 border border-slate-200 rounded-2xl font-bold text-slate-600 hover:bg-slate-50 transition-all text-sm"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={handleDelete}
+                    className="flex-1 py-4 px-6 bg-rose-600 text-white rounded-2xl font-bold hover:bg-rose-700 transition-all shadow-lg shadow-rose-100 text-sm"
+                  >
+                    Confirmar exclusão
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -3521,7 +4164,8 @@ function PDCATab({
   selectedTaskId,
   onAddInnovationProject,
   onUpdateInnovationProject,
-  innovationProjects = []
+  innovationProjects = [],
+  globalConfig
 }: { 
   project: Project, 
   subtask: Subtask,
@@ -3529,7 +4173,8 @@ function PDCATab({
   selectedTaskId?: string | null,
   onAddInnovationProject?: (data: any) => Promise<string>,
   onUpdateInnovationProject?: (id: string, updates: Partial<InnovationProject>) => Promise<void>,
-  innovationProjects?: InnovationProject[]
+  innovationProjects?: InnovationProject[],
+  globalConfig: GlobalConfig
 }) {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
 
@@ -3549,6 +4194,7 @@ function PDCATab({
           onAddInnovationProject={onAddInnovationProject}
           onUpdateInnovationProject={onUpdateInnovationProject}
           innovationProjects={innovationProjects}
+          globalConfig={globalConfig}
         />
       </div>
     );

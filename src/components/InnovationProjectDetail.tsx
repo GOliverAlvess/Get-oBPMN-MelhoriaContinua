@@ -43,10 +43,12 @@ import {
   InnovationArtifact,
   InnovationConfig,
   InnovationAction,
-  InnovationActionType
+  InnovationActionType,
+  GlobalConfig
 } from '../types';
 import { cn } from '../lib/utils';
 import { auth } from '../firebase';
+import GainsEditor from './GainsEditor';
 
 interface InnovationProjectDetailProps {
   project: InnovationProject;
@@ -56,6 +58,7 @@ interface InnovationProjectDetailProps {
   onUpdate: (updates: Partial<InnovationProject>) => Promise<void>;
   onNavigateToMapping?: (projectId: string, subtaskId: string) => void;
   innovationConfig: InnovationConfig;
+  globalConfig?: GlobalConfig;
 }
 
 export default function InnovationProjectDetail({ 
@@ -65,7 +68,8 @@ export default function InnovationProjectDetail({
   onBack, 
   onUpdate,
   onNavigateToMapping,
-  innovationConfig
+  innovationConfig,
+  globalConfig
 }: InnovationProjectDetailProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'technical' | 'team' | 'production'>('overview');
   const [isSaving, setIsSaving] = useState(false);
@@ -233,28 +237,49 @@ export default function InnovationProjectDetail({
                           className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold"
                         />
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Ganho Estimado (R$)</label>
-                        <input 
-                          type="number"
-                          value={project.estimatedGain || ''}
-                          onChange={(e) => onUpdate({ estimatedGain: Number(e.target.value) })}
-                          placeholder="0,00"
-                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                        />
+
+                      <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-50">
+                        <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Impacto/Ganho (Contexto PDCA)</label>
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-slate-500">Impacto Atual:</span>
+                              <span className="font-bold text-rose-600">R$ {(pdcaCycle?.plan?.impact?.value || 0).toLocaleString()}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-slate-500">Meta de Melhoria:</span>
+                              <span className="font-bold text-emerald-600">{pdcaCycle?.plan?.impact?.goal || 0}%</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-indigo-50/30 p-4 rounded-2xl border border-indigo-100">
+                          <label className="text-[10px] font-black text-indigo-400 uppercase tracking-widest block mb-2">Resumo Financeiro Inovação</label>
+                          <div className="space-y-3">
+                             <div className="flex justify-between items-center text-xs">
+                              <span className="text-slate-500">Ganho Estimado:</span>
+                              <input 
+                                type="number"
+                                value={project.estimatedGain || 0}
+                                onChange={(e) => onUpdate({ estimatedGain: Number(e.target.value) })}
+                                className="w-24 bg-transparent border-b border-indigo-200 text-right font-bold text-indigo-600 outline-none focus:border-indigo-500"
+                              />
+                            </div>
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-slate-500">Ganho Real:</span>
+                               <input 
+                                type="number"
+                                value={project.realGain || 0}
+                                onChange={(e) => onUpdate({ realGain: Number(e.target.value) })}
+                                className="w-24 bg-transparent border-b border-emerald-200 text-right font-bold text-emerald-600 outline-none focus:border-emerald-500"
+                              />
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Ganho Real (R$)</label>
-                        <input 
-                          type="number"
-                          value={project.realGain || ''}
-                          onChange={(e) => onUpdate({ realGain: Number(e.target.value) })}
-                          placeholder="0,00"
-                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Data de Conclusão</label>
+
+                      <div className="space-y-1.5 md:col-span-2">
+                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Data de Conclusão Estimada</label>
                         <input 
                           type="date"
                           value={project.completionDate || ''}
@@ -405,6 +430,8 @@ export default function InnovationProjectDetail({
               <ProductionSection 
                 project={project}
                 onUpdateProduction={(production) => onUpdate({ production })}
+                globalConfig={globalConfig}
+                inheritedGains={pdcaCycle?.plan.impact.expectedGains}
               />
             )}
           </motion.div>
@@ -1026,7 +1053,17 @@ function DevelopmentSection({
 }
 
 // --- Production Section ---
-function ProductionSection({ project, onUpdateProduction }: { project: InnovationProject, onUpdateProduction: (prod: any) => void }) {
+function ProductionSection({ 
+  project, 
+  onUpdateProduction,
+  globalConfig,
+  inheritedGains
+}: { 
+  project: InnovationProject, 
+  onUpdateProduction: (prod: any) => void,
+  globalConfig?: GlobalConfig,
+  inheritedGains?: any
+}) {
   const [production, setProduction] = useState(project.production || {
     document: { name: '', url: '' },
     technicalDeliverable: { name: '', type: '', url: '' },
@@ -1185,6 +1222,18 @@ function ProductionSection({ project, onUpdateProduction }: { project: Innovatio
               />
             </div>
           </div>
+        </div>
+
+        {/* Ganhos Previstos do Projeto */}
+        <div className="lg:col-span-2 bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+          <GainsEditor 
+            title="Ganhos previstos do projeto"
+            variant="production"
+            gains={production.refinedGains || { tangible: [], intangible: [] }}
+            onChange={(gains) => setProduction({ ...production, refinedGains: gains })}
+            globalConfig={globalConfig}
+            inheritedGains={inheritedGains}
+          />
         </div>
 
         {/* Links Externos Section */}

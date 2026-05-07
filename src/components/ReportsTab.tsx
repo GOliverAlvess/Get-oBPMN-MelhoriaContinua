@@ -32,7 +32,16 @@ import {
   handleFirestoreError, 
   OperationType 
 } from '../firebase';
-import { Project, User, OperationalAction, ReportLog } from '../types';
+import { Project, User, OperationalAction, ReportLog, GainsStructure } from '../types';
+
+const formatGains = (gains: GainsStructure | undefined): string => {
+  if (!gains) return 'Sem registro';
+  const tangible = (gains.tangible || []).map(t => `${t.type}: ${t.unit} ${t.value}`).join(' | ');
+  const intangible = (gains.intangible || []).map(i => `${i.type} (${i.impactLevel})`).join(' | ');
+  
+  if (!tangible && !intangible) return 'Sem registro';
+  return [tangible, intangible].filter(Boolean).join(' || ');
+};
 import { cn, exportarCSVPadrao } from '../lib/utils';
 import FilterDropdown from './FilterDropdown';
 
@@ -714,7 +723,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                       "CHECK - Como Acompanha": action.monitoringTool || 'N/A',
                       "CHECK - Funcionou": action.worked || 'N/A',
                       "CHECK - Link evidência do acompanhamento": action.evidence || 'N/A',
-                      "CHECK - Impacto de ganho": action.gainImpact || 'N/A',
+                      "CHECK - Ganho real obtido": formatGains(action.realGains),
                       "ACT - Status Final": action.finalProblemStatus || 'N/A',
                       "ACT - Ação Final": action.finalAction || 'N/A',
                       "ACT - Padronização": action.standardizationModels?.join(', ') || 'N/A'
@@ -1126,7 +1135,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                                     {cycle.plan.actionPlan.map((action) => (
                                       <div key={action.id} className="text-[9px] p-3 bg-slate-50 rounded-xl space-y-1">
                                         <p className="font-black text-slate-400 uppercase">{action.what}</p>
-                                        <p className="font-bold text-slate-700 italic">" {action.gainImpact || 'Sem registro de acompanhamento' } "</p>
+                                        <p className="font-bold text-slate-700 italic">" {formatGains(action.realGains) } "</p>
                                       </div>
                                     ))}
                                   </div>

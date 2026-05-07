@@ -39,7 +39,8 @@ import {
   InnovationSolutionType,
   InnovationLog,
   SavedColor,
-  InnovationConfig
+  InnovationConfig,
+  GlobalConfig
 } from '../types';
 import { cn, cleanObject } from '../lib/utils';
 import { db, setDoc, doc, handleFirestoreError, OperationType, deleteDoc } from '../firebase';
@@ -60,6 +61,7 @@ interface InnovationViewProps {
   innovationConfig: InnovationConfig;
   onUpdateInnovationConfig: (config: InnovationConfig) => void;
   onAddInnovationProject?: (data: any) => Promise<string>;
+  globalConfig?: GlobalConfig;
 }
 
 const statusColumns: { id: InnovationStatus; label: string; color: string }[] = [
@@ -83,7 +85,8 @@ export default function InnovationView({
   onDeleteBpmnColor,
   innovationConfig,
   onUpdateInnovationConfig,
-  onAddInnovationProject
+  onAddInnovationProject,
+  globalConfig
 }: InnovationViewProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProject, setSelectedProject] = useState<InnovationProject | null>(null);
@@ -317,6 +320,7 @@ export default function InnovationView({
         onUpdate={handleUpdateInnovation}
         onNavigateToMapping={(pid, sid) => setViewingBpmn({ projectId: pid, subtaskId: sid })}
         innovationConfig={innovationConfig}
+        globalConfig={globalConfig}
       />
     );
   }

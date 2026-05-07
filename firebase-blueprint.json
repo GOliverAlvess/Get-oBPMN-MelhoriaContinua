@@ -32,11 +32,13 @@
     },
     "GlobalConfig": {
       "title": "GlobalConfig",
-      "description": "Global system configurations like sectors and tools",
+      "description": "Global system configurations like sectors, tools, and gain types",
       "type": "object",
       "properties": {
         "sectors": { "type": "array", "items": { "type": "string" } },
-        "tools": { "type": "array", "items": { "type": "string" } }
+        "tools": { "type": "array", "items": { "type": "string" } },
+        "tangibleGainTypes": { "type": "array", "items": { "type": "string" } },
+        "intangibleGainTypes": { "type": "array", "items": { "type": "string" } }
       }
     },
     "OperationalAction": {

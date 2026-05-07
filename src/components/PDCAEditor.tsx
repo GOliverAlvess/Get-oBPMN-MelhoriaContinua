@@ -11,6 +11,7 @@ import {
   Target, 
   FileText, 
   ArrowRight,
+  ArrowLeft,
   TrendingUp,
   HelpCircle,
   Save,
@@ -20,7 +21,9 @@ import {
   ExternalLink,
   GitBranch,
   Layers,
-  Lock
+  Lock,
+  Zap,
+  Award
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -29,8 +32,9 @@ import html2pdf from 'html2pdf.js';
 import pdfMake from 'pdfmake/build/pdfmake';
 import * as pdfFonts from 'pdfmake/build/vfs_fonts';
 
-import { Project, Subtask, PDCACycle, ParetoItem, ActionPlanItem, PDCAStatus, PDCAPriority, InnovationProject, ActionPlanType } from '../types';
+import { Project, Subtask, PDCACycle, ParetoItem, ActionPlanItem, PDCAStatus, PDCAPriority, InnovationProject, ActionPlanType, GainsStructure, GlobalConfig } from '../types';
 import ParetoDiagram from './ParetoDiagram';
+import GainsEditor from './GainsEditor';
 import { cn, isValidUrl, formatUrl, exportarCSVPadrao } from '../lib/utils';
 
 const STATUS_MAP: Record<string, string> = {
@@ -95,7 +99,8 @@ export default function PDCAEditor({
   defaultTaskId,
   onAddInnovationProject,
   onUpdateInnovationProject,
-  innovationProjects = []
+  innovationProjects = [],
+  globalConfig
 }: { 
   project: Project, 
   subtask: Subtask,
@@ -104,10 +109,12 @@ export default function PDCAEditor({
   defaultTaskId?: string,
   onAddInnovationProject?: (data: any) => Promise<string>,
   onUpdateInnovationProject?: (id: string, updates: Partial<InnovationProject>) => Promise<void>,
-  innovationProjects?: InnovationProject[]
+  innovationProjects?: InnovationProject[],
+  globalConfig?: GlobalConfig
 }) {
   const [activeCycleId, setActiveCycleId] = useState<string | null>(null);
   const [activePhase, setActivePhase] = useState<'PLAN' | 'DO' | 'CHECK' | 'ACT' | 'REPORT'>('PLAN');
+  const [activePlanStep, setActivePlanStep] = useState<number>(1);
   const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
   const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [showProblemsModal, setShowProblemsModal] = useState(false);
@@ -525,6 +532,64 @@ export default function PDCAEditor({
     try {
       const logoBase64 = await svgToPngBase64(SYSTEM_LOGO_SVG);
       
+      const renderGainsPDF = (gains: GainsStructure | undefined, title: string) => {
+        if (!gains || ((!gains.tangible || gains.tangible.length === 0) && (!gains.intangible || gains.intangible.length === 0))) {
+          return null;
+        }
+
+        const blocks: any[] = [
+          { text: title.toUpperCase(), style: 'label', margin: [0, 15, 0, 5] }
+        ];
+
+        if (gains.tangible && gains.tangible.length > 0) {
+          blocks.push({ text: 'Ganhos Tangíveis:', style: 'labelTiny', margin: [0, 5, 0, 2] });
+          blocks.push({
+            table: {
+              widths: ['40%', '30%', '30%'],
+              body: [
+                [
+                  { text: 'TIPO', style: 'tableHeaderSmall' },
+                  { text: 'VALOR', style: 'tableHeaderSmall', alignment: 'right' },
+                  { text: 'UNID.', style: 'tableHeaderSmall' }
+                ],
+                ...gains.tangible.map(t => [
+                  { text: t.type || '---', style: 'tableCellTiny' },
+                  { text: t.value?.toString() || '0', style: 'tableCellTiny', alignment: 'right' },
+                  { text: t.unit || '---', style: 'tableCellTiny' }
+                ])
+              ]
+            },
+            layout: 'lightHorizontalLines',
+            margin: [10, 0, 0, 10]
+          });
+        }
+
+        if (gains.intangible && gains.intangible.length > 0) {
+          blocks.push({ text: 'Ganhos Intangíveis:', style: 'labelTiny', margin: [0, 5, 0, 2] });
+          blocks.push({
+            table: {
+              widths: ['40%', '40%', '20%'],
+              body: [
+                [
+                  { text: 'TIPO', style: 'tableHeaderSmall' },
+                  { text: 'DESCRIÇÃO', style: 'tableHeaderSmall' },
+                  { text: 'IMPACTO', style: 'tableHeaderSmall', alignment: 'center' }
+                ],
+                ...gains.intangible.map(i => [
+                  { text: i.type || '---', style: 'tableCellTiny' },
+                  { text: i.description || '---', style: 'tableCellTiny' },
+                  { text: i.impactLevel || '---', style: 'tableCellTiny', alignment: 'center' }
+                ])
+              ]
+            },
+            layout: 'lightHorizontalLines',
+            margin: [10, 0, 0, 10]
+          });
+        }
+
+        return { stack: blocks };
+      };
+
       const docDefinition: any = {
         pageSize: 'A4',
         pageMargins: [40, 80, 40, 60],
@@ -661,7 +726,8 @@ export default function PDCAEditor({
                       { text: 'INDICADOR DE IMPACTO', style: 'label', margin: [15, -80, 0, 2] },
                       { text: activeCycle.plan.impact.description || 'Não definido', style: 'value', margin: [15, 0, 0, 10] },
                       { text: 'META DE MELHORIA', style: 'label', margin: [15, 0, 0, 2] },
-                      { text: `${activeCycle.plan.impact.goal}% de redução`, style: 'bodyText', margin: [15, 0, 0, 0], bold: true, color: '#059669' }
+                      { text: `${activeCycle.plan.impact.goal}% de redução`, style: 'bodyText', margin: [15, 0, 0, 0], bold: true, color: '#059669' },
+                      renderGainsPDF(activeCycle.plan.impact.expectedGains, 'Ganhos Esperados')
                     ]
                   }
                 ]
@@ -763,7 +829,8 @@ export default function PDCAEditor({
                 stack: [
                   { text: 'CHECK - VERIFICAÇÃO', style: 'stepHeading', color: '#059669', margin: [0, 10, 0, 5] },
                   { text: 'O Plano Funcionou?', style: 'labelTiny' },
-                  { text: activeCycle.plan.actionPlan?.[0]?.worked || 'Aguardando encerramento.', style: 'bodyTextSmall' }
+                  { text: activeCycle.plan.actionPlan?.[0]?.worked || 'Aguardando encerramento.', style: 'bodyTextSmall' },
+                  renderGainsPDF(activeCycle.plan.actionPlan?.[0]?.realGains, 'Ganho Real Obtido')
                 ],
                 margin: [10, 0, 0, 0]
               }
@@ -817,6 +884,331 @@ export default function PDCAEditor({
   const updatePlan = (newPlan: any) => {
     if (!activeCycle) return;
     updateCycle({ plan: { ...activeCycle.plan, ...newPlan } });
+  };
+
+  const renderIshikawa = () => {
+    if (!activeCycle) return null;
+    return (
+      <div className="space-y-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {(activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories).map((cat, catIdx) => (
+            <div key={cat.id} className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h5 className="font-black text-slate-800 text-xs uppercase tracking-widest">{cat.name}</h5>
+                  <p className="text-[10px] text-slate-400 font-medium">{cat.description}</p>
+                </div>
+                <button 
+                  disabled={(cat.entries?.length || 0) >= 3}
+                  onClick={() => {
+                    const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
+                    const newIshikawa = currentIshikawa.map((c, i) => {
+                      if (i === catIdx) return { ...c, entries: [...(c.entries || []), { id: uuidv4(), text: '' }] };
+                      return c;
+                    });
+                    updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, ishikawa: newIshikawa } });
+                  }}
+                  className={cn("p-2 rounded-lg transition-all", (cat.entries?.length || 0) >= 3 ? "text-slate-300" : "bg-white text-indigo-600 hover:bg-indigo-600 hover:text-white shadow-sm")}
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+              <div className="space-y-2">
+                {cat.entries.map((entry, entryIdx) => (
+                  <div key={entry.id} className="flex gap-2">
+                    <input 
+                      type="text"
+                      placeholder="Causa..."
+                      value={entry.text || ''}
+                      onChange={(e) => {
+                        const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
+                        const newIshikawa = [...currentIshikawa];
+                        const newEntries = [...newIshikawa[catIdx].entries];
+                        newEntries[entryIdx] = { ...newEntries[entryIdx], text: e.target.value };
+                        newIshikawa[catIdx] = { ...newIshikawa[catIdx], entries: newEntries };
+                        updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, ishikawa: newIshikawa } });
+                      }}
+                      className="flex-1 p-2 bg-white border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-medium shadow-sm transition-all"
+                    />
+                    <button 
+                      onClick={() => {
+                        const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
+                        const newIshikawa = [...currentIshikawa];
+                        newIshikawa[catIdx] = { ...newIshikawa[catIdx], entries: newIshikawa[catIdx].entries.filter((_, i) => i !== entryIdx) };
+                        updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, ishikawa: newIshikawa } });
+                      }}
+                      className="text-slate-300 hover:text-rose-500 transition-colors"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-slate-900 p-8 rounded-[2rem] text-white space-y-6">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-indigo-500 rounded-2xl flex items-center justify-center">
+              <Target size={24} />
+            </div>
+            <div>
+              <h4 className="text-lg font-black tracking-tight">Causas Prioritárias</h4>
+              <p className="text-slate-400 text-xs font-medium">Selecione até 3 causas principais para focar no plano de ação.</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {allIshikawaCauses.length === 0 ? (
+              <p className="text-slate-500 text-xs italic p-4 border border-dashed border-slate-800 rounded-2xl col-span-full text-center">Preencha as causas acima para priorizar.</p>
+            ) : (
+              allIshikawaCauses.map(cause => {
+                const isSelected = (activeCycle.plan.rootCauseAnalysis.priorityCauses || []).includes(cause);
+                return (
+                  <button
+                    key={cause}
+                    onClick={() => {
+                      const current = activeCycle.plan.rootCauseAnalysis.priorityCauses || [];
+                      if (isSelected) updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, priorityCauses: current.filter(c => c !== cause) } });
+                      else if (current.length < 3) updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, priorityCauses: [...current, cause] } });
+                    }}
+                    className={cn("flex items-center gap-3 p-4 rounded-2xl border transition-all text-left", isSelected ? "bg-indigo-600 border-indigo-400 text-white shadow-lg" : "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600")}
+                  >
+                    <div className={cn("w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0", isSelected ? "border-white bg-white text-indigo-600" : "border-slate-600")}>
+                      {isSelected && <CheckCircle2 size={12} />}
+                    </div>
+                    <span className="text-xs font-bold truncate">{cause}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+          {(activeCycle.plan.rootCauseAnalysis.priorityCauses || []).length > 0 && (
+            <div className="pt-4 border-t border-slate-800">
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Selecionadas ({activeCycle.plan.rootCauseAnalysis.priorityCauses?.length}/3)</p>
+              <div className="flex flex-wrap gap-2">
+                {activeCycle.plan.rootCauseAnalysis.priorityCauses?.map(cause => (
+                  <span key={cause} className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{cause}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </motion.div>
+      </div>
+    );
+  };
+
+  const renderStandardCauses = () => {
+    if (!activeCycle) return null;
+    return (
+      <div className="space-y-6">
+        <div className="space-y-4">
+          {activeCycle.plan.rootCauseAnalysis.entries.map((entry, idx) => (
+            <div key={entry.id} className="flex items-center gap-4 group">
+              <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 font-black shadow-sm shrink-0 group-focus-within:bg-indigo-50 group-focus-within:text-indigo-600 group-focus-within:border-indigo-100 transition-all">
+                {activeCycle.plan.rootCauseAnalysis.type === '5whys' ? idx + 1 : <HelpCircle size={16} />}
+              </div>
+              <div className="flex-1 flex gap-2">
+                <input 
+                  type="text" 
+                  placeholder={activeCycle.plan.rootCauseAnalysis.type === '5whys' ? `Por quê ${idx + 1}?` : "Descreva a causa..."}
+                  value={entry.text || ''}
+                  onChange={(e) => {
+                    const newEntries = [...activeCycle.plan.rootCauseAnalysis.entries];
+                    newEntries[idx].text = e.target.value;
+                    updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, entries: newEntries } });
+                  }}
+                  className="flex-1 p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-inner transition-all"
+                />
+                {activeCycle.plan.rootCauseAnalysis.type === 'list' && (
+                  <button 
+                    onClick={() => {
+                      const newEntries = activeCycle.plan.rootCauseAnalysis.entries.filter((_, i) => i !== idx);
+                      updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, entries: newEntries } });
+                    }}
+                    className="p-4 text-slate-300 hover:text-rose-500 transition-colors"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          {activeCycle.plan.rootCauseAnalysis.type === 'list' && (
+            <button 
+              onClick={() => updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, entries: [...activeCycle.plan.rootCauseAnalysis.entries, { id: uuidv4(), text: '' }] } })}
+              className="w-full py-4 border-2 border-dashed border-slate-100 rounded-2xl text-slate-400 font-black text-xs hover:border-indigo-300 hover:text-indigo-600 transition-all flex items-center justify-center gap-2"
+            >
+              <Plus size={16} /> Adicionar Causa
+            </button>
+          )}
+        </div>
+
+        <div className="p-8 bg-indigo-50/50 rounded-[2rem] border border-indigo-100 space-y-4">
+          <div className="flex items-center gap-3 text-indigo-600">
+            <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
+              <Target size={18} />
+            </div>
+            <h5 className="font-black text-xs uppercase tracking-widest">Causa raiz identificada</h5>
+          </div>
+          <textarea 
+            placeholder="Após a análise, qual a causa raiz definitiva?"
+            value={activeCycle.plan.rootCauseAnalysis.identifiedRootCause || ''}
+            onChange={(e) => updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, identifiedRootCause: e.target.value } })}
+            className={cn("w-full p-6 bg-white border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm min-h-[120px] transition-all", showValidationErrors && !activeCycle.plan.rootCauseAnalysis.identifiedRootCause?.trim() ? "border-rose-300 ring-4 ring-rose-50" : "border-indigo-100")}
+          />
+          {!activeCycle.plan.rootCauseAnalysis.identifiedRootCause && (
+            <div className="flex items-center gap-2 text-rose-500 text-[10px] font-black uppercase tracking-widest animate-pulse">
+              <AlertCircle size={14} /> Identificação obrigatória para prosseguir
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderActionPlanItem = (item: ActionPlanItem, index: number) => {
+    return (
+      <div key={item.id} className="bg-slate-50/50 p-8 rounded-[2.5rem] border border-slate-100 space-y-6 relative group transition-all hover:bg-white hover:border-slate-200 hover:shadow-xl hover:shadow-slate-200/50">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-indigo-200">
+              {index + 1}
+            </div>
+            <div>
+              <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ação Corretiva</h5>
+              <p className="text-xs font-bold text-slate-600">Planejamento 5W2H</p>
+            </div>
+          </div>
+          <button onClick={() => removeActionPlanItem(item.id)} className="text-slate-300 hover:text-rose-500 transition-colors p-2 bg-white rounded-xl shadow-sm border border-slate-100">
+            <Trash2 size={18} />
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 px-1">
+              <Layers size={12} className="text-indigo-400" /> Tipo da Ação
+            </label>
+            <select 
+              value={item.actionType || ''} 
+              onChange={(e) => updateActionPlan(item.id, { actionType: e.target.value as any })}
+              className={cn("w-full p-4 bg-white border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold transition-all shadow-sm", !item.actionType ? "border-amber-200 ring-4 ring-amber-50" : "border-slate-100")}
+            >
+              <option value="">Selecione...</option>
+              <option value="Processual">Processual</option>
+              <option value="Operacional">Operacional</option>
+              <option value="Inovação">Inovação</option>
+            </select>
+          </div>
+
+          {item.actionType === 'Inovação' && (
+            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-3 text-emerald-600 bg-emerald-50 px-6 py-4 rounded-2xl border border-emerald-100 self-end">
+              <GitBranch size={18} className="shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-widest leading-tight">Módulo Inovação</p>
+                <p className="text-xs font-bold italic truncate">Projeto a ser criado na execução</p>
+              </div>
+            </motion.div>
+          )}
+        </div>
+
+        {item.actionType ? (
+          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-6 pt-6 border-t border-slate-100 overflow-hidden">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">What (O que?)</label>
+                <textarea 
+                  value={item.what || ''} 
+                  placeholder="Descrição clara da ação..."
+                  onChange={(e) => updateActionPlan(item.id, { what: e.target.value }, true)}
+                  onBlur={() => updateActionPlan(item.id, {})}
+                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 min-h-[100px] shadow-sm resize-none"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Why (Por que?)</label>
+                <textarea 
+                  value={item.why || ''} 
+                  placeholder="Motivo desta ação..."
+                  onChange={(e) => updateActionPlan(item.id, { why: e.target.value }, true)}
+                  onBlur={() => updateActionPlan(item.id, {})}
+                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 min-h-[100px] shadow-sm resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Where (Onde?)</label>
+                <input 
+                  value={item.where || ''} placeholder="Local..."
+                  onChange={(e) => updateActionPlan(item.id, { where: e.target.value }, true)}
+                  onBlur={() => updateActionPlan(item.id, {})}
+                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">When (Quando?)</label>
+                <input 
+                  type="date"
+                  value={item.when || ''} 
+                  onChange={(e) => updateActionPlan(item.id, { when: e.target.value }, true)}
+                  onBlur={() => updateActionPlan(item.id, {})}
+                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm h-[58px]"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Who (Quem?)</label>
+                <input 
+                  value={item.who || ''} placeholder="Responsável..."
+                  onChange={(e) => updateActionPlan(item.id, { who: e.target.value }, true)}
+                  onBlur={() => updateActionPlan(item.id, {})}
+                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">How (Como?)</label>
+              <textarea 
+                value={item.how || ''} 
+                placeholder="Método de execução..."
+                onChange={(e) => updateActionPlan(item.id, { how: e.target.value }, true)}
+                onBlur={() => updateActionPlan(item.id, {})}
+                className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 min-h-[80px] shadow-sm resize-none"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">How Much (Custo)</label>
+                <input 
+                  value={item.howMuch || ''} placeholder="Ex: R$ 0,00"
+                  onChange={(e) => updateActionPlan(item.id, { howMuch: e.target.value }, true)}
+                  onBlur={() => updateActionPlan(item.id, {})}
+                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Setor</label>
+                <input 
+                  value={item.sector || ''} placeholder="Área..."
+                  onChange={(e) => updateActionPlan(item.id, { sector: e.target.value }, true)}
+                  onBlur={() => updateActionPlan(item.id, {})}
+                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
+                />
+              </div>
+            </div>
+          </motion.div>
+        ) : (
+          <div className="bg-amber-50 p-8 rounded-3xl border border-amber-100 text-center space-y-2">
+            <HelpCircle size={24} className="mx-auto text-amber-400" />
+            <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Selecione o Tipo da Ação para detalhar o 5W2H</p>
+          </div>
+        )}
+      </div>
+    );
   };
 
   const dashboardStats = useMemo(() => {
@@ -1126,30 +1518,64 @@ export default function PDCAEditor({
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="max-w-5xl mx-auto space-y-12"
+                    className="max-w-5xl mx-auto space-y-8"
                   >
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-                      <div className="lg:col-span-2 space-y-12">
-                        {/* 1. Descrição */}
-                        <section className="space-y-4">
+                    {/* PLAN Steps Navigation */}
+                    <div className="flex items-center justify-between bg-theme-card p-2 rounded-3xl border border-theme-border shadow-sm mb-4">
+                      {[
+                        { id: 1, title: 'Descrição', icon: <FileText size={16} /> },
+                        { id: 2, title: 'Causa Raiz', icon: <Target size={16} /> },
+                        { id: 3, title: 'Impacto', icon: <TrendingUp size={16} /> },
+                        { id: 4, title: 'Plano de Ação', icon: <GitBranch size={16} /> }
+                      ].map((step) => (
+                        <button
+                          key={step.id}
+                          onClick={() => setActivePlanStep(step.id)}
+                          className={cn(
+                            "flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all",
+                            activePlanStep === step.id 
+                              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200" 
+                              : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                          )}
+                        >
+                          {step.icon}
+                          <span className="hidden md:block">{step.title}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="space-y-12">
+                      {/* Step 1: Descrição */}
+                      {activePlanStep === 1 && (
+                        <motion.section 
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          className="space-y-6"
+                        >
                           <SectionHeader number="1" title="Descrição do Problema" />
                           <textarea 
                             placeholder="Descreva o problema de forma clara..."
                             value={activeCycle.plan.problemDescription || ''}
                             onChange={(e) => updatePlan({ problemDescription: e.target.value })}
-                            className="w-full p-6 bg-theme-background border border-theme-border rounded-3xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all min-h-[120px] text-theme-foreground font-medium shadow-sm"
+                            className="w-full p-8 bg-theme-card border border-theme-border rounded-[2.5rem] focus:ring-2 focus:ring-indigo-500 outline-none transition-all min-h-[300px] text-theme-foreground text-lg font-medium shadow-sm"
                           />
-                        </section>
-                        
-                        {/* 2. Causa Raiz */}
-                        <section className="space-y-6">
-                          <div className="flex items-center justify-between">
+                        </motion.section>
+                      )}
+                      
+                      {/* Step 2: Causa Raiz */}
+                      {activePlanStep === 2 && (
+                        <motion.section 
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          className="space-y-8"
+                        >
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                             <SectionHeader number="2" title="Análise de Causa Raiz" />
-                            <div className="flex bg-theme-background p-1 rounded-xl border border-theme-border">
+                            <div className="flex bg-theme-background p-1 rounded-xl border border-theme-border self-start md:self-auto">
                               <button 
                                 onClick={() => updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, type: '5whys' } })}
                                 className={cn(
-                                  "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                                  "px-6 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
                                   activeCycle.plan.rootCauseAnalysis.type === '5whys' ? "bg-theme-card text-indigo-400 shadow-sm" : "text-slate-400"
                                 )}>
                                 5 Porquês
@@ -1411,10 +1837,301 @@ export default function PDCAEditor({
                               </button>
                             )}
                           </div>
-                        </section>
+                        </motion.section>
+                      )}
 
-                        {/* 4. Plano de Ação (5W2H) */}
-                        <section className="space-y-6">
+                      {/* Step 3: Impacto */}
+                      {activePlanStep === 3 && (
+                        <motion.section 
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          className="space-y-8"
+                        >
+                          <div className="bg-theme-card p-10 rounded-[2.5rem] border border-theme-border shadow-sm space-y-12">
+                            <SectionHeader number="3" title="Impacto do Problema" />
+                            
+                            {/* 1. Impacto Atual */}
+                            <div className="space-y-8">
+                              <div className="flex items-center gap-3 pb-2 border-b border-theme-border">
+                                <div className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
+                                  <RefreshCw size={18} />
+                                </div>
+                                <h4 className="text-sm font-black uppercase tracking-widest text-slate-700">1. Impacto Atual</h4>
+                              </div>
+
+                              <div className="space-y-6">
+                                <div className="space-y-4">
+                                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                    <FileText size={14} className="text-indigo-500" />
+                                    Descrição do Impacto
+                                  </label>
+                                  <textarea 
+                                    placeholder="Descreva detalhadamente o prejuízo ou problema atual..."
+                                    value={activeCycle.plan.impact.description || ''}
+                                    onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, description: e.target.value } })}
+                                    className="w-full p-6 bg-theme-background border border-theme-border rounded-[2rem] outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-theme-foreground min-h-[150px] transition-all"
+                                  />
+                                </div>
+
+                                <div className="max-w-md space-y-4">
+                                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                    <TrendingUp size={14} className="text-emerald-500" />
+                                    Valor do Impacto
+                                  </label>
+                                  <div className="relative">
+                                    <input 
+                                      type="number"
+                                      placeholder="0.00"
+                                      value={activeCycle.plan.impact.value || ''}
+                                      onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, value: parseFloat(e.target.value) || 0 } })}
+                                      className="w-full p-6 bg-theme-background border border-theme-border rounded-3xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground pl-12"
+                                    />
+                                    <span className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-slate-300">R$</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* 2. Ganhos Esperados */}
+                            <div className="space-y-10 pt-4">
+                              <div className="flex items-center gap-3 pb-2 border-b border-theme-border">
+                                <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500">
+                                  <TrendingUp size={18} />
+                                </div>
+                                <h4 className="text-sm font-black uppercase tracking-widest text-slate-700">2. Ganhos Esperados</h4>
+                              </div>
+
+                              {/* Tangíveis */}
+                              <div className="space-y-6">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Zap size={16} className="text-amber-500" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Ganhos Tangíveis</span>
+                                  </div>
+                                  <button 
+                                    onClick={() => {
+                                      const current = activeCycle.plan.impact.expectedGains?.tangible || [];
+                                      const newGains = [...current, { id: uuidv4(), type: '', value: 0, unit: '' }];
+                                      updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, tangible: newGains } } });
+                                    }}
+                                    className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-100 transition-all border border-amber-100 shadow-sm"
+                                  >
+                                    <Plus size={14} />
+                                    Adicionar Ganho Tangível
+                                  </button>
+                                </div>
+
+                                <div className="space-y-4">
+                                  {(activeCycle.plan.impact.expectedGains?.tangible || []).map((gain, index) => (
+                                    <div key={gain.id} className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-theme-background/30 p-6 rounded-[2rem] border border-theme-border/50 items-end">
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Tipo</label>
+                                          <select 
+                                            value={gain.type}
+                                            onChange={(e) => {
+                                              const newGains = [...activeCycle.plan.impact.expectedGains!.tangible];
+                                              const type = e.target.value;
+                                              let unit = gain.unit;
+                                              
+                                              // Auto-populate unit from structured configuration
+                                              if (globalConfig?.structuredTangibleGains) {
+                                                const configGain = globalConfig.structuredTangibleGains.find(g => g.name === type) as any;
+                                                const availableUnits = configGain?.units || (configGain?.unit ? [configGain.unit] : []);
+                                                
+                                                if (availableUnits.length > 0) {
+                                                  if (availableUnits.length === 1) {
+                                                    unit = availableUnits[0];
+                                                  } else if (!availableUnits.includes(gain.unit)) {
+                                                    unit = '';
+                                                  }
+                                                }
+                                              }
+                                              
+                                              newGains[index] = { ...gain, type, unit };
+                                              updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, tangible: newGains } } });
+                                            }}
+                                            className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground text-xs"
+                                          >
+                                          <option value="">Selecione...</option>
+                                          {((globalConfig?.structuredTangibleGains?.filter(g => g.active).map(g => g.name)) || globalConfig?.tangibleGainTypes || []).map(t => <option key={t} value={t}>{t}</option>)}
+                                        </select>
+                                      </div>
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Valor</label>
+                                        <input 
+                                          type="number"
+                                          value={gain.value || ''}
+                                          onChange={(e) => {
+                                            const newGains = [...activeCycle.plan.impact.expectedGains!.tangible];
+                                            newGains[index] = { ...gain, value: parseFloat(e.target.value) || 0 };
+                                            updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, tangible: newGains } } });
+                                          }}
+                                          className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground text-xs"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Unidade</label>
+                                        {(() => {
+                                          const configGain = globalConfig?.structuredTangibleGains?.find(g => g.name === gain.type) as any;
+                                          const availableUnits = configGain?.units || (configGain?.unit ? [configGain.unit] : []);
+                                          const isDisabled = availableUnits.length <= 1;
+
+                                          return (
+                                            <select 
+                                              disabled={isDisabled}
+                                              value={gain.unit}
+                                              onChange={(e) => {
+                                                const newGains = [...activeCycle.plan.impact.expectedGains!.tangible];
+                                                newGains[index] = { ...gain, unit: e.target.value };
+                                                updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, tangible: newGains } } });
+                                              }}
+                                              className={cn(
+                                                "w-full p-4 border border-theme-border rounded-2xl outline-none font-bold text-xs transition-all",
+                                                isDisabled 
+                                                  ? "bg-theme-background text-slate-400 cursor-not-allowed" 
+                                                  : "bg-theme-card text-theme-foreground focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                                              )}
+                                            >
+                                              <option value="">Selecione...</option>
+                                              {availableUnits.length > 0 ? (
+                                                availableUnits.map(u => (
+                                                  <option key={u} value={u}>{u}</option>
+                                                ))
+                                              ) : (
+                                                ((globalConfig?.structuredUnits?.filter(u => u.active).map(u => u.symbol)) || globalConfig?.units || []).map(u => <option key={u} value={u}>{u}</option>)
+                                              )}
+                                            </select>
+                                          );
+                                        })()}
+                                      </div>
+                                      <div>
+                                        <button 
+                                          onClick={() => {
+                                            const newGains = activeCycle.plan.impact.expectedGains!.tangible.filter(g => g.id !== gain.id);
+                                            updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, tangible: newGains } } });
+                                          }}
+                                          className="w-full p-4 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-2xl transition-all flex items-center justify-center border border-transparent hover:border-rose-100"
+                                        >
+                                          <Trash2 size={16} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {(activeCycle.plan.impact.expectedGains?.tangible || []).length === 0 && (
+                                    <div className="text-center p-8 border-2 border-dashed border-theme-border rounded-[2rem] text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                                      Nenhum ganho tangível adicionado
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Intangíveis */}
+                              <div className="space-y-6">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Award size={16} className="text-indigo-500" />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Ganhos Intangíveis</span>
+                                  </div>
+                                  <button 
+                                    onClick={() => {
+                                      const current = activeCycle.plan.impact.expectedGains?.intangible || [];
+                                      const newGains = [...current, { id: uuidv4(), type: '', description: '', impactLevel: 'Baixo' as const }];
+                                      updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, intangible: newGains } } });
+                                    }}
+                                    className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-100 transition-all border border-indigo-100 shadow-sm"
+                                  >
+                                    <Plus size={14} />
+                                    Adicionar Ganho Intangível
+                                  </button>
+                                </div>
+
+                                <div className="space-y-4">
+                                  {(activeCycle.plan.impact.expectedGains?.intangible || []).map((gain, index) => (
+                                    <div key={gain.id} className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-theme-background/30 p-6 rounded-[2rem] border border-theme-border/50 items-end">
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Tipo</label>
+                                        <select 
+                                          value={gain.type}
+                                          onChange={(e) => {
+                                            const newGains = [...activeCycle.plan.impact.expectedGains!.intangible];
+                                            newGains[index] = { ...gain, type: e.target.value };
+                                            updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, intangible: newGains } } });
+                                          }}
+                                          className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground text-xs"
+                                        >
+                                          <option value="">Selecione...</option>
+                                          {((globalConfig?.structuredIntangibleGains?.filter(g => g.active).map(g => g.name)) || globalConfig?.intangibleGainTypes || []).map(t => <option key={t} value={t}>{t}</option>)}
+                                        </select>
+                                      </div>
+                                      <div className="space-y-2 md:col-span-1">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Descrição</label>
+                                        <input 
+                                          type="text"
+                                          value={gain.description || ''}
+                                          onChange={(e) => {
+                                            const newGains = [...activeCycle.plan.impact.expectedGains!.intangible];
+                                            newGains[index] = { ...gain, description: e.target.value };
+                                            updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, intangible: newGains } } });
+                                          }}
+                                          placeholder="Ex: Melhoria no clima..."
+                                          className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-theme-foreground text-xs"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Nível</label>
+                                        <div className="flex gap-1">
+                                          {['Baixo', 'Médio', 'Alto'].map((level) => (
+                                            <button 
+                                              key={level}
+                                              onClick={() => {
+                                                const newGains = [...activeCycle.plan.impact.expectedGains!.intangible];
+                                                newGains[index] = { ...gain, impactLevel: level as any };
+                                                updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, intangible: newGains } } });
+                                              }}
+                                              className={cn(
+                                                "flex-1 py-4 px-1 rounded-xl font-black text-[8px] uppercase tracking-tighter transition-all border",
+                                                gain.impactLevel === level 
+                                                  ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
+                                                  : "bg-theme-card text-slate-400 border-theme-border hover:border-indigo-200"
+                                              )}
+                                            >
+                                              {level}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <button 
+                                          onClick={() => {
+                                            const newGains = activeCycle.plan.impact.expectedGains!.intangible.filter(g => g.id !== gain.id);
+                                            updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, intangible: newGains } } });
+                                          }}
+                                          className="w-full p-4 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-2xl transition-all flex items-center justify-center border border-transparent hover:border-rose-100"
+                                        >
+                                          <Trash2 size={16} />
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {(activeCycle.plan.impact.expectedGains?.intangible || []).length === 0 && (
+                                    <div className="text-center p-8 border-2 border-dashed border-theme-border rounded-[2rem] text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                                      Nenhum ganho intangível adicionado
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </motion.section>
+                      )}
+
+                      {/* Step 4: Plano de Ação */}
+                      {activePlanStep === 4 && (
+                        <motion.section 
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          className="space-y-8"
+                        >
                           <SectionHeader number="4" title="Plano de Ação (5W2H)" />
                           <div className="space-y-6">
                             {activeCycle.plan.actionPlan.map((item, index) => (
@@ -1585,71 +2302,41 @@ export default function PDCAEditor({
                               Nova Ação no Plano
                             </button>
                           </div>
-                        </section>
-                      </div>
+                        </motion.section>
+                      )}
+                    </div>
 
-                      <div className="space-y-8">
-                        {/* 3. Impacto do Problema */}
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-8">
-                          <SectionHeader number="3" title="Impacto" />
-                          
-                          <div className="space-y-4">
-                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                              <Target size={14} className="text-indigo-500" />
-                              Descrição do Impacto
-                            </label>
-                            <textarea 
-                              placeholder="Qual o prejuízo atual?"
-                              value={activeCycle.plan.impact.description || ''}
-                              onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, description: e.target.value } })}
-                              className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 min-h-[100px]"
-                            />
-                          </div>
+                    {/* Step Controls */}
+                    <div className="flex items-center justify-between pt-10 border-t border-theme-border">
+                      <button
+                        disabled={activePlanStep === 1}
+                        onClick={() => setActivePlanStep(prev => prev - 1)}
+                        className={cn(
+                          "flex items-center gap-2 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border border-theme-border hover:bg-theme-card",
+                          activePlanStep === 1 ? "opacity-0 invisible" : "opacity-100"
+                        )}
+                      >
+                        <ArrowLeft size={18} />
+                        Anterior
+                      </button>
 
-                          <div className="space-y-4">
-                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                              <RefreshCw size={14} className="text-amber-500" />
-                              Valor do Impacto Atual
-                            </label>
-                            <input 
-                              type="number"
-                              placeholder="Ex: 5000"
-                              value={activeCycle.plan.impact.value || 0}
-                              onFocus={(e) => e.target.select()}
-                              onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, value: parseFloat(e.target.value) || 0 } })}
-                              className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
-                            />
-                          </div>
-
-                          <div className="space-y-4">
-                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                              <TrendingUp size={14} className="text-emerald-500" />
-                              Meta de Melhoria (%)
-                            </label>
-                            <div className="relative">
-                              <input 
-                                type="number"
-                                placeholder="Ex: 20"
-                                value={activeCycle.plan.impact.goal || 0}
-                                onFocus={(e) => e.target.select()}
-                                onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, goal: parseFloat(e.target.value) || 0 } })}
-                                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 pr-12"
-                              />
-                              <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-slate-400">%</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex justify-end pt-8 border-t border-slate-200">
+                      {activePlanStep < 4 ? (
+                        <button
+                          onClick={() => setActivePlanStep(prev => prev + 1)}
+                          className="flex items-center gap-2 bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all group"
+                        >
+                          Próximo Passo
+                          <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                        </button>
+                      ) : (
                         <button 
                           onClick={() => handlePhaseChange('DO')}
-                          className="flex items-center gap-2 bg-indigo-600 text-white px-8 py-4 rounded-2xl font-black shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all group"
+                          className="flex items-center gap-2 bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all group"
                         >
-                          Próxima Etapa: DO (Execução)
-                          <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                          Finalizar PLAN (Ir para DO)
+                          <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
                         </button>
-                      </div>
+                      )}
                     </div>
                   </motion.div>
                 )}
@@ -2239,15 +2926,16 @@ export default function PDCAEditor({
                                               <option value="Parcial">Parcial</option>
                                             </select>
                                           </div>
-                                          <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Impacto de ganho</label>
-                                            <input 
-                                              type="number"
-                                              value={item.gainImpact || 0}
-                                              onFocus={(e) => e.target.select()}
-                                              onChange={(e) => updateActionPlan(item.id, { gainImpact: parseFloat(e.target.value) || 0 })}
-                                              placeholder="Impacto financeiro ou de tempo"
-                                              className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                          <div className="md:col-span-2 space-y-1">
+                                            <GainsEditor 
+                                              title="Ganho real obtido"
+                                              variant="check"
+                                              gains={item.realGains || { tangible: [], intangible: [] }}
+                                              onChange={(gains) => updateActionPlan(item.id, { realGains: gains })}
+                                              globalConfig={globalConfig}
+                                              inheritedGains={activeCycle.plan.impact.expectedGains}
+                                              tangibleTypes={globalConfig?.structuredTangibleGains?.filter(g => g.active).map(g => g.name) || globalConfig?.tangibleGainTypes}
+                                              intangibleTypes={globalConfig?.structuredIntangibleGains?.filter(g => g.active).map(g => g.name) || globalConfig?.intangibleGainTypes}
                                             />
                                           </div>
 
@@ -3153,6 +3841,36 @@ function SectionHeader({ number, title }: { number: string, title: string }) {
       </div>
       <h4 className="text-xl font-black text-slate-800 tracking-tight">{title}</h4>
     </div>
+  );
+}
+
+function PlanStepButton({ active, completed, onClick, number, label }: { active: boolean, completed?: boolean, onClick: () => void, number: string, label: string }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={cn(
+        "flex-1 flex items-center gap-3 px-6 py-4 rounded-2xl transition-all font-bold text-xs uppercase tracking-widest relative whitespace-nowrap",
+        active 
+          ? "bg-indigo-600 text-white shadow-xl shadow-indigo-100 ring-2 ring-indigo-600 ring-offset-2" 
+          : completed 
+            ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100"
+            : "bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 border border-slate-100"
+      )}
+    >
+      <div className={cn(
+        "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border shrink-0",
+        active ? "bg-white text-indigo-600 border-white" : completed ? "bg-white text-emerald-600 border-emerald-200" : "bg-white text-slate-300 border-slate-200"
+      )}>
+        {completed && !active ? <CheckCircle2 size={12} /> : number}
+      </div>
+      <span className="truncate">{label}</span>
+      {active && (
+        <motion.div 
+          layoutId="plan-step-pill"
+          className="absolute inset-0 bg-indigo-600 rounded-2xl -z-10"
+        />
+      )}
+    </button>
   );
 }
 

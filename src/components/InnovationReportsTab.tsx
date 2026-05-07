@@ -2,18 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { 
   FileText, 
   Download, 
-  Calendar, 
   Users, 
-  Target,
   Filter,
-  Search,
   CheckCircle2,
-  Clock,
-  Briefcase,
-  Layers
+  Briefcase
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { format, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 import pdfMake from 'pdfmake/build/pdfmake';
@@ -46,39 +41,18 @@ interface InnovationReportsTabProps {
 }
 
 export default function InnovationReportsTab({ projects, users }: InnovationReportsTabProps) {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
+  const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [selectedResponsibles, setSelectedResponsibles] = useState<string[]>([]);
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
-
-  const sectors = useMemo(() => {
-    const s = new Set<string>();
-    projects.forEach(p => {
-      if (p.sector) s.add(p.sector);
-    });
-    return Array.from(s).sort();
-  }, [projects]);
 
   const filteredProjects = useMemo(() => {
     return projects.filter(p => !p.deleted).filter(p => {
-      const dateMatch = (!startDate || !endDate) || isWithinInterval(parseISO(p.createdAt), {
-        start: startOfDay(parseISO(startDate)),
-        end: endOfDay(parseISO(endDate))
-      });
-      const statusMatch = selectedStatuses.length === 0 || selectedStatuses.includes(p.status);
+      const projectMatch = selectedProjectIds.length === 0 || selectedProjectIds.includes(p.id);
       const responsibleMatch = selectedResponsibles.length === 0 || selectedResponsibles.includes(p.responsibleId);
-      const typeMatch = selectedTypes.length === 0 || (p.innovationType && selectedTypes.includes(p.innovationType));
-      const sectorMatch = selectedSectors.length === 0 || (p.sector && selectedSectors.includes(p.sector));
-      const searchMatch = p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          (p.description || '').toLowerCase().includes(searchTerm.toLowerCase());
       
-      return dateMatch && statusMatch && responsibleMatch && typeMatch && sectorMatch && searchMatch;
+      return projectMatch && responsibleMatch;
     });
-  }, [projects, startDate, endDate, selectedStatuses, selectedResponsibles, selectedTypes, selectedSectors, searchTerm]);
+  }, [projects, selectedProjectIds, selectedResponsibles]);
 
   const generateExcel = () => {
     if (filteredProjects.length === 0) {
@@ -203,83 +177,24 @@ export default function InnovationReportsTab({ projects, users }: InnovationRepo
         </div>
 
         <div className="bg-slate-50/50 p-6 lg:p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {/* Período */}
-            <div className="space-y-3">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Período de Criação</label>
-              <div className="flex gap-2">
-                <div className="flex-1">
-                  <input 
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div className="flex-1">
-                  <input 
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Busca */}
-            <div className="space-y-3">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Busca por Texto</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-                <input 
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Nome ou descrição..."
-                  className="w-full p-3 pl-10 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-            </div>
-
+          <div className="flex flex-col md:flex-row items-center gap-6">
             {/* Filtros Dropdowns */}
-            <div className="flex flex-col justify-end gap-3 md:flex-row lg:col-span-1">
+            <div className="flex flex-1 flex-wrap items-center gap-4">
                <FilterGroup 
-                label="Status" 
-                options={Object.entries(STATUS_LABELS).map(([id, label]) => ({ id, label }))} 
-                selected={selectedStatuses} 
-                onToggle={(id) => toggleFilter(selectedStatuses, id, setSelectedStatuses)} 
+                label="Selecionar Projeto" 
+                options={projects.map(p => ({ id: p.id, label: p.title }))} 
+                selected={selectedProjectIds} 
+                onToggle={(id) => toggleFilter(selectedProjectIds, id, setSelectedProjectIds)} 
               />
                <FilterGroup 
-                label="Responsável" 
+                label="Selecionar Responsável" 
                 options={users.map(u => ({ id: u.id, label: u.name }))} 
                 selected={selectedResponsibles} 
                 onToggle={(id) => toggleFilter(selectedResponsibles, id, setSelectedResponsibles)} 
               />
-               <FilterGroup 
-                label="Tipo" 
-                options={INNOVATION_TYPES.map(t => ({ id: t, label: t }))} 
-                selected={selectedTypes} 
-                onToggle={(id) => toggleFilter(selectedTypes, id, setSelectedTypes)} 
-              />
-               <FilterGroup 
-                label="Setor" 
-                options={sectors.map(s => ({ id: s, label: s }))} 
-                selected={selectedSectors} 
-                onToggle={(id) => toggleFilter(selectedSectors, id, setSelectedSectors)} 
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center justify-between gap-4 pt-6 border-t border-slate-200">
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600">
-                <Briefcase size={14} />
-                <span>{filteredProjects.length} Projetos filtrados</span>
-              </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 shrink-0">
               <button 
                 onClick={generateExcel}
                 className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
@@ -294,6 +209,13 @@ export default function InnovationReportsTab({ projects, users }: InnovationRepo
                 <FileText size={18} />
                 Gerar PDF
               </button>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-6 border-t border-slate-200">
+            <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg text-xs font-bold text-slate-600">
+              <Briefcase size={14} />
+              <span>{filteredProjects.length} Projetos filtrados</span>
             </div>
           </div>
         </div>

@@ -6,7 +6,7 @@ export function calculateInnovationStatusAndProgress(project: InnovationProject)
   const actions = project.developmentActions || [];
   const hasActions = actions.length > 0;
   const allActionsCompleted = hasActions && actions.every(a => a.status === 'Concluído');
-  const hasTestAction = actions.some(a => a.type === 'Testes'); // Note: type is 'Testes' in types.ts but user says 'Teste'
+  const hasTestAction = actions.some(a => a.type === 'Testes');
   const hasProduction = !!(
     project.production?.document?.name || 
     project.production?.technicalDeliverable?.name || 
@@ -14,15 +14,18 @@ export function calculateInnovationStatusAndProgress(project: InnovationProject)
     (project.production?.externalLinks?.externalTools && project.production.externalLinks.externalTools.length > 0)
   );
 
+  // If already concluded, keep it concluded with 100% progress
+  if (project.status === 'concluído') {
+    return { status: 'concluído', progress: 100 };
+  }
+
   let status: InnovationStatus = 'backlog';
   let progress = 0;
 
-  // PRIORITY RULES for Status
-  if (allActionsCompleted && hasProduction) {
-    status = 'concluído';
-  } else if (hasTestAction && !hasProduction) {
-    status = 'teste';
-  } else if (hasActions && actions.some(a => a.status !== 'Concluído') && !hasTestAction) {
+  // PRIORITY RULES for Status (concluído removed from automatic logic)
+  if (hasProduction || allActionsCompleted) {
+    status = 'teste'; // Use 'teste' as the final stage before manual completion
+  } else if (hasActions && actions.some(a => a.status !== 'Concluído')) {
     status = 'desenvolvimento';
   } else if (hasScope && !hasActions) {
     status = 'planejamento';
@@ -39,10 +42,12 @@ export function calculateInnovationStatusAndProgress(project: InnovationProject)
     progress = 25;
   } else if (hasScope && !hasActions) {
     progress = 50;
-  } else if (hasActions && (!allActionsCompleted || !hasProduction)) {
+  } else if (hasActions && !allActionsCompleted) {
     progress = 75;
+  } else if (allActionsCompleted && !hasProduction) {
+    progress = 85;
   } else if (allActionsCompleted && hasProduction) {
-    progress = 100;
+    progress = 95; // 95% is the max progress before manual completion
   }
 
   return { status, progress };

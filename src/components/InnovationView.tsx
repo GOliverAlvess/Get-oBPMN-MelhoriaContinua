@@ -100,32 +100,25 @@ export default function InnovationView({
   const [projectToEdit, setProjectToEdit] = useState<InnovationProject | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
-  // Effect to automatically update status and progress for all projects
+  // Effect to automatically update progress for all projects
   useEffect(() => {
     const updateOutdatedProjects = async () => {
       for (const project of innovationProjects) {
-        const { status: autoStatus, progress: autoProgress } = calculateInnovationStatusAndProgress(project);
+        const { progress: autoProgress } = calculateInnovationStatusAndProgress(project);
         
-        // Check if update is needed (status changed or progress changed or status is old 'entregue')
-        const isEntregue = (project.status as string) === 'entregue';
-        const statusChanged = project.status !== autoStatus || isEntregue;
+        // Progress changed? (Status is now manual)
         const progressChanged = project.progress !== autoProgress;
 
-        if (statusChanged || progressChanged) {
+        if (progressChanged) {
           try {
             const projectRef = doc(db, 'innovationProjects', project.id);
             await setDoc(projectRef, { 
               ...project, 
-              status: autoStatus, 
               progress: autoProgress,
               updatedAt: new Date().toISOString() 
-            });
-            
-            if (statusChanged) {
-              await logStatusChange({ ...project, status: autoStatus }, project.status, autoStatus);
-            }
+            }, { merge: true });
           } catch (error) {
-            console.error("Error auto-updating project:", project.id, error);
+            console.error("Error auto-updating project progress:", project.id, error);
           }
         }
       }
@@ -225,11 +218,16 @@ export default function InnovationView({
     try {
       const previousStatus = selectedProject.status;
       
-      // Automatic status and progress calculation
+      // Automatic progress calculation (always helpful)
+      // Status calculation is now more restricted
       const projectWithUpdates = { ...selectedProject, ...updates };
       const { status: autoStatus, progress: autoProgress } = calculateInnovationStatusAndProgress(projectWithUpdates);
       
-      const finalUpdates = { ...updates, status: autoStatus, progress: autoProgress };
+      // If status is not explicitly provided, we keep the previous one
+      // unless we want some basic automation (like moving from backlog to análise)
+      // BUT the user wants manual control over status transitions now.
+      const finalStatus = updates.status || selectedProject.status;
+      const finalUpdates = { ...updates, status: finalStatus, progress: autoProgress };
 
       if (onUpdateInnovationProject) {
         await onUpdateInnovationProject(selectedProject.id, finalUpdates);
@@ -251,9 +249,24 @@ export default function InnovationView({
   };
 
   const handleUpdateStatus = async (projectId: string, newStatus: InnovationStatus) => {
-    // Disabled as requested: status is now automatic
-    console.log("Manual status update disabled for", projectId, "to", newStatus);
-    return;
+    try {
+      const project = innovationProjects.find(p => p.id === projectId);
+      if (!project) return;
+      
+      const previousStatus = project.status;
+      if (previousStatus === newStatus) return;
+
+      const projectRef = doc(db, 'innovationProjects', projectId);
+      await setDoc(projectRef, { 
+        ...project, 
+        status: newStatus,
+        updatedAt: new Date().toISOString() 
+      }, { merge: true });
+
+      await logStatusChange({ ...project, status: newStatus }, previousStatus, newStatus);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `innovationProjects/${projectId}`);
+    }
   };
 
   const handleDeleteInnovation = async (id: string) => {

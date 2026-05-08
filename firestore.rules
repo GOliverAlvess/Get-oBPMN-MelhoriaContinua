@@ -181,10 +181,7 @@ service cloud.firestore {
     // ===============================================================
 
     match /innovationProjects/{projectId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && isValidInnovationProject(request.resource.data);
-      allow update: if isAuthenticated() && isValidInnovationProject(request.resource.data);
-      allow delete: if isAdmin() || (isAuthenticated() && resource.data.responsibleId == request.auth.uid);
+      allow read, write: if isAuthenticated();
     }
 
     match /projectFiles/{fileId} {

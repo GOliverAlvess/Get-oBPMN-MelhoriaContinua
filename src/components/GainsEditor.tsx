@@ -13,6 +13,7 @@ interface GainsEditorProps {
   intangibleTypes?: string[];
   globalConfig?: GlobalConfig;
   inheritedGains?: GainsStructure;
+  isReadOnly?: boolean;
 }
 
 export default function GainsEditor({ 
@@ -23,7 +24,8 @@ export default function GainsEditor({
   tangibleTypes = [],
   intangibleTypes = [],
   globalConfig,
-  inheritedGains
+  inheritedGains,
+  isReadOnly = false
 }: GainsEditorProps) {
   const isProductionOverride = variant === 'production' && inheritedGains;
 
@@ -156,7 +158,11 @@ export default function GainsEditor({
           {!isProductionOverride && (
             <button 
               onClick={addTangible}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-200 transition-all shadow-sm"
+              disabled={isReadOnly}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-200 transition-all shadow-sm",
+                isReadOnly && "opacity-50 cursor-not-allowed"
+              )}
             >
               <Plus size={14} />
               Adicionar Ganho
@@ -205,7 +211,11 @@ export default function GainsEditor({
                       type="number"
                       value={t.value}
                       onChange={(e) => updateTangible(t.id, { value: parseFloat(e.target.value) || 0 })}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-mono"
+                      disabled={isReadOnly}
+                      className={cn(
+                        "w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-mono",
+                        isReadOnly && "opacity-50 cursor-not-allowed"
+                      )}
                       placeholder="0.00"
                     />
                   </div>
@@ -248,7 +258,11 @@ export default function GainsEditor({
                     <div className="md:col-span-2 flex justify-end">
                       <button 
                         onClick={() => removeTangible(t.id)}
-                        className="w-10 h-10 bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-600 rounded-xl flex items-center justify-center transition-all border border-slate-100"
+                        disabled={isReadOnly}
+                        className={cn(
+                          "w-10 h-10 bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-600 rounded-xl flex items-center justify-center transition-all border border-slate-100",
+                          isReadOnly && "opacity-50 cursor-not-allowed"
+                        )}
                       >
                         <Trash2 size={16} />
                       </button>
@@ -271,7 +285,11 @@ export default function GainsEditor({
           {!isProductionOverride && (
             <button 
               onClick={addIntangible}
-              className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-200 transition-all shadow-sm"
+              disabled={isReadOnly}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-indigo-600 uppercase tracking-widest hover:bg-indigo-50 hover:border-indigo-200 transition-all shadow-sm",
+                isReadOnly && "opacity-50 cursor-not-allowed"
+              )}
             >
               <Plus size={14} />
               Adicionar Ganho
@@ -333,7 +351,11 @@ export default function GainsEditor({
                     <select 
                       value={i.impactLevel}
                       onChange={(e) => updateIntangible(i.id, { impactLevel: e.target.value as any })}
-                      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                      disabled={isReadOnly}
+                      className={cn(
+                        "w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer",
+                        isReadOnly && "opacity-50 cursor-not-allowed"
+                      )}
                     >
                       <option value="">Selecione...</option>
                       <option value="Baixo">Baixo</option>
@@ -345,7 +367,11 @@ export default function GainsEditor({
                     <div className="md:col-span-2 flex justify-end">
                       <button 
                         onClick={() => removeIntangible(i.id)}
-                        className="w-10 h-10 bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-600 rounded-xl flex items-center justify-center transition-all border border-slate-100"
+                        disabled={isReadOnly}
+                        className={cn(
+                          "w-10 h-10 bg-slate-50 text-slate-400 hover:bg-rose-50 hover:text-rose-600 rounded-xl flex items-center justify-center transition-all border border-slate-100",
+                          isReadOnly && "opacity-50 cursor-not-allowed"
+                        )}
                       >
                         <Trash2 size={16} />
                       </button>

@@ -369,7 +369,7 @@ export interface InnovationProject {
     refinedGains?: GainsStructure;
   };
   progress?: number;
-  innovationType?: 'Incremental' | 'Radical' | 'Disruptiva' | 'Arquitetural';
+  innovationType?: 'Melhoria de Sistema/App' | 'Criação de Sistema/App' | 'RPA' | 'Automação / Tecnologia';
   estimatedGain?: number;
   realGain?: number;
   sector?: string;

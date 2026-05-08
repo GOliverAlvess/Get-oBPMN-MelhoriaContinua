@@ -72,8 +72,25 @@ export default function InnovationProjectDetail({
   globalConfig
 }: InnovationProjectDetailProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'technical' | 'team' | 'production'>('overview');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const handleUpdate = async (updates: Partial<InnovationProject>) => {
+    try {
+      setIsSaving(true);
+      setErrorMessage(null);
+      await onUpdate(updates);
+    } catch (error) {
+      console.error("Error updating innovation:", error);
+      setErrorMessage("Erro ao salvar alterações.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
   const currentUser = auth.currentUser;
+  const isReadOnly = project.status === 'concluído';
 
   const statusLabels: Record<InnovationStatus, string> = {
     'backlog': 'Backlog',
@@ -117,31 +134,142 @@ export default function InnovationProjectDetail({
     return { pdcaAction, pdcaCycle, pdcaProject, pdcaSubtask };
   }, [project, projects]);
 
+  const handleTabChange = async (tab: 'overview' | 'technical' | 'team' | 'production') => {
+    // If going backwards or staying on same tab, allow it
+    const tabsInOrder = ['overview', 'technical', 'team', 'production'];
+    const currentIndex = tabsInOrder.indexOf(activeTab);
+    const targetIndex = tabsInOrder.indexOf(tab);
+
+    if (targetIndex <= currentIndex) {
+      setActiveTab(tab);
+      setErrorMessage(null);
+      return;
+    }
+
+    // Validate current step before going forward
+    const isValid = validateStep(activeTab);
+    if (!isValid) {
+      setErrorMessage("Preencha todos os campos obrigatórios antes de avançar.");
+      return;
+    }
+
+    // Update status if advancing
+    try {
+      if (tab === 'technical' && project.status === 'backlog') {
+        await onUpdate({ status: 'análise' });
+      } else if (tab === 'team' && (project.status === 'análise' || project.status === 'planejamento' || project.status === 'backlog')) {
+        await onUpdate({ status: 'desenvolvimento' });
+      } else if (tab === 'production' && project.status !== 'concluído') {
+        await onUpdate({ status: 'teste' });
+      }
+    } catch (error) {
+      console.error("Error updating status on tab change:", error);
+    }
+
+    setActiveTab(tab);
+    setErrorMessage(null);
+  };
+
+  const validateStep = (tab: string): boolean => {
+    if (tab === 'overview') return true;
+    
+    if (tab === 'technical') {
+      const scope = project.technicalScope;
+      return !!project.innovationType && 
+             !!scope?.whatWillBeDone && 
+             (scope?.technologies || []).length > 0 && 
+             !!scope?.assumptions && 
+             !!scope?.restrictions;
+    }
+
+    if (tab === 'team') {
+      return (project.developmentActions || []).some(
+        a => a.type === 'Implementação' && a.status === 'Concluído'
+      );
+    }
+
+    if (tab === 'production') {
+      const prod = project.production;
+      return !!prod?.document?.name && 
+             !!prod?.document?.url && 
+             !!prod?.technicalDeliverable?.name && 
+             !!prod?.technicalDeliverable?.url && 
+             (prod?.refinedGains?.tangible || []).length > 0 && 
+             (prod?.refinedGains?.intangible || []).length > 0;
+    }
+
+    return true;
+  };
+
   const handleSaveScope = async (scope: NonNullable<InnovationProject['technicalScope']>) => {
-    setIsSaving(true);
-    await onUpdate({ technicalScope: scope });
-    setIsSaving(false);
+    try {
+      setIsSaving(true);
+      setErrorMessage(null);
+      await onUpdate({ technicalScope: scope });
+    } catch (error) {
+      console.error("Error saving scope:", error);
+      setErrorMessage("Erro ao salvar dados no servidor. Verifique sua conexão ou permissões.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleAddAction = async (action: Omit<InnovationAction, 'id' | 'status'>) => {
-    const newAction: InnovationAction = {
-      ...action,
-      id: uuidv4(),
-      status: 'Pendente'
-    };
-    await onUpdate({ developmentActions: [newAction, ...(project.developmentActions || [])] });
+    try {
+      setIsSaving(true);
+      setErrorMessage(null);
+      const newAction: InnovationAction = {
+        ...action,
+        id: uuidv4(),
+        status: 'Pendente'
+      };
+      await onUpdate({ developmentActions: [newAction, ...(project.developmentActions || [])] });
+    } catch (error) {
+      setErrorMessage("Erro ao adicionar ação.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleUpdateAction = async (actionId: string, updates: Partial<InnovationAction>) => {
-    const newActions = (project.developmentActions || []).map(a => 
-      a.id === actionId ? { ...a, ...updates } : a
-    );
-    await onUpdate({ developmentActions: newActions });
+    try {
+      setIsSaving(true);
+      setErrorMessage(null);
+      const newActions = (project.developmentActions || []).map(a => 
+        a.id === actionId ? { ...a, ...updates } : a
+      );
+      await onUpdate({ developmentActions: newActions });
+    } catch (error) {
+      setErrorMessage("Erro ao atualizar ação.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleDeleteAction = async (actionId: string) => {
-    const newActions = (project.developmentActions || []).filter(a => a.id !== actionId);
-    await onUpdate({ developmentActions: newActions });
+    try {
+      setIsSaving(true);
+      setErrorMessage(null);
+      const newActions = (project.developmentActions || []).filter(a => a.id !== actionId);
+      await onUpdate({ developmentActions: newActions });
+    } catch (error) {
+      setErrorMessage("Erro ao excluir ação.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleUpdateProduction = async (production: any) => {
+    try {
+      setIsSaving(true);
+      setErrorMessage(null);
+      await onUpdate({ production });
+    } catch (error) {
+      console.error("Error saving production:", error);
+      setErrorMessage("Erro ao salvar produção.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
 
@@ -189,12 +317,47 @@ export default function InnovationProjectDetail({
         </div>
       </div>
 
+      {/* Error Message */}
+      <AnimatePresence>
+        {errorMessage && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-rose-50 border border-rose-200 rounded-2xl p-4 flex items-center gap-3 text-rose-600 mb-2"
+          >
+            <AlertCircle size={18} />
+            <p className="text-sm font-bold">{errorMessage}</p>
+            <button onClick={() => setErrorMessage(null)} className="ml-auto text-rose-400 hover:text-rose-600 transition-colors">
+              <Plus size={18} className="rotate-45" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {successMessage && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center gap-3 text-emerald-600 mb-2"
+          >
+            <CheckCircle2 size={18} />
+            <p className="text-sm font-bold">{successMessage}</p>
+            <button onClick={() => setSuccessMessage(null)} className="ml-auto text-emerald-400 hover:text-emerald-600 transition-colors">
+              <Plus size={18} className="rotate-45" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Tabs */}
       <div className="flex items-center gap-1 bg-white p-1.5 rounded-[1.5rem] border border-slate-100 shadow-sm self-start">
-        <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} icon={<Info size={16} />} label="Resumo & Contexto" />
-        <TabButton active={activeTab === 'technical'} onClick={() => setActiveTab('technical')} icon={<FileCode size={16} />} label="Escopo Técnico" />
-        <TabButton active={activeTab === 'team'} onClick={() => setActiveTab('team')} icon={<Layers size={16} />} label="Desenvolvimento" />
-        <TabButton active={activeTab === 'production'} onClick={() => setActiveTab('production')} icon={<Paperclip size={16} />} label="Produção" />
+        <TabButton active={activeTab === 'overview'} onClick={() => handleTabChange('overview')} icon={<Info size={16} />} label="Resumo & Contexto" />
+        <TabButton active={activeTab === 'technical'} onClick={() => handleTabChange('technical')} icon={<FileCode size={16} />} label="Escopo Técnico" />
+        <TabButton active={activeTab === 'team'} onClick={() => handleTabChange('team')} icon={<Layers size={16} />} label="Desenvolvimento" />
+        <TabButton active={activeTab === 'production'} onClick={() => handleTabChange('production')} icon={<Paperclip size={16} />} label="Produção" />
       </div>
 
       {/* Content */}
@@ -213,32 +376,7 @@ export default function InnovationProjectDetail({
                 <div className="lg:col-span-2 space-y-8">
                   <Section title="Classificação e Ganhos" icon={<Target size={20} />}>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Tipo de Inovação</label>
-                        <select 
-                          value={project.innovationType || ''}
-                          onChange={(e) => onUpdate({ innovationType: e.target.value as any })}
-                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
-                        >
-                          <option value="">Selecione...</option>
-                          <option value="Incremental">Incremental</option>
-                          <option value="Radical">Radical</option>
-                          <option value="Disruptiva">Disruptiva</option>
-                          <option value="Arquitetural">Arquitetural</option>
-                        </select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Área / Setor</label>
-                        <input 
-                          type="text"
-                          value={project.sector || ''}
-                          onChange={(e) => onUpdate({ sector: e.target.value })}
-                          placeholder="Ex: Comercial, Operações..."
-                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold"
-                        />
-                      </div>
-
-                      <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-slate-50">
+                      <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4 pb-4 border-b border-slate-50">
                         <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Impacto/Ganho (Contexto PDCA)</label>
                           <div className="space-y-3">
@@ -262,7 +400,8 @@ export default function InnovationProjectDetail({
                                 type="number"
                                 value={project.estimatedGain || 0}
                                 onChange={(e) => onUpdate({ estimatedGain: Number(e.target.value) })}
-                                className="w-24 bg-transparent border-b border-indigo-200 text-right font-bold text-indigo-600 outline-none focus:border-indigo-500"
+                                disabled={isReadOnly}
+                                className="w-24 bg-transparent border-b border-indigo-200 text-right font-bold text-indigo-600 outline-none focus:border-indigo-500 disabled:opacity-50"
                               />
                             </div>
                             <div className="flex justify-between items-center text-xs">
@@ -271,21 +410,12 @@ export default function InnovationProjectDetail({
                                 type="number"
                                 value={project.realGain || 0}
                                 onChange={(e) => onUpdate({ realGain: Number(e.target.value) })}
-                                className="w-24 bg-transparent border-b border-emerald-200 text-right font-bold text-emerald-600 outline-none focus:border-emerald-500"
+                                disabled={isReadOnly}
+                                className="w-24 bg-transparent border-b border-emerald-200 text-right font-bold text-emerald-600 outline-none focus:border-emerald-500 disabled:opacity-50"
                               />
                             </div>
                           </div>
                         </div>
-                      </div>
-
-                      <div className="space-y-1.5 md:col-span-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block ml-1">Data de Conclusão Estimada</label>
-                        <input 
-                          type="date"
-                          value={project.completionDate || ''}
-                          onChange={(e) => onUpdate({ completionDate: e.target.value })}
-                          className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold"
-                        />
                       </div>
                     </div>
                   </Section>
@@ -294,6 +424,7 @@ export default function InnovationProjectDetail({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <ReadOnlyField label="Projeto Relacionado" value={pdcaProject?.name || project.projectName} icon={<Layers size={14} />} />
                       <ReadOnlyField label="Subtarefa" value={pdcaSubtask?.title || project.processName} icon={<RefreshCw size={14} />} />
+                      <ReadOnlyField label="Área / Setor" value={pdcaProject?.scope?.involvedSectors?.map(s => s.name).join(', ') || project.sector || 'N/A'} icon={<Globe size={14} />} />
                       <ReadOnlyField label="Responsável" value={project.responsibleName || 'Não atribuído'} icon={<UserIcon size={14} />} />
                     </div>
 
@@ -406,6 +537,8 @@ export default function InnovationProjectDetail({
                 onSave={handleSaveScope}
                 isSaving={isSaving}
                 innovationConfig={innovationConfig}
+                onUpdateInnovation={handleUpdate}
+                onNext={() => handleTabChange('team')}
               />
             )}
 
@@ -418,25 +551,82 @@ export default function InnovationProjectDetail({
                 onDeleteAction={handleDeleteAction}
                 onUpdateResponsible={(id) => {
                   const user = users.find(u => u.id === id);
-                  onUpdate({ responsibleId: id, responsibleName: user?.name });
+                  handleUpdate({ responsibleId: id, responsibleName: user?.name });
                 }}
-                onUpdateParticipants={(ids) => onUpdate({ participantIds: ids })}
+                onUpdateParticipants={(ids) => handleUpdate({ participantIds: ids })}
                 users={users}
                 currentUserId={currentUser?.uid || ''}
+                onNext={() => handleTabChange('production')}
+                isSaving={isSaving}
               />
             )}
 
             {activeTab === 'production' && (
               <ProductionSection 
                 project={project}
-                onUpdateProduction={(production) => onUpdate({ production })}
+                onUpdateProduction={handleUpdateProduction}
+                isSaving={isSaving}
                 globalConfig={globalConfig}
                 inheritedGains={pdcaCycle?.plan.impact.expectedGains}
+                onComplete={() => {
+                  if (validateStep('production')) {
+                    setShowCompletionModal(true);
+                  } else {
+                    setErrorMessage("Preencha todos os campos obrigatórios da produção antes de concluir.");
+                  }
+                }}
               />
             )}
           </motion.div>
         </AnimatePresence>
       </div>
+
+      <AnimatePresence>
+        {showCompletionModal && (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden p-8 text-center"
+            >
+              <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+                <CheckCircle2 size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-2">Concluir projeto?</h3>
+              <p className="text-slate-500 mb-8 leading-relaxed">
+                Tem certeza que deseja concluir este projeto? Após a conclusão, não será possível editar as informações.
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setShowCompletionModal(false)}
+                  className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 transition-all font-black"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={async () => {
+                    try {
+                      setIsSaving(true);
+                      await onUpdate({ status: 'concluído', progress: 100 });
+                      setSuccessMessage("Projeto concluído com sucesso");
+                      setShowCompletionModal(false);
+                      setTimeout(() => setSuccessMessage(null), 5000);
+                    } catch (error) {
+                      setErrorMessage("Erro ao concluir o projeto.");
+                    } finally {
+                      setIsSaving(false);
+                    }
+                  }}
+                  className="flex-1 px-6 py-3 bg-emerald-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200"
+                >
+                  Concluir projeto
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -496,18 +686,32 @@ function TabButton({ active, onClick, icon, label }: { active: boolean, onClick:
 }
 
 // --- Technical Scope Section ---
-function TechnicalScopeSection({ project, onSave, isSaving, innovationConfig }: { 
+function TechnicalScopeSection({ project, onSave, isSaving, innovationConfig, onUpdateInnovation, onNext }: { 
   project: InnovationProject, 
-  onSave: (scope: any) => void, 
+  onSave: (scope: any) => void | Promise<void>, 
   isSaving: boolean,
-  innovationConfig: InnovationConfig 
+  innovationConfig: InnovationConfig,
+  onUpdateInnovation: (updates: Partial<InnovationProject>) => Promise<void>,
+  onNext: () => void
 }) {
+  const isReadOnly = project.status === 'concluído';
   const [scope, setScope] = useState(project.technicalScope || {
     whatWillBeDone: '',
     technologies: [] as string[],
     assumptions: '',
     restrictions: ''
   });
+
+  const isFormValid = !!project.innovationType && 
+    !!scope.whatWillBeDone && 
+    (scope.technologies || []).length > 0 && 
+    !!scope.assumptions && 
+    !!scope.restrictions;
+
+  const handleNext = async () => {
+    await onSave(scope);
+    onNext();
+  };
 
   const toggleTech = (tech: string) => {
     setScope(prev => {
@@ -534,7 +738,7 @@ function TechnicalScopeSection({ project, onSave, isSaving, innovationConfig }: 
           </div>
           <button 
             onClick={() => onSave(scope)}
-            disabled={isSaving}
+            disabled={isSaving || isReadOnly}
             className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-indigo-700 transition-all disabled:opacity-50"
           >
             {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
@@ -545,12 +749,38 @@ function TechnicalScopeSection({ project, onSave, isSaving, innovationConfig }: 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-4">
             <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tipo de Inovação</label>
+              <select 
+                value={project.innovationType || ''}
+                onChange={(e) => onUpdateInnovation({ innovationType: e.target.value as any })}
+                disabled={isReadOnly}
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-700 font-bold text-sm outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <option value="">Selecione...</option>
+                <option value="Melhoria de Sistema/App">Melhoria de Sistema/App</option>
+                <option value="Criação de Sistema/App">Criação de Sistema/App</option>
+                <option value="RPA">RPA</option>
+                <option value="Automação / Tecnologia">Automação / Tecnologia</option>
+              </select>
+              {project.innovationType && (
+                <p className="mt-2 text-[10px] text-slate-500 italic pl-1 flex items-start gap-1.5 leading-normal">
+                  <Info size={10} className="mt-0.5 text-indigo-500 shrink-0" />
+                  {project.innovationType === 'Melhoria de Sistema/App' && 'Ajustes, evoluções, correções, melhorias de performance ou usabilidade em sistemas existentes.'}
+                  {project.innovationType === 'Criação de Sistema/App' && 'Desenvolvimento de um novo sistema ou aplicação que não existia anteriormente.'}
+                  {project.innovationType === 'RPA' && 'Automação de tarefas repetitivas através do uso de robôs para execução de processos.'}
+                  {project.innovationType === 'Automação / Tecnologia' && 'Automações diversas (exceto RPA), integrações, scripts e ferramentas digitais para ganho de eficiência.'}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-2">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">O que será desenvolvido (Visão Técnica)</label>
               <textarea 
                 value={scope.whatWillBeDone}
                 onChange={(e) => setScope({...scope, whatWillBeDone: e.target.value})}
+                disabled={isReadOnly}
                 placeholder="Descreva as especificidades técnicas da solução..."
-                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl min-h-[160px] outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 resize-none transition-all"
+                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl min-h-[160px] outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 resize-none transition-all disabled:opacity-50"
               />
             </div>
             
@@ -562,11 +792,13 @@ function TechnicalScopeSection({ project, onSave, isSaving, innovationConfig }: 
                     <button
                       key={tech}
                       onClick={() => toggleTech(tech)}
+                      disabled={isReadOnly}
                       className={cn(
                         "px-4 py-2 rounded-xl text-xs font-bold transition-all border",
                         (scope.technologies || []).includes(tech)
                           ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
-                          : "bg-white text-slate-500 border-slate-100 hover:border-indigo-200"
+                          : "bg-white text-slate-500 border-slate-100 hover:border-indigo-200",
+                        isReadOnly && "opacity-50 cursor-not-allowed"
                       )}
                     >
                       {tech}
@@ -585,8 +817,9 @@ function TechnicalScopeSection({ project, onSave, isSaving, innovationConfig }: 
               <textarea 
                 value={scope.assumptions}
                 onChange={(e) => setScope({...scope, assumptions: e.target.value})}
+                disabled={isReadOnly}
                 placeholder="Ex: Acesso à API do cliente, disponibilidade de servidor..."
-                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 resize-none transition-all"
+                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 resize-none transition-all disabled:opacity-50"
               />
             </div>
             <div className="space-y-2">
@@ -594,12 +827,29 @@ function TechnicalScopeSection({ project, onSave, isSaving, innovationConfig }: 
               <textarea 
                 value={scope.restrictions}
                 onChange={(e) => setScope({...scope, restrictions: e.target.value})}
+                disabled={isReadOnly}
                 placeholder="Ex: Banco de dados Y, Infraestrutura local..."
-                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 resize-none transition-all"
+                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl min-h-[120px] outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 resize-none transition-all disabled:opacity-50"
               />
             </div>
           </div>
         </div>
+      </div>
+      
+      <div className="flex justify-end pt-4">
+        <button
+          onClick={handleNext}
+          disabled={!isFormValid}
+          className={cn(
+            "flex items-center gap-2 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl",
+            isFormValid 
+              ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100" 
+              : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
+          )}
+        >
+          <span>Seguir para Desenvolvimento</span>
+          <ChevronRight size={16} />
+        </button>
       </div>
     </div>
   );
@@ -615,7 +865,9 @@ function DevelopmentSection({
   onUpdateResponsible,
   onUpdateParticipants,
   users,
-  currentUserId
+  currentUserId,
+  onNext,
+  isSaving
 }: { 
   project: InnovationProject, 
   onAddAction: (action: any) => void, 
@@ -624,8 +876,11 @@ function DevelopmentSection({
   onUpdateResponsible: (id: string) => void,
   onUpdateParticipants: (ids: string[]) => void,
   users: User[],
-  currentUserId: string
+  currentUserId: string,
+  onNext: () => void,
+  isSaving?: boolean
 }) {
+  const isReadOnly = project.status === 'concluído';
   const [showNewActionForm, setShowNewActionForm] = useState(false);
   const [newAction, setNewAction] = useState({ 
     type: 'Alinhamento' as InnovationActionType, 
@@ -640,6 +895,10 @@ function DevelopmentSection({
     status: 'Pendente' as InnovationAction['status'], 
     completionDate: format(new Date(), 'yyyy-MM-dd') 
   });
+
+  const implementationConcluded = (project.developmentActions || []).some(
+    a => a.type === 'Implementação' && a.status === 'Concluído'
+  );
 
   const toggleParticipant = (userId: string) => {
     const currentParticipants = project.participantIds || [];
@@ -728,9 +987,10 @@ function DevelopmentSection({
           </div>
           <button 
             onClick={() => setShowNewActionForm(!showNewActionForm)}
-            className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+            disabled={isSaving || isReadOnly}
+            className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50"
           >
-            {showNewActionForm ? <ArrowLeft size={16} className="rotate-90" /> : <Plus size={16} />}
+            {isSaving ? <RefreshCw size={16} className="animate-spin" /> : (showNewActionForm ? <ArrowLeft size={16} className="rotate-90" /> : <Plus size={16} />)}
             <span>{showNewActionForm ? 'Cancelar' : 'Nova Ação'}</span>
           </button>
         </div>
@@ -1039,15 +1299,32 @@ function DevelopmentSection({
                 </button>
                 <button 
                   onClick={confirmDelete}
-                  className="flex-1 px-6 py-3 bg-rose-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-200"
+                  disabled={isSaving}
+                  className="flex-1 px-6 py-3 bg-rose-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-rose-700 transition-all shadow-lg shadow-rose-200 disabled:opacity-50"
                 >
-                  Confirmar Exclusão
+                  {isSaving ? <RefreshCw size={14} className="animate-spin mx-auto" /> : 'Confirmar Exclusão'}
                 </button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+
+      <div className="flex justify-end pt-4">
+        <button
+          onClick={onNext}
+          disabled={!implementationConcluded}
+          className={cn(
+            "flex items-center gap-2 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl",
+            implementationConcluded 
+              ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100" 
+              : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
+          )}
+        >
+          <span>Seguir para Produção</span>
+          <ChevronRight size={16} />
+        </button>
+      </div>
     </div>
   );
 }
@@ -1056,14 +1333,19 @@ function DevelopmentSection({
 function ProductionSection({ 
   project, 
   onUpdateProduction,
+  isSaving,
   globalConfig,
-  inheritedGains
+  inheritedGains,
+  onComplete
 }: { 
   project: InnovationProject, 
-  onUpdateProduction: (prod: any) => void,
+  onUpdateProduction: (prod: any) => void | Promise<void>,
+  isSaving?: boolean,
   globalConfig?: GlobalConfig,
-  inheritedGains?: any
+  inheritedGains?: any,
+  onComplete: () => void
 }) {
+  const isReadOnly = project.status === 'concluído';
   const [production, setProduction] = useState(project.production || {
     document: { name: '', url: '' },
     technicalDeliverable: { name: '', type: '', url: '' },
@@ -1072,6 +1354,13 @@ function ProductionSection({
       externalTools: []
     }
   });
+
+  const isFormValid = !!production.document?.name && 
+    !!production.document?.url && 
+    !!production.technicalDeliverable?.name && 
+    !!production.technicalDeliverable?.url && 
+    (production.refinedGains?.tangible || []).length > 0 && 
+    (production.refinedGains?.intangible || []).length > 0;
 
   const [newRepo, setNewRepo] = useState({ name: '', url: '' });
   const [newTool, setNewTool] = useState({ name: '', url: '' });
@@ -1145,9 +1434,10 @@ function ProductionSection({
         </div>
         <button 
           onClick={handleSave}
-          className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+          disabled={isSaving || isReadOnly}
+          className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50"
         >
-          <Save size={14} />
+          {isSaving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
           <span>Salvar Produção</span>
         </button>
       </div>
@@ -1167,7 +1457,8 @@ function ProductionSection({
               <input 
                 value={production.document?.name || ''}
                 onChange={(e) => setProduction({...production, document: { ...(production.document || {url: ''}), name: e.target.value }})}
-                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                disabled={isReadOnly}
+                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 disabled:opacity-50"
                 placeholder="Ex: Manual do Usuário"
               />
             </div>
@@ -1176,7 +1467,8 @@ function ProductionSection({
               <input 
                 value={production.document?.url || ''}
                 onChange={(e) => setProduction({...production, document: { ...(production.document || {name: ''}), url: e.target.value }})}
-                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                disabled={isReadOnly}
+                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 disabled:opacity-50"
                 placeholder="https://drive.google.com/..."
               />
             </div>
@@ -1198,7 +1490,8 @@ function ProductionSection({
                 <input 
                   value={production.technicalDeliverable?.name || ''}
                   onChange={(e) => setProduction({...production, technicalDeliverable: { ...(production.technicalDeliverable || {type: '', url: ''}), name: e.target.value }})}
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                  disabled={isReadOnly}
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 disabled:opacity-50"
                   placeholder="Ex: API de Integração"
                 />
               </div>
@@ -1207,7 +1500,8 @@ function ProductionSection({
                 <input 
                   value={production.technicalDeliverable?.type || ''}
                   onChange={(e) => setProduction({...production, technicalDeliverable: { ...(production.technicalDeliverable || {name: '', url: ''}), type: e.target.value }})}
-                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                  disabled={isReadOnly}
+                  className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 disabled:opacity-50"
                   placeholder="Ex: Script, Dashboard, API"
                 />
               </div>
@@ -1217,7 +1511,8 @@ function ProductionSection({
               <input 
                 value={production.technicalDeliverable?.url || ''}
                 onChange={(e) => setProduction({...production, technicalDeliverable: { ...(production.technicalDeliverable || {name: '', type: ''}), url: e.target.value }})}
-                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
+                disabled={isReadOnly}
+                className="w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 disabled:opacity-50"
                 placeholder="https://github.com/..."
               />
             </div>
@@ -1233,6 +1528,7 @@ function ProductionSection({
             onChange={(gains) => setProduction({ ...production, refinedGains: gains })}
             globalConfig={globalConfig}
             inheritedGains={inheritedGains}
+            isReadOnly={isReadOnly}
           />
         </div>
 
@@ -1349,6 +1645,22 @@ function ProductionSection({
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="flex justify-end pt-4">
+        <button
+          onClick={onComplete}
+          disabled={!isFormValid || project.status === 'concluído'}
+          className={cn(
+            "flex items-center gap-2 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl",
+            isFormValid && project.status !== 'concluído'
+              ? "bg-emerald-600 text-white hover:bg-emerald-700 shadow-emerald-100" 
+              : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
+          )}
+        >
+          <CheckCircle2 size={16} />
+          <span>Concluir Projeto</span>
+        </button>
       </div>
     </div>
   );

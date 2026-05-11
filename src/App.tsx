@@ -1931,28 +1931,36 @@ function ProjectDetailView({
       exit={{ opacity: 0, x: -20 }}
       className="space-y-6"
     >
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
+      <div className="sticky top-0 z-[50] bg-theme-background/95 backdrop-blur-sm -mx-4 lg:-mx-8 px-4 lg:px-8 py-4 mb-8 border-b border-theme-border flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm transition-all duration-300">
+        <div className="flex items-center gap-4 flex-1">
           <button 
             onClick={onBack}
-            className="p-2 hover:bg-theme-card rounded-lg transition-colors text-slate-400"
+            className="p-2 hover:bg-theme-card rounded-lg transition-colors text-slate-400 shrink-0"
           >
             <ChevronRight size={24} className="rotate-180" />
           </button>
-          <div>
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-3">
-              <input 
+              <textarea 
                 value={project.name}
-                onChange={(e) => setProjects({ 
-                  ...project, 
-                  name: e.target.value,
-                  scope: { ...project.scope, title: e.target.value }
-                })}
-                className="text-2xl font-bold text-theme-foreground bg-transparent border-b border-transparent hover:border-theme-border focus:border-indigo-500 outline-none transition-all"
+                onChange={(e) => {
+                  setProjects({ 
+                    ...project, 
+                    name: e.target.value,
+                    scope: { ...project.scope, title: e.target.value }
+                  });
+                }}
+                rows={1}
+                onInput={(e) => {
+                  e.currentTarget.style.height = 'auto';
+                  e.currentTarget.style.height = e.currentTarget.scrollHeight + 'px';
+                }}
+                className="text-2xl font-bold text-theme-foreground bg-transparent border-b border-transparent hover:border-theme-border focus:border-indigo-500 outline-none transition-all resize-none overflow-hidden w-full h-auto whitespace-normal break-words py-1"
+                placeholder="Título do Projeto"
               />
               {isSaving && (
                 <span className={cn(
-                  "flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest animate-pulse",
+                  "flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest animate-pulse shrink-0",
                   saveStatus === 'error' ? "text-rose-500" : "text-indigo-400"
                 )}>
                   <RefreshCw size={10} className={cn(saveStatus === 'saving' && "animate-spin")} />
@@ -1960,7 +1968,7 @@ function ProjectDetailView({
                 </span>
               )}
             </div>
-            <div className="flex items-center gap-3 mt-1 text-sm text-slate-400">
+            <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-slate-400">
               <span className="flex items-center gap-1">
                 <Users size={14} />
                 {project.scope.responsible}
@@ -1989,7 +1997,7 @@ function ProjectDetailView({
           </div>
         </div>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-6 shrink-0">
           <div className="hidden md:flex flex-col items-end gap-1">
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Progresso</span>
@@ -3152,13 +3160,78 @@ function InnovationConfigTab({ config, onUpdateConfig }: {
   );
 }
 
+interface ConfigSectionProps {
+  title: string;
+  description: string;
+  items: string[];
+  newValue: string;
+  setNewValue: (v: string) => void;
+  field: string;
+  placeholder: string;
+  onUpdate: (updates: any) => Promise<void>;
+}
+
+const ConfigSection = ({ title, description, items, newValue, setNewValue, field, placeholder, onUpdate }: ConfigSectionProps) => (
+  <div className="space-y-6">
+    <div>
+      <h3 className="text-xl font-bold text-slate-900">{title}</h3>
+      <p className="text-slate-500 text-sm mt-1">{description}</p>
+    </div>
+    <div className="flex gap-2">
+      <input 
+        value={newValue}
+        onChange={(e) => setNewValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            const trimmed = newValue.trim();
+            if (trimmed && !items.includes(trimmed)) {
+              onUpdate({ [field]: [...items, trimmed] });
+              setNewValue('');
+            }
+          }
+        }}
+        placeholder={placeholder}
+        className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+      />
+      <button 
+        onClick={() => {
+          const trimmed = newValue.trim();
+          if (trimmed && !items.includes(trimmed)) {
+            onUpdate({ [field]: [...items, trimmed] });
+            setNewValue('');
+          }
+        }}
+        className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all"
+      >
+        Adicionar
+      </button>
+    </div>
+    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+      {items.map(item => (
+        <div key={item} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 group hover:border-indigo-200 transition-all">
+          <span className="text-sm font-medium text-slate-700">{item}</span>
+          <button 
+            onClick={() => onUpdate({ [field]: items.filter(i => i !== item) })}
+            className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      ))}
+      {items.length === 0 && (
+        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center py-4 border-2 border-dashed border-slate-100 rounded-xl">
+          Vazio
+        </p>
+      )}
+    </div>
+  </div>
+);
+
 function GlobalConfigTab({ config }: { 
   config: GlobalConfig
 }) {
   const [newSector, setNewSector] = useState('');
   const [newTool, setNewTool] = useState('');
-  const [newTangibleType, setNewTangibleType] = useState('');
-  const [newIntangibleType, setNewIntangibleType] = useState('');
 
   const updateConfig = async (updates: any) => {
     try {
@@ -3168,60 +3241,6 @@ function GlobalConfigTab({ config }: {
     }
   };
 
-  const ConfigSection = ({ title, description, items, newValue, setNewValue, field, placeholder }: {
-    title: string,
-    description: string,
-    items: string[],
-    newValue: string,
-    setNewValue: (v: string) => void,
-    field: string,
-    placeholder: string
-  }) => (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-xl font-bold text-slate-900">{title}</h3>
-        <p className="text-slate-500 text-sm mt-1">{description}</p>
-      </div>
-      <div className="flex gap-2">
-        <input 
-          value={newValue}
-          onChange={(e) => setNewValue(e.target.value)}
-          placeholder={placeholder}
-          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-        <button 
-          onClick={() => {
-            const trimmed = newValue.trim();
-            if (trimmed && !items.includes(trimmed)) {
-              updateConfig({ [field]: [...items, trimmed] });
-              setNewValue('');
-            }
-          }}
-          className="bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all"
-        >
-          Adicionar
-        </button>
-      </div>
-      <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-        {items.map(item => (
-          <div key={item} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 group hover:border-indigo-200 transition-all">
-            <span className="text-sm font-medium text-slate-700">{item}</span>
-            <button 
-              onClick={() => updateConfig({ [field]: items.filter(i => i !== item) })}
-              className="text-slate-400 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity p-1"
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        ))}
-        {items.length === 0 && (
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest text-center py-4 border-2 border-dashed border-slate-100 rounded-xl">
-            Vazio
-          </p>
-        )}
-      </div>
-    </div>
-  );
 
   return (
     <div className="p-8 space-y-12 w-full overflow-y-auto max-h-[85vh] custom-scrollbar">
@@ -3244,6 +3263,7 @@ function GlobalConfigTab({ config }: {
           setNewValue={setNewSector}
           field="sectors"
           placeholder="Novo setor..."
+          onUpdate={updateConfig}
         />
         <ConfigSection 
           title="Ferramentas" 
@@ -3253,24 +3273,7 @@ function GlobalConfigTab({ config }: {
           setNewValue={setNewTool}
           field="tools"
           placeholder="Nova ferramenta..."
-        />
-        <ConfigSection 
-          title="Tipos de Ganho Tangível" 
-          description="Opções para o cálculo de impacto financeiro/quantitativo."
-          items={config.tangibleGainTypes || []}
-          newValue={newTangibleType}
-          setNewValue={setNewTangibleType}
-          field="tangibleGainTypes"
-          placeholder="Ex: Redução de Custo..."
-        />
-        <ConfigSection 
-          title="Tipos de Ganho Intangível" 
-          description="Opções para avaliação qualitativa."
-          items={config.intangibleGainTypes || []}
-          newValue={newIntangibleType}
-          setNewValue={setNewIntangibleType}
-          field="intangibleGainTypes"
-          placeholder="Ex: Satisfação do Cliente..."
+          onUpdate={updateConfig}
         />
       </div>
     </div>

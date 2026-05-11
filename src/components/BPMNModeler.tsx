@@ -21,13 +21,15 @@ import {
   AlertCircle,
   Plus,
   Minus,
-  Move
+  Move,
+  BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
 
 import { Project, BPMNTaskData, SavedColor } from '../types';
 import { cn } from '../lib/utils';
+import BpmnGuide from './BpmnGuide';
 
 interface BPMNModelerProps {
   mapping: any;
@@ -69,6 +71,7 @@ export default function BPMNModeler({
   const customDataRef = useRef(customData);
   const [newColorName, setNewColorName] = useState('');
   const [isDiagramReady, setIsDiagramReady] = useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
   const isSyncingRef = useRef(false);
   const isLoadedRef = useRef(false);
 
@@ -449,6 +452,13 @@ export default function BPMNModeler({
 
         <div className="flex items-center gap-2">
           <button 
+            onClick={() => setIsGuideOpen(true)}
+            className="flex items-center gap-2 bg-white border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-50 hover:border-indigo-200 hover:text-indigo-600 transition-all shadow-sm"
+          >
+            <BookOpen size={14} className="text-indigo-500" />
+            Guia BPMN
+          </button>
+          <button 
             onClick={exportAsPng}
             className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
           >
@@ -662,6 +672,11 @@ export default function BPMNModeler({
           )}
         </AnimatePresence>
       </div>
+
+      <BpmnGuide 
+        isOpen={isGuideOpen} 
+        onClose={() => setIsGuideOpen(false)} 
+      />
 
       <style dangerouslySetInnerHTML={{ __html: `
         .bpmn-container {

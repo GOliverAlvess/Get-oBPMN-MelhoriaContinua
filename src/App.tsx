@@ -766,29 +766,99 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="bg-white p-10 rounded-3xl shadow-2xl max-w-md w-full text-center space-y-8 border border-slate-100">
-          <div className="w-auto h-12 bg-white rounded-2xl flex items-center justify-center mx-auto shadow-xl shadow-slate-200 p-2 border border-slate-100">
-            <img 
-              src="/assets/logo-flowprocess.svg" 
-              alt="FlowProcess" 
-              style={{ height: '36px', width: 'auto', objectFit: 'contain' }}
-              referrerPolicy="no-referrer"
-            />
-          </div>
-          <div className="space-y-2">
-            <h2 className="text-3xl font-black text-[#003489] tracking-tight">FlowProcess</h2>
-            <p className="text-slate-500 text-sm">Gestão de Processos, BPMN e PDCA.</p>
-          </div>
-          <button 
-            onClick={handleLogin}
-            className="w-full flex items-center justify-center gap-3 bg-white border-2 border-slate-200 text-slate-700 py-4 rounded-2xl font-bold hover:bg-slate-50 hover:border-indigo-200 transition-all group"
-          >
-            <img src="https://www.google.com/favicon.ico" alt="Google" className="w-5 h-5" />
-            Entrar com Google
-          </button>
-          <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">Acesso Seguro via Firebase</p>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50/50 dark:bg-[#080b14] relative overflow-hidden p-4 font-sans transition-colors duration-700">
+        {/* Deep Depth Background Components */}
+        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-tr from-slate-100/20 via-transparent to-blue-50/20 dark:from-slate-900/10 dark:to-[#003489]/05" />
+          
+          {/* High-end decorative blur - Consistent across themes */}
+          <div className="absolute -top-[10%] -left-[10%] w-[50%] h-[50%] bg-blue-100/30 dark:bg-blue-900/10 rounded-full blur-[140px]" />
+          <div className="absolute -bottom-[10%] -right-[10%] w-[40%] h-[40%] bg-indigo-100/20 dark:bg-indigo-900/10 rounded-full blur-[120px]" />
+          
+          <div 
+            className="absolute inset-0 opacity-[0.02] dark:opacity-[0.04]" 
+            style={{ 
+              backgroundImage: 'radial-gradient(#003489 0.8px, transparent 0.8px)', 
+              backgroundSize: '32px 32px' 
+            }} 
+          />
         </div>
+
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.98, y: 10 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+          className={cn(
+            "w-full max-w-[440px] relative z-10",
+            "bg-white dark:bg-[#111625]",
+            "p-10 md:p-14 rounded-[2rem]",
+            "border-2 border-[#003489] dark:border-slate-800/80",
+            "shadow-[0_20px_60px_-15px_rgba(0,52,137,0.08)] dark:shadow-[0_30px_70px_-20px_rgba(0,0,0,0.5)]",
+            "flex flex-col items-center text-center space-y-12"
+          )}
+        >
+          {/* Refined Brand Header */}
+          <div className="space-y-8 w-full">
+            <div className="flex justify-center">
+              <div className="p-4 bg-white rounded-2xl shadow-sm border border-slate-100/80">
+                <img 
+                  src="/assets/logo-flowprocess.svg" 
+                  alt="FlowProcess" 
+                  className="h-10 w-auto object-contain"
+                  referrerPolicy="no-referrer"
+                />
+              </div>
+            </div>
+            
+            <div className="space-y-4">
+              <h2 className="text-4xl font-extrabold text-[#003489] dark:text-blue-500 tracking-tight leading-none mb-1">
+                FlowProcess
+              </h2>
+              <div className="h-1 w-12 bg-blue-500/20 dark:bg-blue-500/30 mx-auto rounded-full" />
+              <p className="text-slate-500 dark:text-slate-400 text-sm font-medium pt-1 max-w-[300px] mx-auto leading-relaxed">
+                Gestão inteligente de processos e melhoria contínua
+              </p>
+            </div>
+          </div>
+
+          {/* Action Core */}
+          <div className="w-full space-y-8">
+            <button 
+              onClick={handleLogin}
+              className={cn(
+                "w-full h-16 flex items-center justify-center gap-4 py-0 px-8 rounded-2xl font-bold transition-all",
+                "bg-[#003489] hover:bg-[#002868] dark:bg-blue-600 dark:hover:bg-blue-500 text-white",
+                "shadow-[0_12px_24px_-8px_rgba(0,52,137,0.3)] dark:shadow-[0_12px_24px_-8px_rgba(37,99,235,0.4)]",
+                "hover:-translate-y-1 hover:shadow-[0_20px_32px_-12px_rgba(0,52,137,0.4)] active:translate-y-0"
+              )}
+            >
+              <div className="bg-white p-1.5 rounded-lg shrink-0">
+                <img src="https://www.google.com/favicon.ico" alt="Google" className="w-4 h-4 shadow-sm" />
+              </div>
+              <span className="text-lg tracking-tight">Entrar com Google</span>
+            </button>
+
+            <div className="flex items-center gap-4 py-2 px-2">
+              <div className="h-[1px] flex-1 bg-slate-100 dark:bg-slate-800/60" />
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-black uppercase tracking-[0.25em] whitespace-nowrap">Ambiente Criptografado</span>
+              <div className="h-[1px] flex-1 bg-slate-100 dark:bg-slate-800/60" />
+            </div>
+          </div>
+
+          {/* Enhanced Trust Footer */}
+          <div className="flex flex-col items-center gap-5 pt-2">
+            <div className="flex items-center gap-2.5 px-5 py-2 bg-slate-50 dark:bg-white/05 rounded-full border border-slate-100 dark:border-white/05 transition-all hover:border-blue-200">
+              <ShieldCheck size={16} className="text-blue-600 dark:text-blue-400" />
+              <span className="text-[11px] text-slate-600 dark:text-slate-300 font-bold uppercase tracking-widest">Single Sign-On Ativo</span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[9px] text-slate-400 dark:text-slate-500 uppercase font-black tracking-[0.4em]">
+                Enterprise Workflow Suite
+              </p>
+              <p className="text-[8px] text-slate-300 dark:text-slate-700 font-medium">BPMN Engine 2.4.8-Stable</p>
+            </div>
+          </div>
+        </motion.div>
       </div>
     );
   }

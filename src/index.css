@@ -312,6 +312,19 @@
     background-color: rgba(255, 255, 255, 0.05) !important;
   }
 
+  /* Specific background for secondary active states */
+  .bg-indigo-50 {
+    background-color: rgba(59, 130, 246, 0.15) !important;
+  }
+
+  .bg-amber-50 {
+    background-color: rgba(234, 190, 65, 0.15) !important;
+  }
+
+  .bg-emerald-50 {
+    background-color: rgba(16, 185, 129, 0.15) !important;
+  }
+
   /* Force border overrides */
   .border-slate-100, .border-slate-200, .border-slate-300 {
     border-color: var(--border) !important;
@@ -324,6 +337,28 @@
 
   .text-slate-600, .text-slate-500 {
     color: var(--color-slate-400) !important;
+  }
+
+  /* Dark mode specific text overrides for contrast */
+  .text-indigo-600, .text-indigo-700 {
+    color: #818cf8 !important; /* Lighter indigo for dark mode */
+  }
+
+  .text-amber-600, .text-amber-700 {
+    color: #fbbf24 !important; /* Lighter amber for dark mode */
+  }
+
+  .text-emerald-600, .text-emerald-700 {
+    color: #34d399 !important; /* Lighter emerald for dark mode */
+  }
+
+  .text-rose-600, .text-rose-700 {
+    color: #fb7185 !important; /* Lighter rose for dark mode */
+  }
+
+  /* Active states in menus */
+  .bg-indigo-50.text-indigo-700 {
+    color: #ffffff !important;
   }
 
   input, textarea, select {

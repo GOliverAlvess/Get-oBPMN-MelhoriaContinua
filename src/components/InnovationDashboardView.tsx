@@ -286,7 +286,14 @@ export default function InnovationDashboardView({ innovationProjects, users }: I
                         />
                       </Pie>
                       <Tooltip 
-                        contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                        contentStyle={{ 
+                          backgroundColor: '#1e293b', 
+                          borderRadius: '12px', 
+                          border: '1px solid #334155', 
+                          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)',
+                          color: '#ffffff'
+                        }}
+                        itemStyle={{ color: '#ffffff' }}
                       />
                       <Legend verticalAlign="bottom" height={36}/>
                     </PieChart>
@@ -327,7 +334,17 @@ export default function InnovationDashboardView({ innovationProjects, users }: I
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                       <XAxis type="number" hide />
                       <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                      <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '12px', border: 'none' }} />
+                      <Tooltip 
+                        cursor={{ fill: 'rgba(255,255,255,0.05)' }} 
+                        contentStyle={{ 
+                          backgroundColor: '#1e293b', 
+                          borderRadius: '12px', 
+                          border: '1px solid #334155',
+                          color: '#ffffff',
+                          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)'
+                        }} 
+                        itemStyle={{ color: '#ffffff' }}
+                      />
                       <Bar dataKey="count" fill="#60a5fa" radius={[0, 8, 8, 0]} barSize={24}>
                         <LabelList dataKey="count" position="right" style={{ fontSize: 11, fontWeight: 900, fill: '#1e40af' }} offset={10} />
                       </Bar>

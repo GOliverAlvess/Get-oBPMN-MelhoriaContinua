@@ -170,18 +170,20 @@ function SidebarItem({ active, onClick, icon, label, collapsed }: {
         onClick={onClick}
         className={cn(
           "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200",
-          active ? "bg-indigo-50 text-indigo-700 font-bold" : "text-slate-500 hover:bg-slate-50",
+          active 
+            ? "bg-indigo-600 dark:bg-indigo-500 text-white font-bold shadow-lg shadow-indigo-200/20" 
+            : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50",
           collapsed ? "justify-center px-0" : ""
         )}
       >
-        <div className={cn("flex-shrink-0", active ? "text-indigo-600" : "text-slate-400")}>
+        <div className={cn("flex-shrink-0", active ? "text-white" : "text-slate-400 dark:text-slate-500")}>
           {icon}
         </div>
         {!collapsed && <span className="whitespace-nowrap">{label}</span>}
       </button>
       
       {collapsed && (
-        <div className="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-white text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[100] shadow-xl">
+        <div className="absolute left-full ml-2 px-2 py-1 bg-slate-800 dark:bg-slate-700 text-white text-[10px] font-bold rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap z-[100] shadow-xl">
           {label}
         </div>
       )}
@@ -1500,13 +1502,13 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
                         >
                           <div className={cn(
                             "w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold uppercase",
-                            visibleCollaborators.includes(u.id) ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-400"
+                            visibleCollaborators.includes(u.id) ? "bg-white text-indigo-600" : "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500"
                           )}>
                             {u.name.split(' ').map(n => n[0]).join('')}
                           </div>
                           <span className={cn(
                             "text-xs font-bold truncate",
-                            visibleCollaborators.includes(u.id) ? "text-indigo-600" : "text-slate-500"
+                            visibleCollaborators.includes(u.id) ? "text-white" : "text-slate-500 dark:text-slate-400"
                           )}>{u.name}</span>
                         </button>
                       ))}
@@ -1535,33 +1537,33 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
                         >
                           <div className={cn(
                             "w-6 h-6 rounded-full flex items-center justify-center text-[8px] font-bold uppercase",
-                            visibleParticipants.includes(u.id) ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-400"
+                            visibleParticipants.includes(u.id) ? "bg-white text-indigo-600" : "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500"
                           )}>
                             {u.name.split(' ').map(n => n[0]).join('')}
                           </div>
                           <span className={cn(
                             "text-xs font-bold truncate",
-                            visibleParticipants.includes(u.id) ? "text-indigo-600" : "text-slate-500"
+                            visibleParticipants.includes(u.id) ? "text-white" : "text-slate-500 dark:text-slate-400"
                           )}>{u.name}</span>
                         </button>
                       ))}
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100 flex justify-between">
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between">
                     <button 
                       onClick={() => {
                         setVisibleStatuses([]);
                         setVisibleCollaborators([]);
                         setVisibleParticipants([]);
                       }}
-                      className="text-[10px] font-bold text-indigo-600 hover:underline"
+                      className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
                     >
                       Limpar Filtros
                     </button>
                     <button 
                       onClick={() => setIsFilterOpen(false)}
-                      className="text-[10px] font-bold text-slate-400 hover:text-slate-600"
+                      className="text-[10px] font-bold text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-400"
                     >
                       Fechar
                     </button>
@@ -1601,18 +1603,18 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
                       colId === 'Em melhoria' ? "bg-indigo-400" : "bg-emerald-400"
                     )} />
                   ) : (
-                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold text-xs uppercase">
+                    <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400 font-bold text-xs uppercase">
                       {(col as User).name.split(' ').map(n => n[0]).join('')}
                     </div>
                   )}
-                  <h3 className="font-bold text-slate-700">{colTitle}</h3>
-                  <span className="bg-slate-200 text-slate-600 text-xs px-2 py-0.5 rounded-full font-medium">
+                  <h3 className="font-bold text-slate-700 dark:text-slate-200">{colTitle}</h3>
+                  <span className="bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-xs px-2 py-0.5 rounded-full font-medium">
                     {colProjects.length}
                   </span>
                 </div>
               </div>
 
-              <div className="bg-slate-100/50 p-3 rounded-2xl flex-1 space-y-4 border border-slate-200/50">
+              <div className="bg-slate-100/50 dark:bg-slate-900/30 p-3 rounded-2xl flex-1 space-y-4 border border-slate-200/50 dark:border-slate-800/50">
                 {colProjects.map(project => (
                   <ProjectCard 
                     key={project.id} 
@@ -1624,7 +1626,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
                 ))}
                 
                 {colProjects.length === 0 && (
-                  <div className="py-10 flex flex-col items-center justify-center text-slate-300 border-2 border-dashed border-slate-200 rounded-xl">
+                  <div className="py-10 flex flex-col items-center justify-center text-slate-300 dark:text-slate-700 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
                     <Target size={24} className="mb-2 opacity-20" />
                     <p className="text-[10px] font-bold uppercase tracking-widest">Vazio</p>
                   </div>
@@ -1633,7 +1635,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
                 {(groupBy === 'status' && colId === 'Planejamento') && (
                   <button 
                     onClick={onCreateProject}
-                    className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:border-indigo-300 hover:text-indigo-400 transition-all flex items-center justify-center gap-2 group"
+                    className="w-full py-3 border-2 border-dashed border-slate-300 dark:border-slate-800 rounded-xl text-slate-400 dark:text-slate-600 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-400 dark:hover:text-indigo-400 transition-all flex items-center justify-center gap-2 group"
                   >
                     <Plus size={18} className="group-hover:scale-110 transition-transform" />
                     <span className="text-sm font-medium">Adicionar Projeto</span>
@@ -1666,16 +1668,16 @@ function ProjectCard({ project, users, onClick, onDelete }: { project: Project, 
   }, []);
 
   const statusColors = {
-    'Planejamento': 'bg-amber-100 text-amber-700 border-amber-200',
-    'Em andamento': 'bg-blue-100 text-blue-700 border-blue-200',
-    'Em melhoria': 'bg-indigo-100 text-indigo-700 border-indigo-200',
-    'Concluído': 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    'Planejamento': 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20',
+    'Em andamento': 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20',
+    'Em melhoria': 'bg-indigo-100 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/20',
+    'Concluído': 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20',
   };
 
   const priorityColors = {
-    'Baixa': 'bg-slate-100 text-slate-600',
-    'Média': 'bg-indigo-100 text-indigo-600',
-    'Alta': 'bg-rose-100 text-rose-600',
+    'Baixa': 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400',
+    'Média': 'bg-indigo-100 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400',
+    'Alta': 'bg-rose-100 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400',
   };
 
   return (
@@ -2121,8 +2123,8 @@ function TabButton({ active, onClick, icon, label }: { active: boolean, onClick:
       className={cn(
         "flex items-center gap-2 px-4 py-2 rounded-lg transition-all font-bold text-xs uppercase tracking-wider",
         active 
-          ? "bg-theme-card text-indigo-400 shadow-sm border border-theme-border" 
-          : "text-slate-500 hover:bg-theme-card/50 hover:text-slate-400"
+          ? "bg-indigo-600 dark:bg-indigo-500 text-white shadow-md border border-indigo-500/20" 
+          : "text-slate-500 dark:text-slate-400 hover:bg-theme-card/50 hover:text-slate-400"
       )}
     >
       {icon}
@@ -2577,9 +2579,9 @@ function ScopeTab({
                     <td className="px-6 py-4">
                       <span className={cn(
                         "px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider whitespace-nowrap",
-                        currentStatus === 'Concluído' ? "bg-emerald-100 text-emerald-600" :
-                        currentStatus === 'Em andamento' ? "bg-amber-100 text-amber-600" :
-                        "bg-slate-200 text-slate-500"
+                        currentStatus === 'Concluído' ? "bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" :
+                        currentStatus === 'Em andamento' ? "bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400" :
+                        "bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
                       )}>
                         {currentStatus}
                       </span>

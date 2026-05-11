@@ -76,8 +76,8 @@ export default function DashboardView({ projects, users, actions, onProjectClick
     // Process Status Data for Pie Chart
     const processStatusData = [
       { name: 'Planejamento', value: planning, color: '#EABE41' }, // Brand Gold
-      { name: 'Em andamento', value: inProgress, color: '#003489' }, // Brand Blue
-      { name: 'Em melhoria', value: inImprovement, color: '#678ecb' }, // Lighter Blue
+      { name: 'Em andamento', value: inProgress, color: '#3b82f6' }, // Brighter Blue for Dark Mode
+      { name: 'Em melhoria', value: inImprovement, color: '#818cf8' }, // Lighter Indigo
       { name: 'Concluídos', value: completed, color: '#10b981' }, // Emerald
     ].filter(d => d.value > 0);
 
@@ -359,15 +359,16 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                         tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
                       />
                       <Tooltip 
-                        cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                        cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                         contentStyle={{ 
-                          backgroundColor: 'var(--card)', 
+                          backgroundColor: '#1e293b', 
                           borderRadius: '12px', 
-                          border: '1px solid var(--border)', 
-                          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.3)',
-                          color: 'var(--foreground)'
+                          border: '1px solid #334155', 
+                          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)',
+                          color: '#ffffff',
+                          padding: '8px 12px'
                         }}
-                        itemStyle={{ color: 'var(--foreground)' }}
+                        itemStyle={{ color: '#ffffff' }}
                         formatter={(value: number) => [`R$ ${value.toLocaleString()}`, 'Ganho']}
                       />
                       <Bar dataKey="gain" fill="#3b82f6" radius={[0, 8, 8, 0]} barSize={20}>
@@ -473,12 +474,13 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                       tickLine={false}
                     />
                     <Tooltip 
-                      cursor={{ fill: 'rgba(255,255,255,0.02)' }}
+                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
                       contentStyle={{ 
-                        backgroundColor: 'var(--card)', 
+                        backgroundColor: '#1e293b', 
                         borderRadius: '12px', 
-                        border: '1px solid var(--border)',
-                        color: 'var(--foreground)'
+                        border: '1px solid #334155',
+                        color: '#ffffff',
+                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)'
                       }}
                       formatter={(value: number) => [`${value} projeto(s)`, 'Ocorrência']}
                     />

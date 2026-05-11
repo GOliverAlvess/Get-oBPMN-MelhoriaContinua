@@ -23,7 +23,8 @@ import {
   FileText,
   ChevronRight,
   Save,
-  CheckCircle2
+  CheckCircle2,
+  ShieldCheck
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -99,6 +100,14 @@ export default function InnovationView({
   const [projectToDelete, setProjectToDelete] = useState<InnovationProject | null>(null);
   const [projectToEdit, setProjectToEdit] = useState<InnovationProject | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isMappingModalOpen, setIsMappingModalOpen] = useState(false);
+  const [mappingStep, setMappingStep] = useState<'question' | 'waiting'>('question');
+
+  const handleCreateProjectClick = () => {
+    setIsMappingModalOpen(true);
+    setMappingStep('question');
+  };
+
 
   // Effect to automatically update progress for all projects
   useEffect(() => {
@@ -388,7 +397,7 @@ export default function InnovationView({
 
         <div className="flex flex-wrap items-center gap-3">
           <button 
-            onClick={() => setIsCreateModalOpen(true)}
+            onClick={handleCreateProjectClick}
             className="flex items-center gap-2 px-5 py-3 bg-emerald-600 text-white rounded-xl font-bold text-sm hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100"
           >
             <Plus size={20} />
@@ -642,6 +651,65 @@ export default function InnovationView({
           }
         }}
       />
+
+      {/* Process Mapping Question Modal */}
+      <AnimatePresence>
+        {isMappingModalOpen && (
+          <div className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden p-8 border border-slate-100"
+            >
+              {mappingStep === 'question' ? (
+                <>
+                  <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+                    <Users size={32} />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Mapeamento de Processos</h3>
+                  <p className="text-slate-500 text-center mb-8 font-medium">
+                    Será necessário o mapeamento do time de processos?
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={() => setMappingStep('waiting')}
+                      className="px-6 py-4 bg-slate-100 text-slate-600 rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-slate-200 transition-all"
+                    >
+                      SIM
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setIsMappingModalOpen(false);
+                        setIsCreateModalOpen(true);
+                      }}
+                      className="px-6 py-4 bg-indigo-600 text-white rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                    >
+                      NÃO
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-sm">
+                    <Clock size={32} />
+                  </div>
+                  <h3 className="text-xl font-bold text-slate-900 text-center mb-2">Atenção</h3>
+                  <p className="text-slate-500 text-center mb-8 font-medium leading-relaxed">
+                    Aguardar o mapeamento do time de processos antes de criar um novo card
+                  </p>
+                  <button 
+                    onClick={() => setIsMappingModalOpen(false)}
+                    className="w-full px-6 py-4 bg-slate-900 text-white rounded-2xl text-sm font-black uppercase tracking-widest hover:bg-slate-800 transition-all"
+                  >
+                    Entendido
+                  </button>
+                </>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1185,7 +1253,7 @@ function CreateInnovationProjectModal({
   const [priority, setPriority] = useState<ProjectPriority>('Média');
   const [deadline, setDeadline] = useState('');
   const [complexity, setComplexity] = useState<InnovationComplexity>('Média');
-  const [solutionType, setSolutionType] = useState<InnovationSolutionType | ''>('');
+  const [solutionType, setSolutionType] = useState<InnovationSolutionType | ''>('Implantação de tecnologias');
   
   const [selectedProjectId, setSelectedProjectId] = useState('');
   const [selectedSubtaskId, setSelectedSubtaskId] = useState('');
@@ -1210,7 +1278,7 @@ function CreateInnovationProjectModal({
         priority,
         deadline,
         complexity,
-        type: solutionType,
+        type: 'Implantação de tecnologias',
         status: 'backlog',
         progress: 0,
         projectId: selectedProjectId,
@@ -1225,7 +1293,7 @@ function CreateInnovationProjectModal({
       setPriority('Média');
       setDeadline('');
       setComplexity('Média');
-      setSolutionType('');
+      setSolutionType('Implantação de tecnologias');
       setSelectedProjectId('');
       setSelectedSubtaskId('');
     } catch (error) {
@@ -1263,7 +1331,7 @@ function CreateInnovationProjectModal({
           <div className="p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2 space-y-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Título da Inovação <span className="text-rose-500">*</span></label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Título do Projeto <span className="text-rose-500">*</span></label>
                 <input 
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -1318,17 +1386,18 @@ function CreateInnovationProjectModal({
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Tipo de Solução</label>
-                <select 
-                  value={solutionType}
-                  onChange={(e) => setSolutionType(e.target.value as any)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-                >
-                  <option value="">Selecione...</option>
-                  <option value="RPA">RPA</option>
-                  <option value="Sistema">Sistema</option>
-                  <option value="Integração">Integração</option>
-                  <option value="BI">BI</option>
-                </select>
+                <div className="relative">
+                  <input 
+                    type="text"
+                    value="Implantação de tecnologias"
+                    readOnly
+                    className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 text-slate-500 outline-none font-bold cursor-not-allowed"
+                  />
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400">
+                    <ShieldCheck size={18} />
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-400 font-medium ml-1">Campo obrigatório e padronizado pelo sistema.</p>
               </div>
 
               <div className="space-y-1.5">
@@ -1346,7 +1415,7 @@ function CreateInnovationProjectModal({
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Prazo de Conclusão</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Previsão de conclusão</label>
                 <input 
                   type="date"
                   value={deadline}

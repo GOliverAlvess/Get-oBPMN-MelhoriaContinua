@@ -529,29 +529,29 @@ export default function BpmnGuide({ isOpen, onClose }: BpmnGuideProps) {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed top-0 right-0 h-full w-[450px] bg-white shadow-2xl z-[101] flex flex-col font-sans"
+            className="fixed top-0 right-0 h-full w-[450px] bg-white dark:bg-[#111827] shadow-2xl z-[101] flex flex-col font-sans transition-colors"
           >
             {/* Header */}
-            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100 rotate-6">
                   <Info size={24} />
                 </div>
                 <div>
-                  <h2 className="text-lg font-black text-slate-800 uppercase tracking-tight leading-none">Guia BPMN 2.0</h2>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1">Manual de Referência Rápida</p>
+                  <h2 className="text-lg font-black text-slate-800 dark:text-white uppercase tracking-tight leading-none">Guia BPMN 2.0</h2>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mt-1">Manual de Referência Rápida</p>
                 </div>
               </div>
               <button 
                 onClick={onClose}
-                className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 text-slate-400 hover:text-rose-500 hover:border-rose-100 rounded-xl transition-all shadow-sm"
+                className="w-10 h-10 flex items-center justify-center bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-500 hover:border-rose-100 dark:hover:border-rose-900 rounded-xl transition-all shadow-sm"
               >
                 <X size={20} />
               </button>
             </div>
 
             {/* Search */}
-            <div className="p-6 border-b border-slate-100">
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800">
               <div className="relative group">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
                 <input 
@@ -559,7 +559,7 @@ export default function BpmnGuide({ isOpen, onClose }: BpmnGuideProps) {
                   placeholder="Buscar símbolo ou definição..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all shadow-sm"
+                  className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-sm font-medium text-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all shadow-sm"
                 />
               </div>
             </div>
@@ -572,10 +572,10 @@ export default function BpmnGuide({ isOpen, onClose }: BpmnGuideProps) {
 
                 return (
                   <div key={category} className="space-y-4">
-                    <h3 className="text-xs font-black text-indigo-500 uppercase tracking-[0.2em] flex items-center gap-3">
-                      <div className="h-px bg-indigo-100 flex-1" />
+                    <h3 className="text-xs font-black text-indigo-500 dark:text-blue-400 uppercase tracking-[0.2em] flex items-center gap-3">
+                      <div className="h-px bg-indigo-100 dark:bg-slate-800 flex-1" />
                       {category}
-                      <div className="h-px bg-indigo-100 flex-1" />
+                      <div className="h-px bg-indigo-100 dark:bg-slate-800 flex-1" />
                     </h3>
                     
                     <div className="grid grid-cols-1 gap-3">
@@ -583,17 +583,17 @@ export default function BpmnGuide({ isOpen, onClose }: BpmnGuideProps) {
                         <motion.div 
                           layout
                           key={item.id}
-                          className="group p-4 bg-white border border-slate-100 rounded-2xl hover:border-indigo-200 hover:shadow-md transition-all cursor-default"
+                          className="group p-4 bg-white dark:bg-slate-900/30 border border-slate-100 dark:border-slate-800 rounded-2xl hover:border-indigo-200 dark:hover:border-blue-500 hover:shadow-md transition-all cursor-default"
                         >
                           <div className="flex gap-4">
-                            <div className="w-14 h-14 bg-slate-50 rounded-xl flex items-center justify-center shrink-0 border border-slate-100 group-hover:bg-indigo-50 group-hover:border-indigo-100 transition-all">
+                            <div className="w-14 h-14 bg-slate-50 dark:bg-slate-800 rounded-xl flex items-center justify-center shrink-0 border border-slate-100 dark:border-slate-700 group-hover:bg-indigo-50 dark:group-hover:bg-blue-900/20 group-hover:border-indigo-100 dark:group-hover:border-blue-900/30 transition-all">
                               {item.icon}
                             </div>
                             <div className="flex-1 space-y-1">
-                              <h4 className="text-sm font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">
+                              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-blue-400 transition-colors">
                                 {item.name}
                               </h4>
-                              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
                                 {item.description}
                               </p>
                             </div>
@@ -607,11 +607,11 @@ export default function BpmnGuide({ isOpen, onClose }: BpmnGuideProps) {
 
               {filteredItems.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-20 text-center opacity-50">
-                  <HelpCircle size={48} className="text-slate-300 mb-4" />
-                  <p className="text-sm font-bold text-slate-400">Nenhum símbolo encontrado</p>
+                  <HelpCircle size={48} className="text-slate-300 dark:text-slate-700 mb-4" />
+                  <p className="text-sm font-bold text-slate-400 dark:text-slate-600">Nenhum símbolo encontrado</p>
                   <button 
                     onClick={() => setSearchTerm('')}
-                    className="mt-4 text-xs font-black text-indigo-600 uppercase tracking-widest hover:underline"
+                    className="mt-4 text-xs font-black text-indigo-600 dark:text-blue-400 uppercase tracking-widest hover:underline"
                   >
                     Limpar Busca
                   </button>
@@ -620,12 +620,12 @@ export default function BpmnGuide({ isOpen, onClose }: BpmnGuideProps) {
             </div>
 
             {/* Footer */}
-            <div className="p-6 bg-slate-50 border-t border-slate-100">
-              <div className="flex items-start gap-3 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
-                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
+            <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-start gap-3 p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
+                <div className="p-2 bg-indigo-50 dark:bg-blue-900/20 text-indigo-600 dark:text-blue-400 rounded-lg">
                   <Info size={16} />
                 </div>
-                <p className="text-[10px] text-slate-500 font-medium leading-relaxed">
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
                   Este guia utiliza padrões universais do BPMN 2.0 (Business Process Model and Notation).
                   Consulte a documentação técnica para casos complexos.
                 </p>
@@ -634,6 +634,24 @@ export default function BpmnGuide({ isOpen, onClose }: BpmnGuideProps) {
           </motion.div>
         </>
       )}
+      <style dangerouslySetInnerHTML={{ __html: `
+        [data-theme="dark"] .BpmnDiamond path,
+        [data-theme="dark"] circle,
+        [data-theme="dark"] rect,
+        [data-theme="dark"] polygon,
+        [data-theme="dark"] path {
+          /* Targeted overrides for the guide icons */
+        }
+        
+        /* Guide icons use white fill by default in the components above */
+        [data-theme="dark"] .BpmnDiamond path:first-child,
+        [data-theme="dark"] circle[fill="white"],
+        [data-theme="dark"] rect[fill="white"],
+        [data-theme="dark"] polygon[fill="white"],
+        [data-theme="dark"] path[fill="white"] {
+          fill: #1e293b !important;
+        }
+      `}} />
     </AnimatePresence>
   );
 }

@@ -276,7 +276,7 @@ export interface ReportLog {
 
 export type InnovationStatus = 'backlog' | 'análise' | 'planejamento' | 'desenvolvimento' | 'teste' | 'concluído';
 export type InnovationComplexity = 'Baixa' | 'Média' | 'Alta' | 'Muito Alta';
-export type InnovationSolutionType = 'RPA' | 'Sistema' | 'Integração' | 'BI';
+export type InnovationSolutionType = 'RPA' | 'Sistema' | 'Integração' | 'BI' | 'Implantação de tecnologias';
 
 export interface InnovationTeamLogEntry {
   id: string;

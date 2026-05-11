@@ -388,6 +388,10 @@ export default function InnovationProjectDetail({
                               <span className="text-slate-500">Meta de Melhoria:</span>
                               <span className="font-bold text-emerald-600">{pdcaCycle?.plan?.impact?.goal || 0}%</span>
                             </div>
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-slate-500">% Melhoria Esperada:</span>
+                              <span className="font-bold text-indigo-600">{pdcaCycle?.plan?.impact?.improvementPercentage || 0}%</span>
+                            </div>
                           </div>
                         </div>
 

@@ -140,106 +140,108 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
 
   return (
     <div className="space-y-8">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div>
-          <h2 className="text-3xl font-black text-slate-900 tracking-tight">Histórico de Ações</h2>
-          <p className="text-slate-500 mt-1">Gestão de tratativas e ações operacionais do setor.</p>
-        </div>
-        
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={exportToCSV}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all shadow-sm"
-          >
-            <Download size={18} />
-            Exportar CSV
-          </button>
-          <button 
-            onClick={() => setIsModalOpen(true)}
-            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
-          >
-            <Plus size={18} />
-            Nova Ação
-          </button>
-        </div>
-      </div>
-
-      {/* Filtros */}
-      <div className="bg-theme-card p-6 rounded-3xl border border-theme-border shadow-sm space-y-4">
-        <div className="flex items-center gap-2 text-slate-400 mb-2">
-          <Filter size={16} />
-          <span className="text-xs font-black uppercase tracking-widest">Filtros de Busca</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 min-w-0">
-          <div className="relative min-w-0">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-            <input 
-              type="text"
-              placeholder="Buscar ação..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2.5 bg-theme-background border border-theme-border text-theme-foreground rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
-            />
+      <div className="sticky top-0 z-[50] bg-theme-background/95 backdrop-blur-sm -mx-4 lg:-mx-8 px-4 lg:px-8 py-4 mb-4 border-b border-theme-border flex flex-col gap-6 shadow-sm transition-all duration-300">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Histórico de Ações</h2>
+            <p className="text-slate-500 mt-1">Gestão de tratativas e ações operacionais do setor.</p>
           </div>
           
-          <select 
-            value={filterProject}
-            onChange={(e) => setFilterProject(e.target.value)}
-            className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-          >
-            <option value="">Todos os Projetos</option>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={exportToCSV}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all shadow-sm"
+            >
+              <Download size={18} />
+              Exportar CSV
+            </button>
+            <button 
+              onClick={() => setIsModalOpen(true)}
+              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+            >
+              <Plus size={18} />
+              Nova Ação
+            </button>
+          </div>
+        </div>
 
-          <select 
-            value={filterResponsible}
-            onChange={(e) => setFilterResponsible(e.target.value)}
-            className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-          >
-            <option value="">Todos os Responsáveis</option>
-            {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
+        {/* Filtros */}
+        <div className="bg-theme-card p-6 rounded-3xl border border-theme-border shadow-sm space-y-4">
+          <div className="flex items-center gap-2 text-slate-400 mb-2">
+            <Filter size={16} />
+            <span className="text-xs font-black uppercase tracking-widest">Filtros de Busca</span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 min-w-0">
+            <div className="relative min-w-0">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input 
+                type="text"
+                placeholder="Buscar ação..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2.5 bg-theme-background border border-theme-border text-theme-foreground rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+              />
+            </div>
+            
+            <select 
+              value={filterProject}
+              onChange={(e) => setFilterProject(e.target.value)}
+              className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+            >
+              <option value="">Todos os Projetos</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
 
-          <select 
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-          >
-            <option value="">Todos os Status</option>
-            <option value="Pendente">Pendente</option>
-            <option value="Em andamento">Em andamento</option>
-            <option value="Concluído">Concluído</option>
-          </select>
+            <select 
+              value={filterResponsible}
+              onChange={(e) => setFilterResponsible(e.target.value)}
+              className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+            >
+              <option value="">Todos os Responsáveis</option>
+              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
 
-          <select 
-            value={filterPriority}
-            onChange={(e) => setFilterPriority(e.target.value)}
-            className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
-          >
-            <option value="">Todas as Prioridades</option>
-            <option value="Baixa">Baixa</option>
-            <option value="Média">Média</option>
-            <option value="Alta">Alta</option>
-          </select>
+            <select 
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+            >
+              <option value="">Todos os Status</option>
+              <option value="Pendente">Pendente</option>
+              <option value="Em andamento">Em andamento</option>
+              <option value="Concluído">Concluído</option>
+            </select>
+
+            <select 
+              value={filterPriority}
+              onChange={(e) => setFilterPriority(e.target.value)}
+              className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+            >
+              <option value="">Todas as Prioridades</option>
+              <option value="Baixa">Baixa</option>
+              <option value="Média">Média</option>
+              <option value="Alta">Alta</option>
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Listagem */}
       <div className="bg-theme-card rounded-3xl border border-theme-border shadow-sm overflow-hidden">
-        <div className="overflow-x-auto custom-scrollbar">
+        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-350px)] custom-scrollbar">
           <table className="w-full text-left border-separate border-spacing-0 min-w-[1600px]">
-            <thead>
+            <thead className="sticky top-0 z-[40]">
               <tr className="bg-indigo-600 dark:bg-indigo-900">
-                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[200px]">Projeto</th>
-                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px]">Subtarefa</th>
-                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px]">Responsável</th>
-                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[350px]">Ação</th>
-                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[120px]">Prioridade</th>
-                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[160px]">Status</th>
-                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[120px]">Previsão</th>
-                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[300px]">Retorno da Tratativa</th>
-                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[160px]">Data de Conclusão</th>
-                <th className="px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest w-32 text-right">Ações</th>
+                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[200px] z-[41] border-b border-white/10">Projeto</th>
+                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px] z-[41] border-b border-white/10">Subtarefa</th>
+                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px] z-[41] border-b border-white/10">Responsável</th>
+                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[350px] z-[41] border-b border-white/10">Ação</th>
+                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[120px] z-[41] border-b border-white/10">Prioridade</th>
+                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[160px] z-[41] border-b border-white/10">Status</th>
+                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[120px] z-[41] border-b border-white/10">Previsão</th>
+                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[300px] z-[41] border-b border-white/10">Retorno da Tratativa</th>
+                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[160px] z-[41] border-b border-white/10">Data de Conclusão</th>
+                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest w-32 text-right z-[41] border-b border-white/10">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-theme-border">

@@ -9,6 +9,7 @@ import {
   Trash2, 
   CheckCircle2, 
   Target, 
+  Percent,
   FileText, 
   ArrowRight,
   ArrowLeft,
@@ -99,6 +100,7 @@ export default function PDCAEditor({
   defaultTaskId,
   onAddInnovationProject,
   onUpdateInnovationProject,
+  onDeleteInnovationProject,
   innovationProjects = [],
   globalConfig
 }: { 
@@ -109,6 +111,7 @@ export default function PDCAEditor({
   defaultTaskId?: string,
   onAddInnovationProject?: (data: any) => Promise<string>,
   onUpdateInnovationProject?: (id: string, updates: Partial<InnovationProject>) => Promise<void>,
+  onDeleteInnovationProject?: (id: string) => Promise<void>,
   innovationProjects?: InnovationProject[],
   globalConfig?: GlobalConfig
 }) {
@@ -182,7 +185,7 @@ export default function PDCAEditor({
 
   const cycleProgress = useMemo(() => {
     if (!activeCycle) return 0;
-    const planItems = activeCycle.plan.actionPlan;
+    const planItems = (activeCycle.plan.actionPlan || []).filter(item => item.ativo !== false && item.status !== 'Cancelado');
     if (planItems.length === 0) return isPlanPhaseValid ? 25 : 0;
 
     const itemsProgress = planItems.map(item => {
@@ -425,6 +428,7 @@ export default function PDCAEditor({
       "PLAN - Causa Raiz",
       "PLAN - Impacto Descrição",
       "PLAN - Impacto Valor Atual",
+      "PLAN - % Melhoria Esperada",
       "PLAN - Meta (%)",
       "DO - Ação (What)",
       "DO - Responsável",
@@ -446,7 +450,9 @@ export default function PDCAEditor({
     const rows: any[][] = [];
 
     relatedCycles.forEach((cycle) => {
-      cycle.plan.actionPlan.forEach((item) => {
+      cycle.plan.actionPlan
+        .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+        .forEach((item) => {
         rows.push([
           cycle.id,
           cycle.title,
@@ -454,6 +460,7 @@ export default function PDCAEditor({
           cycle.plan.rootCauseAnalysis.identifiedRootCause || '',
           cycle.plan.impact.description,
           cycle.plan.impact.value || '',
+          cycle.plan.impact.improvementPercentage || '',
           cycle.plan.impact.goal || '',
           item.what,
           item.who,
@@ -799,7 +806,7 @@ export default function PDCAEditor({
                   { text: 'COMO', style: 'tableHeaderSmall' },
                   { text: 'QUANTO', style: 'tableHeaderSmall' }
                 ],
-                ...(activeCycle.plan.actionPlan || []).map(action => [
+                ...(activeCycle.plan.actionPlan || []).filter(item => item.status !== 'Cancelado' && item.ativo !== false).map(action => [
                   { text: action.what, style: 'tableCellTiny' },
                   { text: action.why, style: 'tableCellTiny' },
                   { text: action.where, style: 'tableCellTiny' },
@@ -884,6 +891,15 @@ export default function PDCAEditor({
   const updatePlan = (newPlan: any) => {
     if (!activeCycle) return;
     updateCycle({ plan: { ...activeCycle.plan, ...newPlan } });
+    
+    // Sync improvementPercentage with Innovation projects if it changed
+    if (newPlan.impact && newPlan.impact.improvementPercentage !== undefined && onUpdateInnovationProject) {
+      const percentage = newPlan.impact.improvementPercentage;
+      const relatedProjects = innovationProjects.filter(p => p.pdcaId === activeCycle.id);
+      relatedProjects.forEach(project => {
+        onUpdateInnovationProject(project.id, { estimatedGain: percentage });
+      });
+    }
   };
 
   const renderIshikawa = () => {
@@ -970,7 +986,7 @@ export default function PDCAEditor({
                     onClick={() => {
                       const current = activeCycle.plan.rootCauseAnalysis.priorityCauses || [];
                       if (isSelected) updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, priorityCauses: current.filter(c => c !== cause) } });
-                      else if (current.length < 3) updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, priorityCauses: [...current, cause] } });
+                      else updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, priorityCauses: [...current, cause] } });
                     }}
                     className={cn("flex items-center gap-3 p-4 rounded-2xl border transition-all text-left", isSelected ? "bg-indigo-600 border-indigo-400 text-white shadow-lg" : "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600")}
                   >
@@ -985,7 +1001,7 @@ export default function PDCAEditor({
           </div>
           {(activeCycle.plan.rootCauseAnalysis.priorityCauses || []).length > 0 && (
             <div className="pt-4 border-t border-slate-800">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Selecionadas ({activeCycle.plan.rootCauseAnalysis.priorityCauses?.length}/3)</p>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Selecionadas ({activeCycle.plan.rootCauseAnalysis.priorityCauses?.length})</p>
               <div className="flex flex-wrap gap-2">
                 {activeCycle.plan.rootCauseAnalysis.priorityCauses?.map(cause => (
                   <span key={cause} className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{cause}</span>
@@ -1617,7 +1633,6 @@ export default function PDCAEditor({
                                         <p className="text-[10px] text-slate-400 font-medium truncate">{cat.description}</p>
                                       </div>
                                       <button 
-                                        disabled={(cat.entries?.length || 0) >= 3}
                                         onClick={() => {
                                           const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
                                           const newIshikawa = currentIshikawa.map((c, i) => {
@@ -1631,12 +1646,7 @@ export default function PDCAEditor({
                                           });
                                           updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, ishikawa: newIshikawa } });
                                         }}
-                                        className={cn(
-                                          "p-2 rounded-lg transition-all",
-                                          (cat.entries?.length || 0) >= 3 
-                                            ? "bg-slate-100 text-slate-300 cursor-not-allowed" 
-                                            : "bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white"
-                                        )}
+                                        className="p-2 rounded-lg transition-all bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white"
                                       >
                                         <Plus size={14} />
                                       </button>
@@ -1693,7 +1703,7 @@ export default function PDCAEditor({
                                         </div>
                                         <div>
                                           <h4 className="text-lg font-black tracking-tight">Causas Prioritárias</h4>
-                                          <p className="text-slate-400 text-xs font-medium">Selecione até 3 causas principais para focar no plano de ação.</p>
+                                          <p className="text-slate-400 text-xs font-medium">Selecione as causas principais para focar no plano de ação.</p>
                                         </div>
                                       </div>
 
@@ -1710,7 +1720,7 @@ export default function PDCAEditor({
                                                   const current = activeCycle.plan.rootCauseAnalysis.priorityCauses || [];
                                                   if (isSelected) {
                                                     updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, priorityCauses: current.filter(c => c !== cause) } });
-                                                  } else if (current.length < 3) {
+                                                  } else {
                                                     updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, priorityCauses: [...current, cause] } });
                                                   }
                                                 }}
@@ -1736,7 +1746,7 @@ export default function PDCAEditor({
                                       
                                       {(activeCycle.plan.rootCauseAnalysis.priorityCauses || []).length > 0 && (
                                         <div className="pt-4 border-t border-slate-800">
-                                          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Causas Selecionadas ({activeCycle.plan.rootCauseAnalysis.priorityCauses?.length}/3)</p>
+                                          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Causas Selecionadas ({activeCycle.plan.rootCauseAnalysis.priorityCauses?.length})</p>
                                           <div className="flex flex-wrap gap-2">
                                             {activeCycle.plan.rootCauseAnalysis.priorityCauses?.map(cause => (
                                               <span key={cause} className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
@@ -1887,6 +1897,25 @@ export default function PDCAEditor({
                                       className="w-full p-6 bg-theme-background border border-theme-border rounded-3xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground pl-12"
                                     />
                                     <span className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-slate-300">R$</span>
+                                  </div>
+                                </div>
+
+                                <div className="max-w-md space-y-4">
+                                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                    <Percent size={14} className="text-indigo-500" />
+                                    % de melhoria esperada
+                                  </label>
+                                  <div className="relative">
+                                    <input 
+                                      type="number"
+                                      min="0"
+                                      max="100"
+                                      placeholder="0"
+                                      value={activeCycle.plan.impact.improvementPercentage || ''}
+                                      onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, improvementPercentage: Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)) } })}
+                                      className="w-full p-6 bg-theme-background border border-theme-border rounded-3xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground pr-12"
+                                    />
+                                    <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-slate-300">%</span>
                                   </div>
                                 </div>
                               </div>
@@ -2134,7 +2163,9 @@ export default function PDCAEditor({
                         >
                           <SectionHeader number="4" title="Plano de Ação (5W2H)" />
                           <div className="space-y-6">
-                            {activeCycle.plan.actionPlan.map((item, index) => (
+                            {activeCycle.plan.actionPlan
+                              .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+                              .map((item, index) => (
                               <div key={item.id} className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm space-y-6 relative group transition-all hover:shadow-md">
                                 <div className="flex items-center justify-between mb-4">
                                   <div className="flex items-center gap-3">
@@ -2354,22 +2385,20 @@ export default function PDCAEditor({
                         <p className="text-slate-400 text-sm mt-1">Registre cada atualização das ações planejadas.</p>
                       </div>
                       <div className="divide-y divide-theme-border">
-                        {activeCycle.plan.actionPlan.length === 0 ? (
+                        {activeCycle.plan.actionPlan.filter(item => item.status !== 'Cancelado' && item.ativo !== false).length === 0 ? (
                           <div className="p-20 text-center text-slate-400 italic">
                             Nenhuma ação planejada (PLAN).
                           </div>
                         ) : (
                           activeCycle.plan.actionPlan
-                            .map((item) => {
+                            .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+                            .map((item, filteredIdx) => {
                               const isExpanded = expandedActionId === item.id;
-                              
-                              const idx = activeCycle.plan.actionPlan.findIndex(i => i.id === item.id);
                             
                             return (
                               <div key={item.id} className={cn(
                                 "border-b border-slate-100 last:border-0 transition-all",
-                                isExpanded ? "bg-white" : "hover:bg-slate-50/50",
-                                item.status === 'Cancelado' && "bg-slate-50/50 opacity-60 grayscale-[0.5]"
+                                isExpanded ? "bg-white" : "hover:bg-slate-50/50"
                               )}>
                                 {/* Accordion Header */}
                                 <button 
@@ -2381,7 +2410,7 @@ export default function PDCAEditor({
                                       "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
                                       isExpanded ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100"
                                     )}>
-                                      {idx + 1}
+                                      {filteredIdx + 1}
                                     </span>
                                     <div className="min-w-0">
                                       <h5 className="font-bold text-slate-800 text-lg truncate group-hover:text-indigo-600 transition-colors">
@@ -2401,20 +2430,9 @@ export default function PDCAEditor({
                                       </div>
                                     </div>
                                   </div>
-                                  
                                   <div className="flex items-center gap-6">
                                     <div className="hidden sm:block">
-                                      {item.status === 'Cancelado' ? (
-                                        <div className="flex flex-col items-end">
-                                          <span className="text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider bg-rose-100 text-rose-700 shadow-sm border border-rose-200">
-                                            Cancelado
-                                          </span>
-                                          <span className="text-[8px] font-black text-rose-500 uppercase tracking-tighter mt-1 italic flex items-center gap-1">
-                                            <AlertCircle size={10} />
-                                            Via Inovações
-                                          </span>
-                                        </div>
-                                      ) : item.actionType === 'Inovação' ? (
+                                      {item.actionType === 'Inovação' ? (
                                         (() => {
                                           const innovationProject = innovationProjects.find(ip => ip.id === item.innovationProjectId);
                                           const statusLabel = innovationProject ? innovationProject.status : 'Pendente';
@@ -2743,20 +2761,18 @@ export default function PDCAEditor({
                         <p className="text-slate-500 text-sm mt-1">Acompanhamento e validação de cada ação.</p>
                       </div>
                       <div className="divide-y divide-slate-100">
-                        {activeCycle.plan.actionPlan.filter(item => item.status !== 'Cancelado').length === 0 ? (
+                        {activeCycle.plan.actionPlan.filter(item => item.status !== 'Cancelado' && item.ativo !== false).length === 0 ? (
                           <div className="p-20 text-center text-slate-400 italic">
                             Nenhuma ação para verificação (CHECK).
                           </div>
                         ) : (
                           activeCycle.plan.actionPlan
-                            .filter(item => item.status !== 'Cancelado')
-                            .map((item) => {
+                            .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+                            .map((item, filteredIdx) => {
                             const isExpanded = expandedActionId === item.id;
                             const isDoDone = item.actionType === 'Inovação' 
                               ? innovationProjects.find(ip => ip.id === item.innovationProjectId)?.status === 'concluído'
                               : item.status === 'Concluído';
-                              
-                            const idx = activeCycle.plan.actionPlan.findIndex(i => i.id === item.id);
                             
                             return (
                               <div key={item.id} className={cn(
@@ -2778,7 +2794,7 @@ export default function PDCAEditor({
                                         isExpanded ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100",
                                         !isDoDone && "bg-slate-200 text-slate-400"
                                       )}>
-                                        {idx + 1}
+                                        {filteredIdx + 1}
                                       </span>
                                       {!isDoDone && (
                                         <div className="absolute -top-1 -right-1 bg-amber-500 text-white p-0.5 rounded-full shadow-sm" title="Aguardando conclusão da etapa DO">
@@ -3038,21 +3054,19 @@ export default function PDCAEditor({
                         <p className="text-slate-500 text-sm mt-1">Padronização ou novos ajustes para cada ação.</p>
                       </div>
                       <div className="divide-y divide-slate-100">
-                        {activeCycle.plan.actionPlan.filter(item => item.status !== 'Cancelado').length === 0 ? (
+                        {activeCycle.plan.actionPlan.filter(item => item.status !== 'Cancelado' && item.ativo !== false).length === 0 ? (
                           <div className="p-20 text-center text-slate-400 italic">
                             Nenhuma ação para agir (ACT).
                           </div>
                         ) : (
                           activeCycle.plan.actionPlan
-                            .filter(item => item.status !== 'Cancelado')
-                            .map((item) => {
+                            .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+                            .map((item, filteredIdx) => {
                             const isExpanded = expandedActionId === item.id;
                             const isCheckDone = !!item.monitoringTool?.trim() && !!item.evidence?.trim() && !!item.worked && (item.worked === 'Sim' || !!item.failureReason?.trim());
                             
                             // Debug log for tracking blocking logic
                             console.log(`ACT Action ${item.id}: isCheckDone=${isCheckDone}`, item);
-                            
-                            const idx = activeCycle.plan.actionPlan.findIndex(i => i.id === item.id);
                             
                             return (
                               <div key={item.id} className={cn(
@@ -3074,7 +3088,7 @@ export default function PDCAEditor({
                                         isExpanded ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100",
                                         !isCheckDone && "bg-slate-200 text-slate-400"
                                       )}>
-                                        {idx + 1}
+                                        {filteredIdx + 1}
                                       </span>
                                       {!isCheckDone && (
                                         <div className="absolute -top-1 -right-1 bg-amber-500 text-white p-0.5 rounded-full shadow-sm" title="Aguardando conclusão da etapa CHECK">
@@ -3364,7 +3378,7 @@ export default function PDCAEditor({
                             <div className="mt-6 pt-6 border-t border-slate-100">
                               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Plano de Ação (5W2H)</p>
                               <div className="space-y-4">
-                                {(cycle.plan?.actionPlan || []).map((item) => (
+                                {(cycle.plan?.actionPlan || []).filter(item => item.status !== 'Cancelado' && item.ativo !== false).map((item) => (
                                   <div key={item.id} className="grid grid-cols-2 md:grid-cols-6 gap-4 text-[10px] p-3 bg-slate-50 rounded-xl">
                                     <div><p className="font-black text-slate-400 uppercase">O que</p><p className="font-bold text-slate-700">{item.what}</p></div>
                                     <div><p className="font-black text-slate-400 uppercase">Por que</p><p className="font-bold text-slate-700">{item.why}</p></div>
@@ -3381,7 +3395,9 @@ export default function PDCAEditor({
                           {/* DO */}
                           <ReportSection title="DO (Executar)" color="amber">
                             <div className="space-y-4">
-                              {(cycle.plan?.actionPlan || []).map((item, idx) => (
+                              {(cycle.plan?.actionPlan || [])
+                                .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+                                .map((item, idx) => (
                                 <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
                                   <div className="flex justify-between items-start">
                                     <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
@@ -3419,7 +3435,9 @@ export default function PDCAEditor({
                           {/* CHECK */}
                           <ReportSection title="CHECK (Verificar)" color="emerald">
                             <div className="space-y-4">
-                              {(cycle.plan?.actionPlan || []).map((item, idx) => (
+                              {(cycle.plan?.actionPlan || [])
+                                .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+                                .map((item, idx) => (
                                 <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
                                   <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
                                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-[10px]">
@@ -3451,7 +3469,9 @@ export default function PDCAEditor({
                           {/* ACT */}
                           <ReportSection title="ACT (Agir)" color="rose">
                             <div className="space-y-4">
-                              {(cycle.plan?.actionPlan || []).map((item, idx) => (
+                              {(cycle.plan?.actionPlan || [])
+                                .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+                                .map((item, idx) => (
                                 <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
                                   <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
                                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[10px]">
@@ -3674,7 +3694,20 @@ export default function PDCAEditor({
 
   function removeActionPlanItem(id: string) {
     if (!activeCycle) return;
-    const newPlan = activeCycle.plan.actionPlan.filter(i => i.id !== id);
+    
+    // Rule: "Garantir que, ao excluir um plano de ação do tipo “Inovação” no módulo PDCA, 
+    // o respectivo projeto/card criado automaticamente no módulo de Gestão de Inovação também seja excluído."
+    const itemToDelete = activeCycle.plan.actionPlan.find(i => i.id === id);
+    if (itemToDelete?.actionType === 'Inovação' && itemToDelete.innovationProjectId && onDeleteInnovationProject) {
+      onDeleteInnovationProject(itemToDelete.innovationProjectId).catch(err => {
+        console.error("Erro ao excluir projeto de inovação vinculado:", err);
+      });
+    }
+
+    // Implementing Soft Delete as per Task 7 Option A
+    const newPlan = activeCycle.plan.actionPlan.map(i => 
+      i.id === id ? { ...i, status: 'Cancelado' as any, ativo: false } : i
+    );
     updatePlan({ actionPlan: newPlan });
   }
 

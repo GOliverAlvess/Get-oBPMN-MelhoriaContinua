@@ -185,6 +185,7 @@ export interface PDCACycle {
       value: number;
       goal: number; // %
       expectedGains?: GainsStructure;
+      improvementPercentage?: number;
     };
     actionPlan: ActionPlanItem[];
   };

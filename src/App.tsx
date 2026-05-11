@@ -1170,6 +1170,7 @@ export default function App() {
                 onAddInnovationProject={handleAddInnovationProject}
                 onUpdateInnovationProject={handleUpdateInnovationProject}
                 innovationProjects={innovationProjects}
+                onDeleteInnovationProject={handleDeleteInnovationProject}
                 initialSubtaskId={targetSubtaskId}
                 onClearInitialSubtask={() => setTargetSubtaskId(null)}
               />
@@ -1780,6 +1781,7 @@ function ProjectDetailView({
   saveStatus,
   onAddInnovationProject,
   onUpdateInnovationProject,
+  onDeleteInnovationProject,
   innovationProjects = [],
   initialSubtaskId,
   onClearInitialSubtask
@@ -1799,6 +1801,7 @@ function ProjectDetailView({
   saveStatus: 'idle' | 'saving' | 'success' | 'error',
   onAddInnovationProject?: (data: any) => Promise<string>,
   onUpdateInnovationProject?: (id: string, updates: Partial<InnovationProject>) => Promise<void>,
+  onDeleteInnovationProject?: (id: string) => Promise<void>,
   innovationProjects?: InnovationProject[],
   initialSubtaskId?: string | null,
   onClearInitialSubtask?: () => void,
@@ -1911,6 +1914,7 @@ function ProjectDetailView({
               onUpdateSubtask={handleUpdateSubtask}
               onAddInnovationProject={onAddInnovationProject}
               onUpdateInnovationProject={onUpdateInnovationProject}
+              onDeleteInnovationProject={onDeleteInnovationProject}
               innovationProjects={innovationProjects}
               globalConfig={globalConfig}
               onBack={() => {
@@ -4167,6 +4171,7 @@ function PDCATab({
   selectedTaskId,
   onAddInnovationProject,
   onUpdateInnovationProject,
+  onDeleteInnovationProject,
   innovationProjects = [],
   globalConfig
 }: { 
@@ -4176,6 +4181,7 @@ function PDCATab({
   selectedTaskId?: string | null,
   onAddInnovationProject?: (data: any) => Promise<string>,
   onUpdateInnovationProject?: (id: string, updates: Partial<InnovationProject>) => Promise<void>,
+  onDeleteInnovationProject?: (id: string) => Promise<void>,
   innovationProjects?: InnovationProject[],
   globalConfig: GlobalConfig
 }) {
@@ -4196,6 +4202,7 @@ function PDCATab({
           defaultTaskId={selectedTaskId || undefined}
           onAddInnovationProject={onAddInnovationProject}
           onUpdateInnovationProject={onUpdateInnovationProject}
+          onDeleteInnovationProject={onDeleteInnovationProject}
           innovationProjects={innovationProjects}
           globalConfig={globalConfig}
         />

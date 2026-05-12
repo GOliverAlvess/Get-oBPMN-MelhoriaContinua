@@ -17,6 +17,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { format, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { v4 as uuidv4 } from 'uuid';
+import { SYSTEM_LOGO_PATH } from '../constants/pdfLogo';
+import { getBase64ImageFromUrl } from '../lib/utils';
 import html2pdf from 'html2pdf.js';
 import pdfMake from 'pdfmake/build/pdfmake';
 import * as pdfFonts from 'pdfmake/build/vfs_fonts';
@@ -97,43 +99,9 @@ const HEADERS_ACTIONS = [
   "Data de conclusão"
 ];
 
-// FlowProcess Horizontal Logo SVG for PDF
-const SYSTEM_LOGO_SVG = `<svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="921" height="212" viewBox="0 0 921 212">
-<path d="M0 0 C6.85 4.55 10.97 12.5 14.92 19.47 C16.06 21.43 17.2 23.4 18.34 25.37 C18.91 26.34 19.48 27.32 20.07 28.33 C22.51 32.47 25.08 36.54 27.67 40.59 C32.1 47.52 36.41 54.5 40.67 61.53" fill="#003489"/><path d="M250 75C186.48 75 135 126.48 135 190C135 253.51 186.48 305 250 305" fill="#003489"/></svg>`;
+// import { PDF_LOGO_PNG_BASE64 } from '../constants/pdfLogo';
 
 const SYSTEM_LOGO_PRIMARY_COLOR = '#003489';
-
-// Helper to convert SVG to PNG Base64 for pdfMake compatibility
-const svgToPngBase64 = (svgString: string): Promise<string> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
-    const url = URL.createObjectURL(svgBlob);
-
-    img.onload = function () {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0);
-        const pngBase64 = canvas.toDataURL('image/png');
-        resolve(pngBase64);
-      } else {
-        // Fallback to a simple data URL if canvas fails
-        resolve("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==");
-      }
-      URL.revokeObjectURL(url);
-    };
-
-    img.onerror = () => {
-      resolve("data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg==");
-    };
-
-    img.src = url;
-  });
-};
 
 interface ReportsTabProps {
   projects: Project[];
@@ -226,7 +194,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
     setProgress(10);
     
     try {
-      const logoBase64 = await svgToPngBase64(SYSTEM_LOGO_SVG);
+      const logoBase64 = await getBase64ImageFromUrl(SYSTEM_LOGO_PATH);
       
       if (reportType === 'Relatório Completo') {
         const project = projects.find(p => p.id === selectedProjectId);
@@ -237,16 +205,19 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
         const docDefinition: any = {
           pageSize: 'A4',
           pageMargins: [40, 80, 40, 60],
+          images: {
+            logo: logoBase64
+          },
           header: (currentPage: number, pageCount: number) => {
             if (currentPage === 1) return null;
             return {
               margin: [40, 20, 40, 0],
               stack: [
                 {
-                  image: logoBase64,
-                  fit: [120, 40],
+                  image: 'logo',
+                  width: 220,
                   alignment: 'left',
-                  margin: [0, 0, 0, 5]
+                  margin: [0, 0, 0, 10]
                 },
                 {
                   columns: [
@@ -277,8 +248,8 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                   canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#cbd5e1' }]
                 },
                 {
-                  image: logoBase64,
-                  fit: [100, 30],
+                  image: 'logo',
+                  width: 220,
                   alignment: 'center',
                   margin: [0, 5, 0, 5]
                 },
@@ -296,8 +267,8 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
             {
               stack: [
                 {
-                  image: logoBase64,
-                  fit: [300, 120],
+                  image: 'logo',
+                  width: 220,
                   alignment: 'center',
                   margin: [0, 40, 0, 20]
                 },

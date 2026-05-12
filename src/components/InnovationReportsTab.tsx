@@ -17,6 +17,9 @@ import { InnovationProject, User } from '../types';
 import { cn } from '../lib/utils';
 import { auth, db, doc, setDoc } from '../firebase';
 import { v4 as uuidv4 } from 'uuid';
+import { SYSTEM_LOGO_PATH } from '../constants/pdfLogo';
+import { getBase64ImageFromUrl } from '../lib/utils';
+// import { PDF_LOGO_PNG_BASE64 } from '../constants/pdfLogo';
 
 // Set up pdfMake fonts
 if (pdfFonts && (pdfFonts as any).pdfMake) {
@@ -91,17 +94,28 @@ export default function InnovationReportsTab({ projects, users }: InnovationRepo
     logReport('Excel');
   };
 
-  const generatePDF = () => {
+  const generatePDF = async () => {
     if (filteredProjects.length === 0) {
       alert('Nenhum projeto encontrado para os filtros selecionados.');
       return;
     }
 
+    const logoBase64 = await getBase64ImageFromUrl(SYSTEM_LOGO_PATH);
+
     const docDefinition: any = {
       pageSize: 'A4',
       pageOrientation: 'landscape',
       pageMargins: [40, 40, 40, 40],
+      images: {
+        logo: logoBase64
+      },
       content: [
+        {
+          image: 'logo',
+          width: 150,
+          alignment: 'left',
+          margin: [0, 0, 0, 15]
+        },
         { text: 'RELATÓRIO DE PROJETOS DE INOVAÇÃO', style: 'header' },
         { text: `Emissão: ${format(new Date(), 'dd/MM/yyyy HH:mm')}`, style: 'subheader' },
         {

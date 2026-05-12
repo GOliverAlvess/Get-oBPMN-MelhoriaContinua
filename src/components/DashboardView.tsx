@@ -369,6 +369,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                           padding: '8px 12px'
                         }}
                         itemStyle={{ color: '#ffffff' }}
+                        labelStyle={{ color: '#ffffff', fontWeight: 700 }}
                         formatter={(value: number) => [`R$ ${value.toLocaleString()}`, 'Ganho']}
                       />
                       <Bar dataKey="gain" fill="#3b82f6" radius={[0, 8, 8, 0]} barSize={20}>
@@ -412,11 +413,14 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                       </Pie>
                       <Tooltip 
                          contentStyle={{ 
-                          backgroundColor: 'var(--card)', 
+                          backgroundColor: '#1e293b', 
                           borderRadius: '12px', 
-                          border: '1px solid var(--border)',
-                          color: 'var(--foreground)'
-                        }} 
+                          border: '1px solid #334155', 
+                          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)',
+                          color: '#ffffff'
+                        }}
+                        itemStyle={{ color: '#ffffff' }}
+                        labelStyle={{ color: '#ffffff', fontWeight: 700 }}
                       />
                       <Legend verticalAlign="bottom" height={36}/>
                     </PieChart>
@@ -482,6 +486,8 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                         color: '#ffffff',
                         boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)'
                       }}
+                      itemStyle={{ color: '#ffffff' }}
+                      labelStyle={{ color: '#ffffff', fontWeight: 700 }}
                       formatter={(value: number) => [`${value} projeto(s)`, 'Ocorrência']}
                     />
                     <Bar dataKey="count" fill="#EABE41" radius={[0, 8, 8, 0]} barSize={24}>

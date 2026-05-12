@@ -388,7 +388,7 @@ export default function BPMNModeler({
       <div className="h-14 bg-white dark:bg-[#111827] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 z-20 shadow-sm transition-colors">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className="w-auto h-10 bg-white rounded-lg flex items-center justify-center shadow-md border border-slate-100 p-1">
+            <div className="w-auto h-10 bg-white dark:bg-slate-800 rounded-lg flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 p-1">
               <img 
                 src="/assets/logo-flowprocess.svg" 
                 alt="Logo" 
@@ -398,52 +398,52 @@ export default function BPMNModeler({
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-none">{projectName}</h3>
-              <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-wider mt-1">Mapeamento BPMN</p>
+              <p className="text-[10px] text-slate-400 dark:text-white font-bold uppercase tracking-wider mt-1">Mapeamento BPMN</p>
             </div>
           </div>
 
-          <div className="h-6 w-px bg-slate-200 dark:bg-slate-800" />
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
 
           {!readOnly && (
-            <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-slate-900/50 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
-              <button onClick={undo} className="p-1.5 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 transition-all" title="Desfazer">
+            <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
+              <button onClick={undo} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded text-slate-400 dark:text-slate-500 transition-all" title="Desfazer">
                 <Undo2 size={16} />
               </button>
-              <button onClick={redo} className="p-1.5 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 transition-all" title="Refazer">
+              <button onClick={redo} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded text-slate-400 dark:text-slate-500 transition-all" title="Refazer">
                 <Redo2 size={16} />
               </button>
             </div>
           )}
 
-          <div className="h-6 w-px bg-slate-200 dark:bg-slate-800" />
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
 
-          <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-slate-900/50 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
-            <button onClick={zoomOut} className="p-1.5 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 transition-all" title="Diminuir Zoom">
+          <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
+            <button onClick={zoomOut} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded text-slate-400 dark:text-slate-500 transition-all" title="Diminuir Zoom">
               <Minus size={16} />
             </button>
-            <button onClick={zoomReset} className="p-1.5 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 transition-all" title="Ajustar Visualização">
+            <button onClick={zoomReset} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded text-slate-400 dark:text-slate-500 transition-all" title="Ajustar Visualização">
               <Maximize2 size={16} />
             </button>
-            <button onClick={zoomIn} className="p-1.5 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 transition-all" title="Aumentar Zoom">
+            <button onClick={zoomIn} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded text-slate-400 dark:text-slate-500 transition-all" title="Aumentar Zoom">
               <Plus size={16} />
             </button>
           </div>
 
-          <div className="h-6 w-px bg-slate-200 dark:bg-slate-800" />
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
 
-          <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-slate-900/50 p-1 rounded-lg border border-slate-200 dark:border-slate-800">
-            <button onClick={activateHandTool} className="p-1.5 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400 transition-all" title="Mover Fluxograma (Arrastar)">
+          <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
+            <button onClick={activateHandTool} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded text-slate-400 dark:text-slate-500 transition-all" title="Mover Fluxograma (Arrastar)">
               <Move size={16} />
             </button>
           </div>
 
-          <div className="h-6 w-px bg-slate-200 dark:bg-slate-800" />
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
 
-          <div className="flex items-center gap-4 px-4 border-l border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-4 px-4 border-l border-slate-200 dark:border-slate-700">
             <div className="flex flex-col">
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Tempo Total</span>
+              <span className="text-[10px] font-black text-slate-500 dark:text-white uppercase tracking-widest">Tempo Total</span>
               <div className="flex items-center gap-1.5">
-                <Clock size={14} className="text-indigo-400" />
+                <Clock size={14} className="text-indigo-400 dark:text-blue-400" />
                 <span className="text-sm font-black text-slate-900 dark:text-white">{totalTime} min</span>
               </div>
             </div>
@@ -481,7 +481,7 @@ export default function BPMNModeler({
               exit={{ x: 320 }}
               className="w-80 bg-white dark:bg-[#111827] border-l border-slate-200 dark:border-slate-800 flex flex-col z-20 shadow-2xl overflow-y-auto transition-colors"
             >
-              <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/50">
+              <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
                 <h4 className="text-xs font-black text-slate-800 dark:text-white uppercase tracking-tight flex items-center gap-2">
                   <Settings2 size={14} className="text-indigo-600 dark:text-blue-400" />
                   Propriedades BPMN
@@ -493,7 +493,7 @@ export default function BPMNModeler({
                     {currentElementData?.isProblemStep ? 'GARGALO' : 'NORMAL'}
                   </span>
                 </h4>
-                <button onClick={() => setSelectedElement(null)} className="p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all">
+                <button onClick={() => setSelectedElement(null)} className="p-1.5 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-all">
                   <X size={16} />
                 </button>
               </div>
@@ -501,14 +501,14 @@ export default function BPMNModeler({
               <div className="p-6 space-y-6">
                 <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Descrição (Texto da Task)</label>
+                    <label className="text-[10px] font-black text-slate-400 dark:text-white uppercase tracking-widest">Descrição (Texto da Task)</label>
                     <textarea 
                       value={currentElementData?.description || ''}
                       onChange={(e) => !readOnly && updateElementData(selectedElement.id, { description: e.target.value })}
                       readOnly={readOnly}
                       rows={3}
                       className={cn(
-                        "w-full p-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium text-slate-700 dark:text-slate-200 text-xs resize-none",
+                        "w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium text-slate-700 dark:text-white text-xs resize-none",
                         readOnly && "bg-slate-100 dark:bg-slate-800 cursor-not-allowed"
                       )}
                       placeholder="Este texto aparecerá dentro da task no canvas..."
@@ -517,7 +517,7 @@ export default function BPMNModeler({
 
                   <div className="grid grid-cols-1 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Tempo (min)</label>
+                      <label className="text-[10px] font-black text-slate-400 dark:text-white uppercase tracking-widest">Tempo (min)</label>
                       <input 
                         type="number" 
                         value={currentElementData?.timeInMinutes || 0}
@@ -525,7 +525,7 @@ export default function BPMNModeler({
                         onChange={(e) => !readOnly && updateElementData(selectedElement.id, { timeInMinutes: parseInt(e.target.value) || 0 })}
                         readOnly={readOnly}
                         className={cn(
-                          "w-full p-2.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700 dark:text-white text-xs",
+                          "w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-bold text-slate-700 dark:text-white text-xs",
                           readOnly && "bg-slate-100 dark:bg-slate-800 cursor-not-allowed"
                         )}
                       />
@@ -533,11 +533,11 @@ export default function BPMNModeler({
                   </div>
                 </div>
 
-                <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4">
+                <div className="pt-6 border-t border-slate-100 dark:border-slate-700 space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex flex-col">
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Etapa Problema</span>
-                      <span className="text-[10px] text-slate-400 font-medium">Marcar como gargalo</span>
+                      <span className="text-xs font-bold text-slate-700 dark:text-white">Etapa Problema</span>
+                      <span className="text-[10px] text-slate-400 dark:text-white/60 font-medium">Marcar como gargalo</span>
                     </div>
                     <button 
                       onClick={() => !readOnly && updateElementData(selectedElement.id, { isProblemStep: !currentElementData?.isProblemStep })}
@@ -558,14 +558,14 @@ export default function BPMNModeler({
 
                 {!readOnly && (
                   <>
-                    <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4">
-                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                    <div className="pt-6 border-t border-slate-100 dark:border-slate-700 space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 dark:text-white uppercase tracking-widest flex items-center gap-2">
                         <Palette size={12} className="text-indigo-500 dark:text-blue-400" />
                         Aparência BPMN
                       </label>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase">Fundo</span>
+                          <span className="text-[9px] font-bold text-slate-400 dark:text-white/60 uppercase">Fundo</span>
                           <div className="flex items-center gap-2">
                             <input 
                               type="color" 
@@ -573,11 +573,11 @@ export default function BPMNModeler({
                               onChange={(e) => updateElementData(selectedElement.id, { backgroundColor: e.target.value })}
                               className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0 p-0"
                             />
-                            <span className="text-[10px] font-mono text-slate-400">{currentElementData?.backgroundColor || '#ffffff'}</span>
+                            <span className="text-[10px] font-mono text-slate-400 dark:text-white/60">{currentElementData?.backgroundColor || '#ffffff'}</span>
                           </div>
                         </div>
                         <div className="space-y-1.5">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase">Borda</span>
+                          <span className="text-[9px] font-bold text-slate-400 dark:text-white/60 uppercase">Borda</span>
                           <div className="flex items-center gap-2">
                             <input 
                               type="color" 
@@ -585,14 +585,14 @@ export default function BPMNModeler({
                               onChange={(e) => updateElementData(selectedElement.id, { borderColor: e.target.value })}
                               className="w-8 h-8 rounded-lg cursor-pointer bg-transparent border-0 p-0"
                             />
-                            <span className="text-[10px] font-mono text-slate-400">{currentElementData?.borderColor || '#333333'}</span>
+                            <span className="text-[10px] font-mono text-slate-400 dark:text-white/60">{currentElementData?.borderColor || '#333333'}</span>
                           </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4">
-                      <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center justify-between gap-2">
+                    <div className="pt-6 border-t border-slate-100 dark:border-slate-700 space-y-4">
+                      <label className="text-[10px] font-black text-slate-400 dark:text-white uppercase tracking-widest flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
                           <Palette size={12} className="text-indigo-500 dark:text-blue-400" />
                           Biblioteca de Cores
@@ -608,7 +608,7 @@ export default function BPMNModeler({
                             {savedColors.map((color) => (
                               <div 
                                 key={color.id}
-                                className="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800 rounded-xl group hover:border-indigo-200 dark:hover:border-blue-500 transition-all cursor-pointer"
+                                className="flex items-center gap-3 p-2 bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-xl group hover:border-indigo-200 dark:hover:border-blue-500 transition-all cursor-pointer"
                                 onClick={() => updateElementData(selectedElement.id, { 
                                   backgroundColor: color.backgroundColor,
                                   borderColor: color.borderColor
@@ -619,8 +619,8 @@ export default function BPMNModeler({
                                   style={{ backgroundColor: color.backgroundColor, borderColor: color.borderColor }}
                                 />
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-[10px] font-black text-slate-700 dark:text-slate-200 truncate">{color.name}</p>
-                                  <p className="text-[8px] font-mono text-slate-400 mt-0.5">{color.backgroundColor}</p>
+                                  <p className="text-[10px] font-black text-slate-700 dark:text-white truncate">{color.name}</p>
+                                  <p className="text-[8px] font-mono text-slate-400 dark:text-white/40 mt-0.5">{color.backgroundColor}</p>
                                 </div>
                                 <button 
                                   onClick={(e) => {
@@ -629,7 +629,7 @@ export default function BPMNModeler({
                                       onDeleteGlobalColor(color.id);
                                     }
                                   }}
-                                  className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-800 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                  className="p-1.5 text-slate-300 dark:text-white/20 hover:text-rose-500 hover:bg-white dark:hover:bg-slate-800 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
                                 >
                                   <Trash2 size={12} />
                                 </button>
@@ -637,8 +637,8 @@ export default function BPMNModeler({
                             ))}
                           </div>
                         ) : (
-                          <div className="py-6 text-center bg-slate-50 dark:bg-slate-900/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Nenhuma cor salva</p>
+                          <div className="py-6 text-center bg-slate-50 dark:bg-slate-900/30 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700">
+                            <p className="text-[10px] font-bold text-slate-400 dark:text-white uppercase tracking-widest">Nenhuma cor salva</p>
                           </div>
                         )}
                       </div>
@@ -647,7 +647,7 @@ export default function BPMNModeler({
                         <div className="space-y-1.5">
                           <label className="text-[9px] font-black text-indigo-600 dark:text-blue-400 uppercase tracking-widest ml-1">Salvar Cor Atual</label>
                           <div className="flex gap-2">
-                            <input 
+                             <input 
                               type="text"
                               placeholder="Ex: Etapa Crítica"
                               value={newColorName}
@@ -761,6 +761,36 @@ export default function BPMNModeler({
         }
         [data-theme="dark"] .djs-connection path {
           stroke: #64748b !important;
+        }
+
+        /* BPMN Popup/Replace Menu Dark Mode */
+        [data-theme="dark"] .djs-popup {
+          background: #111827 !important;
+          border-color: #374151 !important;
+          box-shadow: 0 10px 25px rgba(0,0,0,0.5) !important;
+          color: white !important;
+        }
+        [data-theme="dark"] .djs-popup .entry {
+          background: #111827 !important;
+          color: #e2e8f0 !important;
+        }
+        [data-theme="dark"] .djs-popup .entry:hover {
+          background: #1f2937 !important;
+          color: #ffffff !important;
+        }
+        [data-theme="dark"] .djs-popup-header {
+           background: #1f2937 !important;
+           border-bottom: 1px solid #374151 !important;
+           color: #ffffff !important;
+        }
+        [data-theme="dark"] .djs-popup .entry-label {
+           color: #e2e8f0 !important;
+        }
+        [data-theme="dark"] .djs-popup .entry-icon {
+           color: #94a3b8 !important;
+        }
+        [data-theme="dark"] .djs-popup .entry:hover .entry-icon {
+           color: #ffffff !important;
         }
       `}} />
     </div>

@@ -209,8 +209,16 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
                   tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }}
                 />
                 <Tooltip 
-                  cursor={{ fill: '#f8fafc' }}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                  contentStyle={{ 
+                    backgroundColor: '#1e293b', 
+                    borderRadius: '12px', 
+                    border: '1px solid #334155', 
+                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)',
+                    color: '#ffffff'
+                  }}
+                  itemStyle={{ color: '#ffffff' }}
+                  labelStyle={{ color: '#ffffff', fontWeight: 700 }}
                 />
                 <Bar dataKey="count" fill="#6366f1" radius={[0, 8, 8, 0]} barSize={24}>
                   <LabelList 
@@ -243,8 +251,16 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
                   tick={{ fontSize: 11, fontWeight: 700, fill: '#64748b' }}
                 />
                 <Tooltip 
-                  cursor={{ fill: '#f8fafc' }}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                  contentStyle={{ 
+                    backgroundColor: '#1e293b', 
+                    borderRadius: '12px', 
+                    border: '1px solid #334155', 
+                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)',
+                    color: '#ffffff'
+                  }}
+                  itemStyle={{ color: '#ffffff' }}
+                  labelStyle={{ color: '#ffffff', fontWeight: 700 }}
                 />
                 <Bar dataKey="count" fill="#003489" radius={[0, 8, 8, 0]} barSize={24}>
                   <LabelList 
@@ -287,7 +303,15 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
                   />
                 </Pie>
                 <Tooltip 
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                  contentStyle={{ 
+                    backgroundColor: '#1e293b', 
+                    borderRadius: '12px', 
+                    border: '1px solid #334155', 
+                    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)',
+                    color: '#ffffff'
+                  }}
+                  itemStyle={{ color: '#ffffff' }}
+                  labelStyle={{ color: '#ffffff', fontWeight: 700 }}
                 />
                 <Legend verticalAlign="bottom" height={36}/>
               </PieChart>

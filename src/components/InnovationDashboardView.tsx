@@ -219,12 +219,12 @@ export default function InnovationDashboardView({ innovationProjects, users }: I
           <p className="text-slate-500 mt-1">Visão executiva e acompanhamento operacional de projetos.</p>
         </div>
         <div className="flex items-center gap-4">
-          <div className="bg-white p-1 rounded-xl border border-slate-200 shadow-sm flex items-center">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl shadow-sm flex items-center">
             <button 
               onClick={() => setActiveTab('executive')}
               className={cn(
                 "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
-                activeTab === 'executive' ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-50"
+                activeTab === 'executive' ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
               )}
             >
               Visão Executiva
@@ -233,7 +233,7 @@ export default function InnovationDashboardView({ innovationProjects, users }: I
               onClick={() => setActiveTab('development')}
               className={cn(
                 "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
-                activeTab === 'development' ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-50"
+                activeTab === 'development' ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 dark:text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800"
               )}
             >
               Desenvolvimento
@@ -294,6 +294,7 @@ export default function InnovationDashboardView({ innovationProjects, users }: I
                           color: '#ffffff'
                         }}
                         itemStyle={{ color: '#ffffff' }}
+                        labelStyle={{ color: '#ffffff', fontWeight: 700 }}
                       />
                       <Legend verticalAlign="bottom" height={36}/>
                     </PieChart>
@@ -306,16 +307,16 @@ export default function InnovationDashboardView({ innovationProjects, users }: I
                 <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Ranking Colaboradores</h3>
                 <div className="space-y-4">
                   {stats.collaboratorRanking.map((collab, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                    <div key={idx} className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-xs">
+                        <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 flex items-center justify-center font-black text-xs">
                           {idx + 1}
                         </div>
-                        <span className="font-bold text-slate-700">{collab.name}</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-200">{collab.name}</span>
                       </div>
                       <div className="text-right">
-                        <span className="text-xl font-black text-indigo-600">{collab.count}</span>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Projetos</p>
+                        <span className="text-xl font-black text-indigo-600 dark:text-indigo-400">{collab.count}</span>
+                        <p className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Projetos</p>
                       </div>
                     </div>
                   ))}
@@ -344,6 +345,7 @@ export default function InnovationDashboardView({ innovationProjects, users }: I
                           boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)'
                         }} 
                         itemStyle={{ color: '#ffffff' }}
+                        labelStyle={{ color: '#ffffff', fontWeight: 700 }}
                       />
                       <Bar dataKey="count" fill="#60a5fa" radius={[0, 8, 8, 0]} barSize={24}>
                         <LabelList dataKey="count" position="right" style={{ fontSize: 11, fontWeight: 900, fill: '#1e40af' }} offset={10} />
@@ -368,11 +370,11 @@ export default function InnovationDashboardView({ innovationProjects, users }: I
                   {stats.projectProgressList.map((p) => (
                     <div 
                       key={p.id} 
-                      className="group p-4 bg-slate-50 rounded-2xl border border-slate-100 hover:border-indigo-200 transition-all"
+                      className="group p-4 bg-slate-50 dark:bg-slate-900/50 rounded-2xl border border-slate-100 dark:border-slate-800 hover:border-indigo-200 dark:hover:border-indigo-500 transition-all"
                     >
                       <div className="flex items-center justify-between mb-2 min-w-0 gap-2">
-                        <span className="font-bold text-slate-700 truncate">{p.name}</span>
-                        <span className="text-xs font-black text-slate-500 shrink-0">{p.progress}%</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-200 truncate">{p.name}</span>
+                        <span className="text-xs font-black text-slate-500 dark:text-slate-400 shrink-0">{p.progress}%</span>
                       </div>
                       <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                         <motion.div 
@@ -396,22 +398,22 @@ export default function InnovationDashboardView({ innovationProjects, users }: I
                   {stats.recentActivities.map((activity, idx) => (
                     <div key={idx} className="flex gap-4 relative">
                       {idx !== stats.recentActivities.length - 1 && (
-                        <div className="absolute left-5 top-10 bottom-0 w-0.5 bg-slate-100" />
+                        <div className="absolute left-5 top-10 bottom-0 w-0.5 bg-slate-100 dark:bg-slate-800" />
                       )}
                       <div className={cn(
                         "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm",
-                        activity.type.includes('Concluída') ? "bg-emerald-100 text-emerald-600" : "bg-indigo-100 text-indigo-600"
+                        activity.type.includes('Concluída') ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "bg-indigo-100 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
                       )}>
                         {activity.type.includes('Concluída') ? <CheckCircle2 size={20} /> : <TrendingUp size={20} />}
                       </div>
                       <div className="space-y-1 min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-black text-slate-400 uppercase tracking-widest truncate">{activity.type}</span>
-                          <span className="text-[10px] text-slate-300">•</span>
-                          <span className="text-[10px] font-bold text-slate-400 shrink-0">{format(new Date(activity.date), "dd/MM HH:mm")}</span>
+                          <span className="text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest truncate">{activity.type}</span>
+                          <span className="text-[10px] text-slate-300 dark:text-slate-700">•</span>
+                          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 shrink-0">{format(new Date(activity.date), "dd/MM HH:mm")}</span>
                         </div>
-                        <p className="font-bold text-slate-800 break-words line-clamp-2" title={activity.title}>{activity.title}</p>
-                        <p className="text-xs text-slate-500 font-medium truncate">Projeto: {activity.projectName}</p>
+                        <p className="font-bold text-slate-800 dark:text-slate-200 break-words line-clamp-2" title={activity.title}>{activity.title}</p>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate">Projeto: {activity.projectName}</p>
                       </div>
                     </div>
                   ))}
@@ -715,7 +717,7 @@ function StatCard({
         "p-4 rounded-[1.5rem] border shadow-sm flex items-center justify-between gap-3 transition-all min-h-[80px] min-w-0",
         highlight 
           ? "bg-slate-900 border-slate-800 text-white" 
-          : "bg-white border-slate-200 text-slate-900"
+          : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100"
       )}
     >
       <div className="flex items-center gap-3 min-w-0 flex-1">

@@ -163,7 +163,7 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
       </div>
 
       {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
         <SummaryCard 
           title="Total de Ações" 
           value={stats.total} 
@@ -190,14 +190,14 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 w-full">
         {/* Gráfico de Colaboradores */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
+        <div className="bg-theme-card p-4 sm:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-theme-border shadow-sm space-y-6 overflow-hidden">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Ações por Colaborador</h3>
+            <h3 className="text-base md:text-lg font-black text-theme-foreground uppercase tracking-tight">Ações por Colaborador</h3>
             <Users size={20} className="text-indigo-500" />
           </div>
-          <div className="h-[350px] w-full">
+          <div className="h-[300px] md:h-[350px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats.collaboratorRanking} layout="vertical" margin={{ left: 40, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
@@ -234,12 +234,12 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
         </div>
 
         {/* Gráfico de Projetos */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-sm space-y-6">
+        <div className="bg-theme-card p-4 sm:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-theme-border shadow-sm space-y-6 overflow-hidden">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-black text-slate-800 uppercase tracking-tight">Ações por Projeto</h3>
+            <h3 className="text-base md:text-lg font-black text-theme-foreground uppercase tracking-tight">Ações por Projeto</h3>
             <Briefcase size={20} className="text-[#003489]" />
           </div>
-          <div className="h-[350px] w-full">
+          <div className="h-[300px] md:h-[350px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={stats.projectRanking} layout="vertical" margin={{ left: 40, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />

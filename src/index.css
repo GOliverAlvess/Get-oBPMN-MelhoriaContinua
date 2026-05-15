@@ -388,12 +388,15 @@
 }
 
 @layer base {
+  body {
+    @apply bg-theme-background text-theme-foreground min-h-screen;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
+  }
+  
   * {
     @apply border-theme-border;
-  }
-  body {
-    @apply bg-theme-background text-theme-foreground;
-    transition: background-color 0.3s ease, color 0.3s ease;
   }
 
   @media print {

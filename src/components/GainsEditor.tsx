@@ -192,8 +192,8 @@ export default function GainsEditor({
                     >
                       <option value="">Selecione...</option>
                       {((globalConfig?.structuredTangibleGains?.filter(g => g.active).map(g => g.name)) || tangibleTypes).length > 0 ? (
-                        ((globalConfig?.structuredTangibleGains?.filter(g => g.active).map(g => g.name)) || tangibleTypes).map(type => (
-                          <option key={type} value={type}>{type}</option>
+                        ((globalConfig?.structuredTangibleGains?.filter(g => g.active).map(g => g.name)) || tangibleTypes).map((type, tIdx) => (
+                          <option key={`${type}-${tIdx}`} value={type}>{type}</option>
                         ))
                       ) : (
                         <>
@@ -319,8 +319,8 @@ export default function GainsEditor({
                     >
                       <option value="">Selecione...</option>
                       {((globalConfig?.structuredIntangibleGains?.filter(g => g.active).map(g => g.name)) || intangibleTypes).length > 0 ? (
-                        ((globalConfig?.structuredIntangibleGains?.filter(g => g.active).map(g => g.name)) || intangibleTypes).map(type => (
-                          <option key={type} value={type}>{type}</option>
+                        ((globalConfig?.structuredIntangibleGains?.filter(g => g.active).map(g => g.name)) || intangibleTypes).map((type, iIdx) => (
+                          <option key={`${type}-${iIdx}`} value={type}>{type}</option>
                         ))
                       ) : (
                         <>

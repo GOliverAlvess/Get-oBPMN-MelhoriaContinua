@@ -1138,8 +1138,8 @@ export default function PDCAEditor({
             <div className="pt-4 border-t border-slate-800">
               <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Selecionadas ({activeCycle.plan.rootCauseAnalysis.priorityCauses?.length})</p>
               <div className="flex flex-wrap gap-2">
-                {activeCycle.plan.rootCauseAnalysis.priorityCauses?.map(cause => (
-                  <span key={cause} className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{cause}</span>
+                {activeCycle.plan.rootCauseAnalysis.priorityCauses?.map((cause, cIdx) => (
+                  <span key={`${cause}-${cIdx}`} className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{cause}</span>
                 ))}
               </div>
             </div>
@@ -1399,9 +1399,9 @@ export default function PDCAEditor({
 
         <div className="flex-1 overflow-y-auto p-8 space-y-8">
           {/* Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <StatCard title="Total de Problemas" value={dashboardStats.total} icon={<AlertCircle />} color="indigo" />
-            <StatCard title="Em Andamento" value={dashboardStats.inProgress} icon={<Clock />} color="amber" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            <StatCard title="Total" value={dashboardStats.total} icon={<AlertCircle />} color="indigo" />
+            <StatCard title="Andamento" value={dashboardStats.inProgress} icon={<Clock />} color="amber" />
             <StatCard title="Resolvidos" value={dashboardStats.resolved} icon={<CheckCircle2 />} color="emerald" />
           </div>
 
@@ -1569,21 +1569,21 @@ export default function PDCAEditor({
   }
 
   return (
-    <div className="flex flex-col min-h-full bg-theme-background transition-colors duration-300">
+    <div className="flex flex-col min-h-full bg-theme-background transition-colors duration-300 w-full">
       {/* Combined Sticky Header */}
-      <div className="sticky top-[73.5px] z-[100] bg-theme-card border-b border-theme-border shadow-sm transition-colors duration-300">
+      <div className="sticky top-0 md:top-[73.5px] z-[100] bg-theme-card border-b border-theme-border shadow-sm transition-colors duration-300">
         {/* Cycle Info Header */}
-        <div className="p-4 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button onClick={() => setShowDashboard(true)} className="p-2 hover:bg-slate-100/10 rounded-lg text-slate-400">
+        <div className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4 w-full sm:w-auto">
+            <button onClick={() => setShowDashboard(true)} className="p-2 hover:bg-slate-100/10 rounded-lg text-slate-400 shrink-0">
               <ChevronRight size={24} className="rotate-180" />
             </button>
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shrink-0">
                 <RefreshCw size={24} />
               </div>
-              <div>
-                <h3 className="font-bold text-theme-foreground truncate max-w-[300px]">{activeCycle?.title}</h3>
+              <div className="min-w-0">
+                <h3 className="font-bold text-theme-foreground truncate max-w-full sm:max-w-[300px]">{activeCycle?.title}</h3>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={activeCycle?.status || 'Ativo'} />
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
@@ -1594,7 +1594,7 @@ export default function PDCAEditor({
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
             {saveFeedback && (
               <motion.div 
                 initial={{ opacity: 0, x: 20 }}
@@ -1609,7 +1609,7 @@ export default function PDCAEditor({
             <select 
               value={activeCycle?.status}
               onChange={(e) => updateCycle({ status: e.target.value as any })}
-              className="bg-slate-100 border-none text-xs font-black uppercase tracking-widest px-4 py-2 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500"
+              className="bg-slate-100 border-none text-[10px] sm:text-xs font-black uppercase tracking-widest px-4 py-2 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 flex-1 sm:flex-none text-center"
             >
               <option value="Ativo">Ativo</option>
               <option value="Concluído">Concluído</option>
@@ -1618,12 +1618,12 @@ export default function PDCAEditor({
         </div>
 
         {activeCycle && (
-          <div className="px-8 flex gap-8 border-t border-theme-border">
-            <PhaseTab active={activePhase === 'PLAN'} onClick={() => handlePhaseChange('PLAN')} label="PLAN (P)" color="indigo" />
+          <div className="px-4 md:px-8 flex gap-4 md:gap-8 border-t border-theme-border overflow-x-auto no-scrollbar">
+            <PhaseTab active={activePhase === 'PLAN'} onClick={() => handlePhaseChange('PLAN')} label="PLAN" color="indigo" />
             <PhaseTab 
               active={activePhase === 'DO'} 
               onClick={() => handlePhaseChange('DO')} 
-              label="DO (D)" 
+              label="DO" 
               color="amber" 
               disabled={!isPlanPhaseValid}
               icon={!isPlanPhaseValid ? <Lock size={12} /> : undefined}
@@ -1632,7 +1632,7 @@ export default function PDCAEditor({
             <PhaseTab 
               active={activePhase === 'CHECK'} 
               onClick={() => handlePhaseChange('CHECK')} 
-              label="CHECK (C)" 
+              label="CHECK" 
               color="emerald" 
               disabled={!isDoPhaseValid}
               icon={!isDoPhaseValid ? <Lock size={12} /> : undefined}
@@ -1641,7 +1641,7 @@ export default function PDCAEditor({
             <PhaseTab 
               active={activePhase === 'ACT'} 
               onClick={() => handlePhaseChange('ACT')} 
-              label="ACT (A)" 
+              label="ACT" 
               color="rose" 
               disabled={!isCheckPhaseValid}
               icon={!isCheckPhaseValid ? <Lock size={12} /> : undefined}
@@ -1650,18 +1650,18 @@ export default function PDCAEditor({
             <PhaseTab 
               active={activePhase === 'REPORT'} 
               onClick={() => handlePhaseChange('REPORT')} 
-              label="RELATÓRIO PDCA" 
+              label="RELATÓRIO" 
               color="slate" 
             />
           </div>
         )}
       </div>
 
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col overflow-y-auto w-full">
         {activeCycle ? (
           <>
             {/* Phase Content */}
-            <div className="flex-1 p-8">
+            <div className="flex-1 p-4 md:p-8 w-full max-w-full">
               <AnimatePresence mode="wait">
                 {activePhase === 'PLAN' && (
                   <motion.div 
@@ -1669,10 +1669,10 @@ export default function PDCAEditor({
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -10 }}
-                    className="max-w-5xl mx-auto space-y-8"
+                    className="max-w-5xl mx-auto space-y-6 md:space-y-8"
                   >
                     {/* PLAN Steps Navigation */}
-                    <div className="flex items-center justify-between bg-theme-card p-2 rounded-3xl border border-theme-border shadow-sm mb-4">
+                    <div className="flex items-center justify-between bg-theme-card p-1 md:p-2 rounded-2xl md:rounded-3xl border border-theme-border shadow-sm mb-4 overflow-x-auto no-scrollbar">
                       {[
                         { id: 1, title: 'Descrição', icon: <FileText size={16} /> },
                         { id: 2, title: 'Causa Raiz', icon: <Target size={16} /> },
@@ -1683,14 +1683,14 @@ export default function PDCAEditor({
                           key={step.id}
                           onClick={() => setActivePlanStep(step.id)}
                           className={cn(
-                            "flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all",
+                            "flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl md:rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shrink-0",
                             activePlanStep === step.id 
                               ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200" 
                               : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
                           )}
                         >
                           {step.icon}
-                          <span className="hidden md:block">{step.title}</span>
+                          <span className="hidden sm:block">{step.title}</span>
                         </button>
                       ))}
                     </div>
@@ -2117,7 +2117,7 @@ export default function PDCAEditor({
                                             className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground text-xs"
                                           >
                                           <option value="">Selecione...</option>
-                                          {((globalConfig?.structuredTangibleGains?.filter(g => g.active).map(g => g.name)) || globalConfig?.tangibleGainTypes || []).map(t => <option key={t} value={t}>{t}</option>)}
+                                          {((globalConfig?.structuredTangibleGains?.filter(g => g.active).map(g => g.name)) || globalConfig?.tangibleGainTypes || []).map((t, tIdx) => <option key={`${t}-${tIdx}`} value={t}>{t}</option>)}
                                         </select>
                                       </div>
                                       <div className="space-y-2">
@@ -2224,7 +2224,7 @@ export default function PDCAEditor({
                                           className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground text-xs"
                                         >
                                           <option value="">Selecione...</option>
-                                          {((globalConfig?.structuredIntangibleGains?.filter(g => g.active).map(g => g.name)) || globalConfig?.intangibleGainTypes || []).map(t => <option key={t} value={t}>{t}</option>)}
+                                          {((globalConfig?.structuredIntangibleGains?.filter(g => g.active).map(g => g.name)) || globalConfig?.intangibleGainTypes || []).map((t, tIdx) => <option key={`${t}-${tIdx}`} value={t}>{t}</option>)}
                                         </select>
                                       </div>
                                       <div className="space-y-2 md:col-span-1">
@@ -3510,11 +3510,11 @@ export default function PDCAEditor({
                             </div>
                             <ReportField label="Método Utilizado" value={cycle.plan?.rootCauseAnalysis?.type?.toUpperCase() || 'N/A'} />
                             
-                            <div className="mt-6 pt-6 border-t border-slate-100">
+                            <div className="mt-6 pt-6 border-t border-slate-100 overflow-x-auto no-scrollbar">
                               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Plano de Ação (5W2H)</p>
-                              <div className="space-y-4">
+                              <div className="space-y-4 min-w-[600px]">
                                 {(cycle.plan?.actionPlan || []).filter(item => item.status !== 'Cancelado' && item.ativo !== false).map((item) => (
-                                  <div key={item.id} className="grid grid-cols-2 md:grid-cols-6 gap-4 text-[10px] p-3 bg-slate-50 rounded-xl">
+                                  <div key={item.id} className="grid grid-cols-6 gap-4 text-[10px] p-3 bg-slate-50 rounded-xl">
                                     <div><p className="font-black text-slate-400 uppercase">O que</p><p className="font-bold text-slate-700">{item.what}</p></div>
                                     <div><p className="font-black text-slate-400 uppercase">Por que</p><p className="font-bold text-slate-700">{item.why}</p></div>
                                     <div><p className="font-black text-slate-400 uppercase">Onde</p><p className="font-bold text-slate-700">{item.where}</p></div>
@@ -3939,13 +3939,13 @@ function StatCard({ title, value, icon, color }: { title: string, value: number,
   };
 
   return (
-    <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-6">
-      <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center", colors[color])}>
-        {React.cloneElement(icon as React.ReactElement, { size: 28 })}
+    <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4 md:gap-6">
+      <div className={cn("w-12 h-12 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center shrink-0", colors[color])}>
+        {React.cloneElement(icon as React.ReactElement, { size: 24 })}
       </div>
-      <div>
-        <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{title}</p>
-        <p className="text-3xl font-black text-slate-900 mt-1">{value}</p>
+      <div className="min-w-0">
+        <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest truncate">{title}</p>
+        <p className="text-2xl md:text-3xl font-black text-slate-900 mt-0.5 md:mt-1">{value}</p>
       </div>
     </div>
   );

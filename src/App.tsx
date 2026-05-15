@@ -42,7 +42,8 @@ import {
   History,
   Download,
   Sun,
-  Moon
+  Moon,
+  Menu
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -217,6 +218,7 @@ export default function App() {
   const [activeView, setActiveView] = useState<'kanban' | 'settings' | 'dashboard' | 'actions' | 'home' | 'innovation'>('home');
   const [mode, setMode] = useState<'processos' | 'inovacao' | null>(localStorage.getItem('flowprocess_mode') as any || null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [operationalActions, setOperationalActions] = useState<OperationalAction[]>([]);
   const [innovationProjects, setInnovationProjects] = useState<InnovationProject[]>([]);
   const [innovationConfig, setInnovationConfig] = useState<InnovationConfig>({ technologies: [] });
@@ -957,7 +959,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-theme-background text-theme-foreground font-sans transition-colors duration-300">
-        {/* Theme Toggle Floating */}
+        {/* Theme Toggle Floating and Mobile Menu */}
         <div className="fixed top-4 right-4 z-[60] flex items-center gap-3">
           <button 
             onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
@@ -970,12 +972,34 @@ export default function App() {
               <Sun size={20} className="group-hover:rotate-90 transition-transform text-amber-400" />
             )}
           </button>
+          
+          <button 
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="lg:hidden p-3 bg-theme-card border border-theme-border rounded-2xl shadow-xl text-slate-400 hover:text-indigo-600 transition-all active:scale-95"
+            title="Menu"
+          >
+            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
         </div>
+
+        {/* Sidebar Overlay for Mobile */}
+        <AnimatePresence>
+          {isMobileMenuOpen && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 lg:hidden"
+            />
+          )}
+        </AnimatePresence>
 
         {/* Sidebar */}
         <aside className={cn(
-          "fixed left-0 top-0 h-full bg-theme-card border-r border-theme-border z-50 hidden lg:flex flex-col transition-all duration-300",
-          isSidebarCollapsed ? "w-20" : "w-64"
+          "fixed left-0 top-0 h-full bg-theme-card border-r border-theme-border flex flex-col transition-all duration-300 z-50",
+          isSidebarCollapsed ? "w-20" : "w-64",
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
         )}>
           <div className="p-4 border-b border-theme-border flex flex-col items-center gap-4 shrink-0">
             <div className="flex items-center justify-between w-full min-w-0">
@@ -1020,6 +1044,7 @@ export default function App() {
                     setActiveView('dashboard');
                     setSelectedProjectId(null);
                     setHasChanges(false);
+                    setIsMobileMenuOpen(false);
                   })}
                   icon={<LayoutDashboard size={20} />}
                   label="Dashboard"
@@ -1031,6 +1056,7 @@ export default function App() {
                     setActiveView('kanban');
                     setSelectedProjectId(null);
                     setHasChanges(false);
+                    setIsMobileMenuOpen(false);
                   })}
                   icon={<GitBranch size={20} />}
                   label="Projetos"
@@ -1042,6 +1068,7 @@ export default function App() {
                     setActiveView('actions');
                     setSelectedProjectId(null);
                     setHasChanges(false);
+                    setIsMobileMenuOpen(false);
                   })}
                   icon={<History size={20} />}
                   label="Histórico de Ações"
@@ -1058,6 +1085,7 @@ export default function App() {
                     setActiveView('innovation_dashboard');
                     setSelectedProjectId(null);
                     setHasChanges(false);
+                    setIsMobileMenuOpen(false);
                   })}
                   icon={<LayoutDashboard size={20} />}
                   label="Dashboard"
@@ -1069,6 +1097,7 @@ export default function App() {
                     setActiveView('innovation');
                     setSelectedProjectId(null);
                     setHasChanges(false);
+                    setIsMobileMenuOpen(false);
                   })}
                   icon={<Target size={20} />}
                   label="Projetos"
@@ -1082,6 +1111,7 @@ export default function App() {
               onClick={() => handleNavigation(() => {
                 setActiveView('settings');
                 setHasChanges(false);
+                setIsMobileMenuOpen(false);
               })}
               icon={<Settings size={20} />}
               label="Configurações"
@@ -1140,21 +1170,21 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 1.05 }}
-                className="flex-1 flex flex-col items-center justify-center"
+                className="flex-1 flex flex-col items-center justify-center p-4 w-full"
               >
-                 <div className="flex flex-col items-center gap-8 text-center animate-in fade-in zoom-in duration-700">
-                    <div className="bg-white p-10 rounded-[2.5rem] shadow-2xl shadow-indigo-100/40 border border-slate-100">
+                 <div className="flex flex-col items-center gap-6 md:gap-8 text-center animate-in fade-in zoom-in duration-700 w-full max-w-sm md:max-w-none">
+                    <div className="bg-white p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] shadow-2xl shadow-indigo-100/40 border border-slate-100 w-full max-w-[300px] md:max-w-none">
                        <img 
                          src="/assets/logo-flowprocess.svg" 
                          alt="Logo" 
-                         className="h-32 w-auto object-contain"
+                         className="h-20 md:h-32 w-auto mx-auto object-contain"
                          referrerPolicy="no-referrer"
                        />
                     </div>
                     <div className="space-y-4">
-                      <h2 className="text-5xl font-black text-[#003489] tracking-tighter" translate="no">FlowProcess</h2>
-                      <div className="h-1.5 w-24 bg-indigo-600 mx-auto rounded-full" />
-                      <p className="text-slate-400 text-lg font-medium tracking-wide">
+                      <h2 className="text-3xl md:text-5xl font-black text-[#003489] tracking-tighter" translate="no">FlowProcess</h2>
+                      <div className="h-1.5 w-16 md:w-24 bg-indigo-600 mx-auto rounded-full" />
+                      <p className="text-slate-400 text-sm md:text-lg font-medium tracking-wide">
                         {mode === 'inovacao' ? 'Gestão Inteligente de Inovações' : 'Gestão Inteligente de Processos'}
                       </p>
                     </div>
@@ -1583,7 +1613,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 overflow-x-auto pb-4 min-h-[600px] custom-scrollbar">
+      <div className="flex flex-col lg:flex-row gap-6 overflow-x-auto pb-8 custom-scrollbar">
         {columns.map(col => {
           const colId = typeof col === 'string' ? col : col.id;
           const colTitle = typeof col === 'string' ? col : col.name;
@@ -1909,34 +1939,34 @@ function ProjectDetailView({
         className="flex flex-col h-full bg-theme-background"
       >
         {/* Subtask Header */}
-        <div className="bg-theme-card border-b border-theme-border px-8 py-4 flex items-center justify-between sticky top-0 z-10 transition-colors">
-          <div className="flex items-center gap-4">
+        <div className="bg-theme-card border-b border-theme-border px-4 lg:px-8 py-4 flex flex-col md:flex-row md:items-center justify-between sticky top-0 z-10 transition-colors gap-4">
+          <div className="flex items-center gap-2 lg:gap-4 flex-1">
             <button 
               onClick={() => {
                 setSelectedSubtaskId(null);
                 setActiveTab('scope');
               }}
-              className="p-2 hover:bg-theme-background rounded-lg transition-colors text-slate-400 flex items-center gap-2 font-bold text-sm"
+              className="p-2 hover:bg-theme-background rounded-lg transition-colors text-slate-400 flex items-center gap-2 font-bold text-[10px] md:text-sm shrink-0"
             >
               <ChevronRight size={20} className="rotate-180" />
-              Voltar ao Escopo
+              <span className="hidden sm:inline">Voltar ao Escopo</span>
             </button>
-            <div className="h-6 w-px bg-theme-border" />
-            <div>
-              <h3 className="text-lg font-bold text-theme-foreground">
-                Execução: {selectedSubtask.title}
+            <div className="h-6 w-px bg-theme-border hidden sm:block" />
+            <div className="min-w-0">
+              <h3 className="text-sm md:text-lg font-bold text-theme-foreground truncate">
+                {selectedSubtask.title}
               </h3>
-              <p className="text-xs text-slate-500 font-medium font-sans">Projeto: {project.scope.title}</p>
+              <p className="text-[10px] text-slate-500 font-medium truncate">Projeto: {project.scope.title}</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
-            <div className="flex bg-theme-background p-1 rounded-xl border border-theme-border">
+          <div className="flex items-center justify-between md:justify-end gap-2 lg:gap-4">
+            <div className="flex bg-theme-background p-1 rounded-xl border border-theme-border overflow-x-auto">
               <TabButton 
                 active={activeTab === 'mapping'} 
                 onClick={() => setActiveTab('mapping')} 
                 icon={<GitBranch size={16} />} 
-                label="Mapeamento" 
+                label="Map" 
               />
               <TabButton 
                 active={activeTab === 'pdca'} 
@@ -2223,16 +2253,16 @@ function ScopeTab({
   };
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-12">
+    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-8 md:space-y-12">
       {/* 1. INFORMAÇÕES GERAIS */}
-      <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
-        <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+      <section className="bg-white p-4 md:p-8 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm space-y-6 md:space-y-8">
+        <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl md:rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
             <FileText size={20} />
           </div>
           Informações Gerais
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
           <div className="space-y-6">
             <FormField 
               label="Título do Projeto" 
@@ -2284,14 +2314,14 @@ function ScopeTab({
       </section>
 
       {/* 2. CONTEXTO DO PROJETO */}
-      <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
-        <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+      <section className="bg-white p-4 md:p-8 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm space-y-6 md:space-y-8">
+        <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl md:rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
             <Target size={20} />
           </div>
           Contexto do Projeto
         </h3>
-        <div className="space-y-8">
+        <div className="space-y-6 md:space-y-8">
           <FormField 
             label="Descrição do Problema" 
             value={project.scope.problemDescription} 
@@ -2310,14 +2340,14 @@ function ScopeTab({
       </section>
 
       {/* 3. ESTRUTURA DO PROJETO */}
-      <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
-        <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+      <section className="bg-white p-4 md:p-8 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm space-y-6 md:space-y-8">
+        <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl md:rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
             <Briefcase size={20} />
           </div>
           Estrutura do Projeto
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
           <div className="space-y-8">
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase mb-3 block ml-1">Setores Envolvidos</label>
@@ -2382,7 +2412,7 @@ function ScopeTab({
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-8">
+          <div className="grid grid-cols-1 gap-6 md:gap-8">
             <FormField 
               label="Data Início" 
               value={project.scope.startDate} 
@@ -2400,9 +2430,9 @@ function ScopeTab({
       </section>
 
       {/* 4. ODS */}
-      <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
-        <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+      <section className="bg-white p-4 md:p-8 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm space-y-6 md:space-y-8">
+        <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl md:rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
             <Globe size={20} />
           </div>
           ODS (Objetivos de Desenvolvimento Sustentável)
@@ -2417,19 +2447,19 @@ function ScopeTab({
       </section>
 
       {/* 5. ESG */}
-      <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
-        <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+      <section className="bg-white p-4 md:p-8 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm space-y-6 md:space-y-8">
+        <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl md:rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
             <Leaf size={20} />
           </div>
           ESG (Environmental, Social and Governance)
         </h3>
         <div className="grid grid-cols-1 gap-8">
-          <div className="flex gap-4 items-start">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 mt-6">
+          <div className="flex flex-col sm:flex-row gap-4 items-start">
+            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 mt-0 sm:mt-6">
               <Leaf size={24} />
             </div>
-            <div className="flex-1">
+            <div className="flex-1 w-full">
               <FormField 
                 label="E – Environmental" 
                 value={project.scope.esgEnvironmental || ''} 
@@ -2439,11 +2469,11 @@ function ScopeTab({
               />
             </div>
           </div>
-          <div className="flex gap-4 items-start">
-            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 mt-6">
+          <div className="flex flex-col sm:flex-row gap-4 items-start">
+            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 mt-0 sm:mt-6">
               <Heart size={24} />
             </div>
-            <div className="flex-1">
+            <div className="flex-1 w-full">
               <FormField 
                 label="S – Social" 
                 value={project.scope.esgSocial || ''} 
@@ -2453,11 +2483,11 @@ function ScopeTab({
               />
             </div>
           </div>
-          <div className="flex gap-4 items-start">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mt-6">
+          <div className="flex flex-col sm:flex-row gap-4 items-start">
+            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mt-0 sm:mt-6">
               <ShieldCheck size={24} />
             </div>
-            <div className="flex-1">
+            <div className="flex-1 w-full">
               <FormField 
                 label="G – Governance" 
                 value={project.scope.esgGovernance || ''} 
@@ -3283,8 +3313,8 @@ const ConfigSection = ({ title, description, items, newValue, setNewValue, field
       </button>
     </div>
     <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-      {items.map(item => (
-        <div key={item} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 group hover:border-indigo-200 transition-all">
+      {items.map((item, idx) => (
+        <div key={`${item}-${idx}`} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 group hover:border-indigo-200 transition-all">
           <span className="text-sm font-medium text-slate-700">{item}</span>
           <button 
             onClick={() => onUpdate({ [field]: items.filter(i => i !== item) })}
@@ -3554,8 +3584,8 @@ function GainTypesTab({ config }: { config: GlobalConfig }) {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-wrap gap-1">
-                          {item.units && item.units.length > 0 ? item.units.map(u => (
-                            <span key={u} className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">{u}</span>
+                          {item.units && item.units.length > 0 ? item.units.map((u, uIdx) => (
+                            <span key={`${u}-${uIdx}`} className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">{u}</span>
                           )) : <span className="text-[10px] text-slate-400">Nenhuma</span>}
                         </div>
                       </td>
@@ -3782,11 +3812,11 @@ function GainTypesTab({ config }: { config: GlobalConfig }) {
                   <div className="space-y-4">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Unidades de medida vinculadas</label>
                     <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
-                      {(config.structuredUnits?.filter(u => u.active).map(u => u.symbol) || config.units || []).map(u => {
+                      {(config.structuredUnits?.filter(u => u.active).map(u => u.symbol) || config.units || []).map((u, uIdx) => {
                         const isSelected = selectedUnits.includes(u);
                         return (
                           <label 
-                            key={u} 
+                            key={`${u}-${uIdx}`} 
                             className={cn(
                               "flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer",
                               isSelected 

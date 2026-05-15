@@ -306,7 +306,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
             </div>
 
             {/* 1. Visão Geral e Impacto Financeiro */}
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
               <StatCard 
                 title="Ganho Geral" 
                 value={stats.totalGainValue} 
@@ -340,14 +340,14 @@ export default function DashboardView({ projects, users, actions, onProjectClick
               />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 w-full">
               {/* 2. Impacto de Ganho por Projeto */}
-              <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
+              <div className="bg-theme-card p-4 sm:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-theme-border shadow-sm space-y-6 overflow-hidden">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Ganhos por Projeto</h3>
+                  <h3 className="text-base md:text-lg font-black text-theme-foreground uppercase tracking-tight">Ganhos por Projeto</h3>
                   <TrendingUp size={20} className="text-emerald-500" />
                 </div>
-                <div className="h-[300px] w-full">
+                <div className="h-[250px] md:h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={stats.projectGains} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
@@ -626,27 +626,26 @@ function StatCard({
     <motion.div 
       whileHover={{ y: -3 }}
       className={cn(
-        "p-4 rounded-[1.5rem] border shadow-sm flex items-center justify-between gap-3 transition-all min-h-[80px] min-w-0",
+        "p-4 md:p-5 rounded-2xl md:rounded-3xl border shadow-sm flex items-center justify-between gap-4 transition-all min-h-[80px] md:min-h-[100px] min-w-0",
         highlight 
           ? "bg-slate-900 dark:bg-black border-slate-800 dark:border-slate-800 text-white" 
           : "bg-theme-card border-theme-border text-theme-foreground"
       )}
     >
-      <div className="flex items-center gap-3 min-w-0 flex-1">
+      <div className="flex items-center gap-4 min-w-0 flex-1">
         <div className={cn(
-          "w-10 h-10 rounded-xl flex items-center justify-center text-white shadow-md shrink-0", 
+          "w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center text-white shadow-md shrink-0", 
           color
         )}>
           {icon}
         </div>
         <div className="min-w-0 flex-1 overflow-hidden">
           <p className={cn(
-            "text-[9px] font-black uppercase tracking-widest text-slate-400 truncate"
+            "text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400 truncate"
           )} title={title}>{title}</p>
           <h4 
-            className="font-black tracking-tight"
+            className="font-black tracking-tight text-xl md:text-2xl lg:text-3xl"
             style={{ 
-              fontSize: 'clamp(14px, 1.5vw, 20px)',
               whiteSpace: 'nowrap',
               overflow: 'hidden',
               textOverflow: 'ellipsis'
@@ -658,7 +657,7 @@ function StatCard({
         </div>
       </div>
       {highlight && (
-        <div className="shrink-0">
+        <div className="shrink-0 hidden md:block">
           <ArrowUpRight size={18} className="text-emerald-400 opacity-50" />
         </div>
       )}

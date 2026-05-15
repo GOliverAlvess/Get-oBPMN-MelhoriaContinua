@@ -295,7 +295,7 @@ export default function InnovationView({
     }
 
     return (
-      <div className="flex flex-col gap-6 h-screen -mt-4 bg-theme-background transition-colors duration-300">
+      <div className="flex flex-col gap-6 min-h-full bg-theme-background transition-colors duration-300">
         <div className="flex items-center justify-between px-8 py-4 bg-theme-card border-b border-theme-border shadow-sm">
           <div className="flex items-center gap-4">
             <button 

@@ -107,7 +107,7 @@ export interface ExecutionLog {
   type: 'update' | 'completion' | 'start';
 }
 
-export type ActionPlanType = 'Processual' | 'Operacional' | 'Inovação';
+export type ActionPlanType = 'Processual' | 'Operacional';
 
 export interface ActionPlanItem {
   id: string;
@@ -121,7 +121,6 @@ export interface ActionPlanItem {
   how: string;
   howMuch: string;
   actionType?: ActionPlanType; // New field
-  innovationProjectId?: string; // New field
   
   // DO
   status: 'Pendente' | 'Em andamento' | 'Concluído' | 'Cancelado';
@@ -145,20 +144,8 @@ export interface ActionPlanItem {
   finalProblemStatus?: 'Resolvido' | 'Não resolvido';
   finalAction?: 'Padronizar processo' | 'Fazer nova análise';
   standardizationModels?: ('POP' | 'ITO' | 'Painel de controle')[];
-  innovationLogs?: InnovationLog[];
 }
 
-export interface InnovationLog {
-  id: string;
-  date: string;
-  previousStatus?: InnovationStatus | '';
-  newStatus?: InnovationStatus;
-  action?: string;
-  detalhes?: string;
-  cardTitulo?: string;
-  responsible: string;
-  origin: 'inovacao';
-}
 
 export type PDCAStatus = 'Ativo' | 'Concluído';
 export type PDCAPriority = 'Baixa' | 'Média' | 'Alta' | 'Crítica';
@@ -246,7 +233,6 @@ export interface User {
   sector?: string;
   avatar?: string;
   profile?: UserProfile;
-  module?: 'processos' | 'inovacao';
 }
 
 export interface OperationalAction {
@@ -274,20 +260,6 @@ export interface ReportLog {
   reportType: 'PDCA' | 'Histórico de Ações' | 'Relatório Completo';
 }
 
-export type InnovationStatus = 'backlog' | 'análise' | 'planejamento' | 'desenvolvimento' | 'teste' | 'concluído';
-export type InnovationComplexity = 'Baixa' | 'Média' | 'Alta' | 'Muito Alta';
-export type InnovationSolutionType = 'RPA' | 'Sistema' | 'Integração' | 'BI' | 'Implantação de tecnologias';
-
-export interface InnovationTeamLogEntry {
-  id: string;
-  date: string;
-  type: 'Decisão' | 'Hipótese' | 'Teste' | 'Aprendizado' | 'Risco' | 'Ajuste';
-  content: string;
-  authorId: string;
-}
-
-export type InnovationActionType = 'Alinhamento' | 'Ajustes' | 'Decisão' | 'Testes' | 'Implementação';
-
 export interface TangibleGain {
   id: string;
   type: string;
@@ -305,80 +277,6 @@ export interface IntangibleGain {
 export interface GainsStructure {
   tangible: TangibleGain[];
   intangible: IntangibleGain[];
-}
-
-export interface InnovationAction {
-  id: string;
-  type: InnovationActionType;
-  priority: 'Baixa' | 'Média' | 'Alta';
-  description: string;
-  responsibleId: string;
-  deadline: string;
-  status: 'Pendente' | 'Em andamento' | 'Concluído';
-  responseDescription?: string;
-  completionDate?: string;
-}
-
-export interface InnovationArtifact {
-  id: string;
-  name: string;
-  url: string;
-  type: 'link' | 'file';
-  addedAt: string;
-}
-
-export interface InnovationProject {
-  id: string;
-  projectId: string; 
-  pdcaId: string;
-  actionId: string;
-  title: string;
-  description?: string;
-  type: InnovationSolutionType | '';
-  status: InnovationStatus;
-  complexity: InnovationComplexity | '';
-  responsibleId: string;
-  responsibleName?: string;
-  participantIds?: string[];
-  deleted?: boolean;
-  deletedAt?: string;
-  deletedBy?: string;
-  createdAt: string;
-  updatedAt: string;
-  projectName: string;
-  processName: string;
-  subtaskTitle?: string;
-  priority?: ProjectPriority;
-  deadline?: string;
-  
-  // New fields for detail screen
-  technicalScope?: {
-    whatWillBeDone: string;
-    technologies: string[];
-    assumptions: string;
-    restrictions: string;
-  };
-  developmentActions?: InnovationAction[];
-  artifacts?: InnovationArtifact[];
-  production?: {
-    document?: { name: string; url: string };
-    technicalDeliverable?: { name: string; type: string; url: string };
-    externalLinks?: {
-      repositories: { id: string; name: string; url: string }[];
-      externalTools: { id: string; name: string; url: string }[];
-    };
-    refinedGains?: GainsStructure;
-  };
-  progress?: number;
-  innovationType?: 'Melhoria de Sistema/App' | 'Criação de Sistema/App' | 'RPA' | 'Automação / Tecnologia';
-  estimatedGain?: number;
-  realGain?: number;
-  sector?: string;
-  completionDate?: string;
-}
-
-export interface InnovationConfig {
-  technologies: string[];
 }
 
 export interface TangibleGainType {

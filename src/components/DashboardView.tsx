@@ -106,7 +106,8 @@ export default function DashboardView({ projects, users, actions, onProjectClick
           
           const cycleGain = cycle.plan.actionPlan.reduce((s, action) => {
             if (action.finalProblemStatus === 'Resolvido') {
-              return s + (action.gainImpact || 0);
+              const tangibleSum = (action.realGains?.tangible || []).reduce((acc, t) => acc + (t.value || 0), 0);
+              return s + tangibleSum;
             }
             return s;
           }, 0);

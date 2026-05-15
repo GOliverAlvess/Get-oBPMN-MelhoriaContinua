@@ -1,5 +1,5 @@
 {
-  "name": "FlowProcess - Gestão de Processos e Inovações",
-  "description": "Plataforma integrada para gestão de processos corporativos, mapeamento BPMN, melhoria contínua (PDCA) e projetos de inovações.",
+  "name": "FlowProcess - Gestão de Processos",
+  "description": "Plataforma integrada para gestão de processos corporativos, mapeamento BPMN e melhoria contínua (PDCA).",
   "requestFramePermissions": []
 }

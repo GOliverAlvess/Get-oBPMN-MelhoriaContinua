@@ -33,7 +33,7 @@ import html2pdf from 'html2pdf.js';
 import pdfMake from 'pdfmake/build/pdfmake';
 import * as pdfFonts from 'pdfmake/build/vfs_fonts';
 
-import { Project, Subtask, PDCACycle, ParetoItem, ActionPlanItem, PDCAStatus, PDCAPriority, InnovationProject, ActionPlanType, GainsStructure, GlobalConfig } from '../types';
+import { Project, Subtask, PDCACycle, ParetoItem, ActionPlanItem, PDCAStatus, PDCAPriority, ActionPlanType, GainsStructure, GlobalConfig } from '../types';
 import ParetoDiagram from './ParetoDiagram';
 import GainsEditor from './GainsEditor';
 import { cn, isValidUrl, formatUrl, exportarCSVPadrao } from '../lib/utils';
@@ -64,10 +64,6 @@ export default function PDCAEditor({
   onUpdateSubtask, 
   onBack, 
   defaultTaskId,
-  onAddInnovationProject,
-  onUpdateInnovationProject,
-  onDeleteInnovationProject,
-  innovationProjects = [],
   globalConfig
 }: { 
   project: Project, 
@@ -75,10 +71,6 @@ export default function PDCAEditor({
   onUpdateSubtask: (s: Subtask) => void,
   onBack: () => void,
   defaultTaskId?: string,
-  onAddInnovationProject?: (data: any) => Promise<string>,
-  onUpdateInnovationProject?: (id: string, updates: Partial<InnovationProject>) => Promise<void>,
-  onDeleteInnovationProject?: (id: string) => Promise<void>,
-  innovationProjects?: InnovationProject[],
   globalConfig?: GlobalConfig
 }) {
   const [activeCycleId, setActiveCycleId] = useState<string | null>(null);
@@ -93,7 +85,6 @@ export default function PDCAEditor({
   const [showActConfirmation, setShowActConfirmation] = useState(false);
 
   const [confirmingLog, setConfirmingLog] = useState<{ id: string, updates: any, obsInputId: string } | null>(null);
-  const pendingInnovationCreations = useRef<Set<string>>(new Set());
 
   // Filter cycles if defaultTaskId is provided
   const cycles = useMemo(() => {
@@ -117,13 +108,9 @@ export default function PDCAEditor({
   const isDoPhaseValid = useMemo(() => {
     if (!activeCycle || activeCycle.plan.actionPlan.length === 0) return false;
     return activeCycle.plan.actionPlan.some(item => {
-      if (item.actionType === 'Inovação') {
-        const innovationProject = innovationProjects.find(ip => ip.id === item.innovationProjectId);
-        return innovationProject?.status === 'concluído';
-      }
       return item.status === 'Concluído';
     });
-  }, [activeCycle, innovationProjects]);
+  }, [activeCycle]);
 
   const isCheckPhaseValid = useMemo(() => {
     if (!activeCycle) return false;
@@ -158,9 +145,7 @@ export default function PDCAEditor({
       let p = 25; // PLAN is done if item exists in a cycle with PLAN valid
 
       // DO progress
-      const isDoDone = item.actionType === 'Inovação' 
-        ? innovationProjects.find(ip => ip.id === item.innovationProjectId)?.status === 'concluído'
-        : item.status === 'Concluído';
+      const isDoDone = item.status === 'Concluído';
       
       if (isDoDone) {
         p += 25;
@@ -172,7 +157,7 @@ export default function PDCAEditor({
           const isActDone = !!item.finalProblemStatus && !!item.finalAction && (item.finalAction !== 'Padronizar processo' || (item.standardizationModels || []).length > 0);
           if (isActDone) p += 25;
         }
-      } else if (item.status === 'Em andamento' || (item.actionType === 'Inovação' && item.innovationProjectId)) {
+      } else if (item.status === 'Em andamento') {
         p += 10; // Partial DO
       }
 
@@ -181,7 +166,7 @@ export default function PDCAEditor({
 
     const averageProgress = itemsProgress.reduce((acc, p) => acc + p, 0) / itemsProgress.length;
     return Math.round(averageProgress);
-  }, [activeCycle, isPlanPhaseValid, innovationProjects]);
+  }, [activeCycle, isPlanPhaseValid]);
 
   // Sync progress with subtask overall progress
   useEffect(() => {
@@ -262,18 +247,6 @@ export default function PDCAEditor({
     const { priorityCauses } = activeCycle.plan.rootCauseAnalysis;
     return priorityCauses && priorityCauses.length > 0;
   }, [activeCycle]);
-
-  const isInnovationBlocked = useMemo(() => {
-    if (!activeCycle) return false;
-    // We only block if there is AT LEAST ONE innovation action that is not 'concluído'
-    const innovationActions = activeCycle.plan.actionPlan.filter(item => item.actionType === 'Inovação');
-    if (innovationActions.length === 0) return false;
-    
-    return innovationActions.some(item => {
-      const innovationProject = innovationProjects.find(ip => ip.id === item.innovationProjectId);
-      return !innovationProject || innovationProject.status !== 'concluído';
-    });
-  }, [activeCycle, innovationProjects]);
 
   const handlePhaseChange = (newPhase: typeof activePhase) => {
     const phases: (typeof activePhase)[] = ['PLAN', 'DO', 'CHECK', 'ACT', 'REPORT'];
@@ -508,14 +481,12 @@ export default function PDCAEditor({
       // Cálculos para as novas seções
       const validActions = (activeCycle.plan.actionPlan || []).filter(item => item.status !== 'Cancelado' && item.ativo !== false);
       
-      // Map execution status considering innovation projects
+      // Map execution status
       const mappedActions = validActions.map(action => {
-        const isInnov = action.actionType === 'Inovação' && action.innovationProjectId;
-        const innovProj = isInnov ? innovationProjects.find(ip => ip.id === action.innovationProjectId) : null;
         return {
           ...action,
-          displayStatus: innovProj ? translateStatus(innovProj.status) : translateStatus(action.status),
-          effectiveStatus: innovProj ? (innovProj.status === 'concluído' ? 'Concluído' : 'Em andamento') : action.status
+          displayStatus: translateStatus(action.status),
+          effectiveStatus: action.status
         };
       });
 
@@ -1026,15 +997,6 @@ export default function PDCAEditor({
   const updatePlan = (newPlan: any) => {
     if (!activeCycle) return;
     updateCycle({ plan: { ...activeCycle.plan, ...newPlan } });
-    
-    // Sync improvementPercentage with Innovation projects if it changed
-    if (newPlan.impact && newPlan.impact.improvementPercentage !== undefined && onUpdateInnovationProject) {
-      const percentage = newPlan.impact.improvementPercentage;
-      const relatedProjects = innovationProjects.filter(p => p.pdcaId === activeCycle.id);
-      relatedProjects.forEach(project => {
-        onUpdateInnovationProject(project.id, { estimatedGain: percentage });
-      });
-    }
   };
 
   const renderIshikawa = () => {
@@ -1249,19 +1211,8 @@ export default function PDCAEditor({
               <option value="">Selecione...</option>
               <option value="Processual">Processual</option>
               <option value="Operacional">Operacional</option>
-              <option value="Inovação">Inovação</option>
             </select>
           </div>
-
-          {item.actionType === 'Inovação' && (
-            <motion.div initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="flex items-center gap-3 text-emerald-600 bg-emerald-50 px-6 py-4 rounded-2xl border border-emerald-100 self-end">
-              <GitBranch size={18} className="shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-widest leading-tight">Módulo Inovação</p>
-                <p className="text-xs font-bold italic truncate">Projeto a ser criado na execução</p>
-              </div>
-            </motion.div>
-          )}
         </div>
 
         {item.actionType ? (
@@ -2318,147 +2269,133 @@ export default function PDCAEditor({
                                   </button>
                                 </div>
 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
-                                  <div className="space-y-1">
+                                <div className="space-y-6">
+                                  <div className="max-w-md space-y-1">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Tipo do Plano de Ação (OBRIGATÓRIO)</label>
                                     <select 
                                       value={item.actionType || ''} 
                                       onChange={(e) => updateActionPlan(item.id, { actionType: e.target.value as any })}
                                       className={cn(
-                                        "w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold transition-all",
+                                        "w-full p-4 border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold transition-all",
                                         !item.actionType ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-slate-50 border-slate-100 text-slate-700"
                                       )}
                                     >
                                       <option value="">Selecione o tipo...</option>
                                       <option value="Processual">Processual</option>
                                       <option value="Operacional">Operacional</option>
-                                      <option value="Inovação">Inovação</option>
                                     </select>
                                   </div>
 
-                                  {item.actionType === 'Inovação' && (
+                                  {/* 5W2H Section - Full Width */}
+                                  {item.actionType ? (
                                     <motion.div 
-                                      initial={{ opacity: 0, x: -10 }}
-                                      animate={{ opacity: 1, x: 0 }}
-                                      className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-3 rounded-xl border border-emerald-100 h-[46px]"
+                                      initial={{ opacity: 0, height: 0 }}
+                                      animate={{ opacity: 1, height: 'auto' }}
+                                      className="space-y-6 pt-6 border-t border-slate-100 w-full"
                                     >
-                                      <GitBranch size={16} className="shrink-0" />
-                                      <span className="text-[10px] font-black uppercase tracking-widest italic">Encaminhado para Inovação</span>
+                                      <div className="grid grid-cols-1 md:grid-cols-6 gap-6 w-full px-1">
+                                        {/* Row 1: What & Why */}
+                                        <div className="md:col-span-3 space-y-1 min-w-0">
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">What (O que será feito?)</label>
+                                          <textarea 
+                                            rows={3}
+                                            value={item.what || ''} 
+                                            placeholder="Descreva o que será feito com detalhes..."
+                                            onChange={(e) => updateActionPlan(item.id, { what: e.target.value }, true)}
+                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 resize-none min-h-[100px] box-border"
+                                          />
+                                        </div>
+                                        <div className="md:col-span-3 space-y-1 min-w-0">
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Why (Por que será feito?)</label>
+                                          <textarea 
+                                            rows={3}
+                                            value={item.why || ''} 
+                                            placeholder="Por que essa ação é necessária?"
+                                            onChange={(e) => updateActionPlan(item.id, { why: e.target.value }, true)}
+                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 resize-none min-h-[100px] box-border"
+                                          />
+                                        </div>
+
+                                        {/* Row 2: Where, When, Who */}
+                                        <div className="md:col-span-2 space-y-1 min-w-0">
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Where (Onde?)</label>
+                                          <input 
+                                            value={item.where || ''} 
+                                            placeholder="Local da execução"
+                                            onChange={(e) => updateActionPlan(item.id, { where: e.target.value }, true)}
+                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
+                                          />
+                                        </div>
+                                        <div className="md:col-span-2 space-y-1 min-w-0">
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">When (Quando?)</label>
+                                          <input 
+                                            type="date"
+                                            value={item.when || ''} 
+                                            onChange={(e) => updateActionPlan(item.id, { when: e.target.value }, true)}
+                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 h-[54px] box-border"
+                                          />
+                                        </div>
+                                        <div className="md:col-span-2 space-y-1 min-w-0">
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Who (Quem)</label>
+                                          <input 
+                                            value={item.who || ''} 
+                                            placeholder="Responsável"
+                                            onChange={(e) => updateActionPlan(item.id, { who: e.target.value }, true)}
+                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
+                                          />
+                                        </div>
+
+                                        {/* Row 3: How (Main focus) */}
+                                        <div className="md:col-span-6 space-y-1 min-w-0">
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">How (Como será feito?)</label>
+                                          <textarea 
+                                            rows={2}
+                                            value={item.how || ''} 
+                                            placeholder="Detalhe o passo a passo da execução..."
+                                            onChange={(e) => updateActionPlan(item.id, { how: e.target.value }, true)}
+                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 resize-none min-h-[80px] box-border"
+                                          />
+                                        </div>
+
+                                        {/* Row 4: How much, Sector */}
+                                        <div className="md:col-span-3 space-y-1 min-w-0">
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">How much (Custo)</label>
+                                          <input 
+                                            value={item.howMuch || ''} 
+                                            placeholder="Valor ou recurso necessário"
+                                            onChange={(e) => updateActionPlan(item.id, { howMuch: e.target.value }, true)}
+                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
+                                          />
+                                        </div>
+                                        <div className="md:col-span-3 space-y-1 min-w-0">
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Setor</label>
+                                          <input 
+                                            value={item.sector || ''} 
+                                            placeholder="Área responsável"
+                                            onChange={(e) => updateActionPlan(item.id, { sector: e.target.value }, true)}
+                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
+                                          />
+                                        </div>
+                                      </div>
                                     </motion.div>
+                                  ) : (
+                                    <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 text-center">
+                                      <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">
+                                        Defina o Tipo do Plano acima para liberar o preenchimento do 5W2H
+                                      </p>
+                                    </div>
                                   )}
                                 </div>
-
-                                {/* 5W2H Section - Hidden until type is selected */}
-                                {item.actionType ? (
-                                  <motion.div 
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    className="space-y-6 pt-6 border-t border-slate-100 w-full"
-                                  >
-                                    <div className="grid grid-cols-1 md:grid-cols-6 gap-4 w-full px-1">
-                                      {/* What - Full Width */}
-                                      <div className="md:col-span-6 space-y-1 min-w-0">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">What (O que será feito?)</label>
-                                        <textarea 
-                                          rows={2}
-                                          value={item.what || ''} 
-                                          placeholder="Descreva o que será feito com detalhes..."
-                                          onChange={(e) => updateActionPlan(item.id, { what: e.target.value }, true)}
-                                          onBlur={() => updateActionPlan(item.id, {})}
-                                          className="w-full max-w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 resize-none min-h-[80px] box-border"
-                                        />
-                                      </div>
-
-                                      {/* Why - Full Width */}
-                                      <div className="md:col-span-6 space-y-1 min-w-0">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Why (Por que será feito?)</label>
-                                        <textarea 
-                                          rows={2}
-                                          value={item.why || ''} 
-                                          placeholder="Por que essa ação é necessária?"
-                                          onChange={(e) => updateActionPlan(item.id, { why: e.target.value }, true)}
-                                          onBlur={() => updateActionPlan(item.id, {})}
-                                          className="w-full max-w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 resize-none min-h-[80px] box-border"
-                                        />
-                                      </div>
-
-                                      {/* Where, When, Who - Shared Row */}
-                                      <div className="md:col-span-2 space-y-1 min-w-0">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Where (Onde?)</label>
-                                        <input 
-                                          value={item.where || ''} 
-                                          placeholder="Local da execução"
-                                          onChange={(e) => updateActionPlan(item.id, { where: e.target.value }, true)}
-                                          onBlur={() => updateActionPlan(item.id, {})}
-                                          className="w-full max-w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
-                                        />
-                                      </div>
-                                      <div className="md:col-span-2 space-y-1 min-w-0">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">When (Quando?)</label>
-                                        <input 
-                                          type="date"
-                                          value={item.when || ''} 
-                                          onChange={(e) => updateActionPlan(item.id, { when: e.target.value }, true)}
-                                          onBlur={() => updateActionPlan(item.id, {})}
-                                          className="w-full max-w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 h-[46px] box-border"
-                                        />
-                                      </div>
-                                      <div className="md:col-span-2 space-y-1 min-w-0">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Who (Quem)</label>
-                                        <input 
-                                          value={item.who || ''} 
-                                          placeholder="Nome do responsável"
-                                          onChange={(e) => updateActionPlan(item.id, { who: e.target.value }, true)}
-                                          onBlur={() => updateActionPlan(item.id, {})}
-                                          className="w-full max-w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
-                                        />
-                                      </div>
-
-                                      {/* How - Full Width */}
-                                      <div className="md:col-span-6 space-y-1 min-w-0">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">How (Como será feito?)</label>
-                                        <textarea 
-                                          rows={2}
-                                          value={item.how || ''} 
-                                          placeholder="Como será executada?"
-                                          onChange={(e) => updateActionPlan(item.id, { how: e.target.value }, true)}
-                                          onBlur={() => updateActionPlan(item.id, {})}
-                                          className="w-full max-w-full p-4 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 resize-none min-h-[80px] box-border"
-                                        />
-                                      </div>
-
-                                      {/* How much, Sector - Shared Row */}
-                                      <div className="md:col-span-3 space-y-1 min-w-0">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">How much (Custo)</label>
-                                        <input 
-                                          value={item.howMuch || ''} 
-                                          placeholder="Qual o custo?"
-                                          onChange={(e) => updateActionPlan(item.id, { howMuch: e.target.value }, true)}
-                                          onBlur={() => updateActionPlan(item.id, {})}
-                                          className="w-full max-w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
-                                        />
-                                      </div>
-                                      <div className="md:col-span-3 space-y-1 min-w-0">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Setor</label>
-                                        <input 
-                                          value={item.sector || ''} 
-                                          placeholder="Setor responsável"
-                                          onChange={(e) => updateActionPlan(item.id, { sector: e.target.value }, true)}
-                                          onBlur={() => updateActionPlan(item.id, {})}
-                                          className="w-full max-w-full p-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
-                                        />
-                                      </div>
-                                    </div>
-                                  </motion.div>
-                                ) : (
-                                  <div className="bg-amber-50 p-6 rounded-2xl border border-amber-100 text-center">
-                                    <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">
-                                      Defina o Tipo do Plano acima para liberar o preenchimento do 5W2H
-                                    </p>
-                                  </div>
-                                )}
-                              </div>
-                            ))}
+                            </div>
+                          ))}
 
                             <button 
                               onClick={addActionPlanItem}
@@ -2567,32 +2504,13 @@ export default function PDCAEditor({
                                   </div>
                                   <div className="flex items-center gap-6">
                                     <div className="hidden sm:block">
-                                      {item.actionType === 'Inovação' ? (
-                                        (() => {
-                                          const innovationProject = innovationProjects.find(ip => ip.id === item.innovationProjectId);
-                                          const statusLabel = innovationProject ? innovationProject.status : 'Pendente';
-                                          return (
-                                            <div className="flex flex-col items-end">
-                                              <span className={cn(
-                                                "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
-                                                statusLabel === 'concluído' ? "bg-emerald-100 text-emerald-700" :
-                                                statusLabel === 'backlog' ? "bg-slate-100 text-slate-600" : "bg-amber-100 text-amber-700"
-                                              )}>
-                                                {statusLabel === 'concluído' ? 'Concluído' : statusLabel === 'backlog' ? 'Pendente' : 'Em andamento'}
-                                              </span>
-                                              <span className="text-[9px] font-black text-indigo-500 uppercase tracking-tighter mt-1 italic">Vínculo: Inovação</span>
-                                            </div>
-                                          );
-                                        })()
-                                      ) : (
-                                        <span className={cn(
-                                          "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
-                                          item.status === 'Concluído' ? "bg-emerald-100 text-emerald-700" :
-                                          item.status === 'Em andamento' ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
-                                        )}>
-                                          {item.status}
-                                        </span>
-                                      )}
+                                      <span className={cn(
+                                        "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
+                                        item.status === 'Concluído' ? "bg-emerald-100 text-emerald-700" :
+                                        item.status === 'Em andamento' ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
+                                      )}>
+                                        {item.status}
+                                      </span>
                                     </div>
                                     <div className={cn(
                                       "w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 transition-transform duration-300 group-hover:border-indigo-200 group-hover:text-indigo-500",
@@ -2616,116 +2534,52 @@ export default function PDCAEditor({
                                       <div className="px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-1 duration-300">
                                         {/* History Log */}
                                         <div className="space-y-4 pt-4 border-t border-slate-50">
-                                          {(item.actionType || 'Processual') !== 'Inovação' && (
-                                            <>
-                                              <div className="flex items-center justify-between">
-                                                <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                                  <Clock size={14} />
-                                                  Histórico de Atualizações
-                                                </h6>
-                                                <span className="text-[10px] font-black text-slate-300">
-                                                  {(item.executionLogs || []).length} registros
-                                                </span>
+                                          <div className="flex items-center justify-between">
+                                            <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                              <Clock size={14} />
+                                              Histórico de Atualizações
+                                            </h6>
+                                            <span className="text-[10px] font-black text-slate-300">
+                                              {(item.executionLogs || []).length} registros
+                                            </span>
+                                          </div>
+                                          
+                                          <div className="space-y-3">
+                                            {(item.executionLogs || []).length === 0 ? (
+                                              <div className="py-8 bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-slate-400 gap-2">
+                                                <AlertCircle size={24} className="opacity-20" />
+                                                <p className="text-[10px] font-bold uppercase tracking-widest">Sem movimentações registradas</p>
                                               </div>
-                                              
-                                              <div className="space-y-3">
-                                                {(item.executionLogs || []).length === 0 ? (
-                                                  <div className="py-8 bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-slate-400 gap-2">
-                                                    <AlertCircle size={24} className="opacity-20" />
-                                                    <p className="text-[10px] font-bold uppercase tracking-widest">Sem movimentações registradas</p>
-                                                  </div>
-                                                ) : (
-                                                  [...(item.executionLogs || [])].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()).map((log) => (
-                                                    <div key={log.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4 hover:border-slate-200 transition-colors">
-                                                      <div className={cn(
-                                                        "w-2 h-2 rounded-full mt-2 shrink-0 shadow-sm",
-                                                        log.status === 'Concluído' ? "bg-emerald-500" :
-                                                        log.status === 'Em andamento' ? "bg-amber-500" : "bg-slate-300"
-                                                      )} />
-                                                      <div className="flex-1">
-                                                        <div className="flex items-center justify-between mb-1">
-                                                          <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">{log.status}</span>
-                                                          <span className="text-[10px] text-slate-400 font-medium">{format(new Date(log.timestamp), 'dd/MM/yyyy HH:mm')}</span>
-                                                        </div>
-                                                        <p className="text-xs text-slate-600 font-medium leading-relaxed">{log.observation}</p>
-                                                        <div className="mt-3 flex items-center gap-2">
-                                                          <span className="text-[10px] bg-slate-100 px-2.5 py-1 rounded-lg text-slate-500 font-bold flex items-center gap-1">
-                                                            <Users size={10} />
-                                                            {log.responsible}
-                                                          </span>
-                                                          {log.sector && (
-                                                            <span className="text-[10px] bg-indigo-50 px-2.5 py-1 rounded-lg text-indigo-600 font-bold">
-                                                              {log.sector}
-                                                            </span>
-                                                          )}
-                                                        </div>
-                                                      </div>
+                                            ) : (
+                                              [...(item.executionLogs || [])].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()).map((log) => (
+                                                <div key={log.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4 hover:border-slate-200 transition-colors">
+                                                  <div className={cn(
+                                                    "w-2 h-2 rounded-full mt-2 shrink-0 shadow-sm",
+                                                    log.status === 'Concluído' ? "bg-emerald-500" :
+                                                    log.status === 'Em andamento' ? "bg-amber-500" : "bg-slate-300"
+                                                  )} />
+                                                  <div className="flex-1">
+                                                    <div className="flex items-center justify-between mb-1">
+                                                      <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">{log.status}</span>
+                                                      <span className="text-[10px] text-slate-400 font-medium">{format(new Date(log.timestamp), 'dd/MM/yyyy HH:mm')}</span>
                                                     </div>
-                                                  ))
-                                                )}
-                                              </div>
-                                            </>
-                                          )}
-
-                                          {/* Innovation Logs (Automatic) */}
-                                          {(item.actionType || 'Processual') === 'Inovação' && (
-                                            <div className="space-y-4">
-                                              <div className="flex items-center justify-between">
-                                                <h6 className="text-[10px] font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
-                                                  <Target size={14} />
-                                                  Histórico da Execução (Inovação)
-                                                </h6>
-                                                <span className="text-[10px] font-black text-indigo-300">
-                                                  {(item.innovationLogs || []).length} registros automáticos
-                                                </span>
-                                              </div>
-                                              
-                                              <div className="space-y-3">
-                                                {(item.innovationLogs || []).length === 0 ? (
-                                                  <div className="py-8 bg-indigo-50/50 rounded-2xl border-2 border-dashed border-indigo-100 flex flex-col items-center justify-center text-indigo-400 gap-2">
-                                                    <GitBranch size={24} className="opacity-20" />
-                                                    <p className="text-[10px] font-bold uppercase tracking-widest">Aguardando início pela Inovação</p>
-                                                  </div>
-                                                ) : (
-                                                  [...(item.innovationLogs || [])].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).map((log) => (
-                                                    <div key={log.id} className="bg-indigo-50/50 p-4 rounded-2xl border border-indigo-100/50 flex items-start gap-4">
-                                                      <div className="w-2 h-2 rounded-full bg-indigo-500 mt-2 shrink-0" />
-                                                      <div className="flex-1">
-                                                        <div className="flex items-center justify-between mb-1">
-                                                          <div className="flex items-center gap-2">
-                                                            {log.action ? (
-                                                              <div className="flex flex-col gap-0.5">
-                                                                <span className="text-[10px] font-black text-rose-600 uppercase tracking-widest">{log.action}</span>
-                                                                {log.cardTitulo && (
-                                                                  <span className="text-[9px] font-bold text-slate-500 italic">Card: {log.cardTitulo}</span>
-                                                                )}
-                                                                {log.detalhes && (
-                                                                  <p className="text-[9px] text-slate-400 leading-tight mt-0.5">{log.detalhes}</p>
-                                                                )}
-                                                              </div>
-                                                            ) : (
-                                                              <>
-                                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{log.previousStatus || 'Início'}</span>
-                                                                <ArrowRight size={10} className="text-slate-300" />
-                                                                <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">{log.newStatus}</span>
-                                                              </>
-                                                            )}
-                                                          </div>
-                                                          <span className="text-[10px] text-slate-400 font-medium">{format(new Date(log.date), 'dd/MM/yyyy HH:mm')}</span>
-                                                        </div>
-                                                        <div className="mt-2 flex items-center gap-2">
-                                                          <span className="text-[10px] bg-white px-2.5 py-1 rounded-lg text-indigo-500 font-bold border border-indigo-100 flex items-center gap-1">
-                                                            <Users size={10} />
-                                                            {log.responsible}
-                                                          </span>
-                                                        </div>
-                                                      </div>
+                                                    <p className="text-xs text-slate-600 font-medium leading-relaxed">{log.observation}</p>
+                                                    <div className="mt-3 flex items-center gap-2">
+                                                      <span className="text-[10px] bg-slate-100 px-2.5 py-1 rounded-lg text-slate-500 font-bold flex items-center gap-1">
+                                                        <Users size={10} />
+                                                        {log.responsible}
+                                                      </span>
+                                                      {log.sector && (
+                                                        <span className="text-[10px] bg-indigo-50 px-2.5 py-1 rounded-lg text-indigo-600 font-bold">
+                                                          {log.sector}
+                                                        </span>
+                                                      )}
                                                     </div>
-                                                  ))
-                                                )}
-                                              </div>
-                                            </div>
-                                          )}
+                                                  </div>
+                                                </div>
+                                              ))
+                                            )}
+                                          </div>
 
                                           {/* Add Log Form */}
                                           <div className="mt-8">
@@ -2736,17 +2590,7 @@ export default function PDCAEditor({
                                                 </div>
                                                 <div className="flex-1">
                                                   <h6 className="text-sm font-black text-rose-900 uppercase tracking-widest mb-1">Ação Cancelada</h6>
-                                                  <p className="text-xs text-rose-600 font-medium leading-relaxed">Este plano de ação foi cancelado via módulo de Inovação e não permite mais atualizações.</p>
-                                                </div>
-                                              </div>
-                                            ) : item.actionType === 'Inovação' ? (
-                                              <div className="bg-indigo-50 p-6 rounded-[2rem] border border-indigo-100 flex flex-col items-center justify-center text-center space-y-3">
-                                                <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-indigo-600 shadow-sm border border-indigo-100">
-                                                  <GitBranch size={24} />
-                                                </div>
-                                                <div>
-                                                  <p className="text-[10px] font-black text-indigo-800 uppercase tracking-widest">Execução Gerenciada pela Inovação</p>
-                                                  <p className="text-xs text-indigo-600 font-medium mt-1">Este status é atualizado automaticamente via Módulo de Inovação.</p>
+                                                  <p className="text-xs text-rose-600 font-medium leading-relaxed">Este plano de ação foi cancelado e não permite mais atualizações.</p>
                                                 </div>
                                               </div>
                                             ) : item.status !== 'Concluído' ? (
@@ -2905,9 +2749,7 @@ export default function PDCAEditor({
                             .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
                             .map((item, filteredIdx) => {
                             const isExpanded = expandedActionId === item.id;
-                            const isDoDone = item.actionType === 'Inovação' 
-                              ? innovationProjects.find(ip => ip.id === item.innovationProjectId)?.status === 'concluído'
-                              : item.status === 'Concluído';
+                            const isDoDone = item.status === 'Concluído';
                             
                             return (
                               <div key={item.id} className={cn(
@@ -2916,10 +2758,10 @@ export default function PDCAEditor({
                               )}>
                                 {/* Accordion Header */}
                                 <button 
-                                  onClick={() => isDoDone && setExpandedActionId(isExpanded ? null : item.id)}
+                                  onClick={() => item.status === 'Concluído' && setExpandedActionId(isExpanded ? null : item.id)}
                                   className={cn(
                                     "w-full p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left group",
-                                    !isDoDone && "cursor-not-allowed"
+                                    item.status !== 'Concluído' && "cursor-not-allowed"
                                   )}
                                 >
                                   <div className="flex items-center gap-4 flex-1">
@@ -2927,11 +2769,11 @@ export default function PDCAEditor({
                                       <span className={cn(
                                         "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
                                         isExpanded ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100",
-                                        !isDoDone && "bg-slate-200 text-slate-400"
+                                        item.status !== 'Concluído' && "bg-slate-200 text-slate-400"
                                       )}>
                                         {filteredIdx + 1}
                                       </span>
-                                      {!isDoDone && (
+                                      {item.status !== 'Concluído' && (
                                         <div className="absolute -top-1 -right-1 bg-amber-500 text-white p-0.5 rounded-full shadow-sm" title="Aguardando conclusão da etapa DO">
                                           <Lock size={10} />
                                         </div>
@@ -2941,11 +2783,11 @@ export default function PDCAEditor({
                                       <div className="flex items-center gap-2">
                                         <h5 className={cn(
                                           "font-bold text-lg truncate transition-colors",
-                                          isDoDone ? "text-slate-800 group-hover:text-indigo-600" : "text-slate-400"
+                                          item.status === 'Concluído' ? "text-slate-800 group-hover:text-indigo-600" : "text-slate-400"
                                         )}>
                                           {item.what || 'Ação sem descrição'}
                                         </h5>
-                                        {!isDoDone && (
+                                        {item.status !== 'Concluído' && (
                                           <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg uppercase tracking-widest whitespace-nowrap">
                                             Aguardando DO
                                           </span>
@@ -3729,64 +3571,6 @@ export default function PDCAEditor({
     const oldItem = newPlan[idx];
     let newItem = { ...oldItem, ...data };
 
-    // Handle Innovation Project Creation
-    const isInnovationType = newItem.actionType === 'Inovação';
-    const hasLongWhat = (newItem.what?.trim().length || 0) > 3;
-    const hasNoProject = !newItem.innovationProjectId;
-    const isNotPending = !pendingInnovationCreations.current.has(id);
-    
-    // Only create card if NOT typing (e.g. onBlur or actionType change)
-    if (!isTyping && isInnovationType && hasLongWhat && hasNoProject && isNotPending) {
-      if (onAddInnovationProject) {
-        pendingInnovationCreations.current.add(id);
-        try {
-          console.log(`🚀 [PDCAEditor] Creating innovation card for action ${id}...`);
-          const innovationProjectId = await onAddInnovationProject({
-            projectId: project.id,
-            projectName: project.name,
-            pdcaId: activeCycle.id,
-            actionId: id,
-            actionTitle: newItem.what,
-            processName: subtask.title,
-            title: newItem.what,
-            status: 'backlog',
-            complexity: 'Baixa',
-            startDate: new Date().toISOString(),
-            responsibleId: newItem.who || '',
-            responsibleName: '' 
-          });
-          
-          // Re-fetch the current state to avoid overwriting newer changes during async call
-          const currentPlan = [...(subtask.pdcaCycles.find(c => c.id === activeCycle.id)?.plan.actionPlan || [])];
-          const currentIdx = currentPlan.findIndex(i => i.id === id);
-          if (currentIdx !== -1) {
-            currentPlan[currentIdx] = { 
-              ...currentPlan[currentIdx], 
-              innovationProjectId, 
-              status: 'Pendente' 
-            };
-            updatePlan({ actionPlan: currentPlan });
-            console.log(`✅ [PDCAEditor] Innovation card created: ${innovationProjectId}`);
-          }
-        } catch (err) {
-          console.error("Erro ao criar projeto de inovação:", err);
-          setSaveFeedback("Erro ao integrar com Inovação");
-        } finally {
-          pendingInnovationCreations.current.delete(id);
-        }
-        // Early return as we already updated the state in the async callback
-        return;
-      }
-    }
-
-    // Sync title to innovation project if it changes and project already exists
-    // Also avoid excessive updates if typing
-    if (!isTyping && data.what !== undefined && newItem.innovationProjectId) {
-      if (onUpdateInnovationProject) {
-        onUpdateInnovationProject(newItem.innovationProjectId, { title: newItem.what });
-      }
-    }
-
     // Auto-transition from DO to CHECK when status is Concluído
     if (data.status === 'Concluído' && (!oldItem.currentPhase || oldItem.currentPhase === 'DO')) {
       newItem.currentPhase = 'CHECK';
@@ -3830,15 +3614,6 @@ export default function PDCAEditor({
   function removeActionPlanItem(id: string) {
     if (!activeCycle) return;
     
-    // Rule: "Garantir que, ao excluir um plano de ação do tipo “Inovação” no módulo PDCA, 
-    // o respectivo projeto/card criado automaticamente no módulo de Gestão de Inovação também seja excluído."
-    const itemToDelete = activeCycle.plan.actionPlan.find(i => i.id === id);
-    if (itemToDelete?.actionType === 'Inovação' && itemToDelete.innovationProjectId && onDeleteInnovationProject) {
-      onDeleteInnovationProject(itemToDelete.innovationProjectId).catch(err => {
-        console.error("Erro ao excluir projeto de inovação vinculado:", err);
-      });
-    }
-
     // Implementing Soft Delete as per Task 7 Option A
     const newPlan = activeCycle.plan.actionPlan.map(i => 
       i.id === id ? { ...i, status: 'Cancelado' as any, ativo: false } : i
@@ -3863,9 +3638,7 @@ export default function PDCAEditor({
     const itemsProgress = planItems.map(item => {
       let p = 25; // PLAN is done
 
-      const isDoDone = item.actionType === 'Inovação' 
-        ? innovationProjects.find(ip => ip.id === item.innovationProjectId)?.status === 'concluído'
-        : item.status === 'Concluído';
+      const isDoDone = item.status === 'Concluído';
       
       if (isDoDone) {
         p += 25;
@@ -3875,7 +3648,7 @@ export default function PDCAEditor({
           const isActDone = !!item.finalProblemStatus && !!item.finalAction && (item.finalAction !== 'Padronizar processo' || (item.standardizationModels || []).length > 0);
           if (isActDone) p += 25;
         }
-      } else if (item.status === 'Em andamento' || (item.actionType === 'Inovação' && item.innovationProjectId)) {
+      } else if (item.status === 'Em andamento') {
         p += 10;
       }
 

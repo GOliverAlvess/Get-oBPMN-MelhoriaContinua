@@ -107,7 +107,7 @@ export interface ExecutionLog {
   type: 'update' | 'completion' | 'start';
 }
 
-export type ActionPlanType = 'Processual' | 'Operacional';
+export type ActionPlanType = 'Processual' | 'Operacional' | 'Inovação';
 
 export interface ActionPlanItem {
   id: string;

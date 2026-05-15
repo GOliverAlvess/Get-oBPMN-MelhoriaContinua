@@ -412,7 +412,7 @@ export default function PDCAEditor({
           item.monitoringTool || '',
           item.worked || '',
           item.evidence || '',
-          item.gainImpact || '0',
+          (item.realGains?.tangible || []).reduce((acc, t) => acc + (t.value || 0), 0),
           item.finalProblemStatus || '',
           item.finalAction || '',
           (item.standardizationModels || []).join('; ')
@@ -1211,6 +1211,7 @@ export default function PDCAEditor({
               <option value="">Selecione...</option>
               <option value="Processual">Processual</option>
               <option value="Operacional">Operacional</option>
+              <option value="Inovação">Inovação</option>
             </select>
           </div>
         </div>
@@ -2283,6 +2284,7 @@ export default function PDCAEditor({
                                       <option value="">Selecione o tipo...</option>
                                       <option value="Processual">Processual</option>
                                       <option value="Operacional">Operacional</option>
+                                      <option value="Inovação">Inovação</option>
                                     </select>
                                   </div>
 
@@ -3434,7 +3436,7 @@ export default function PDCAEditor({
                                     )}
                                     <div>
                                       <p className="font-black text-slate-400 uppercase">Impacto de Ganho</p>
-                                      <p className="font-bold text-emerald-600">R$ {item.gainImpact || 0}</p>
+                                      <p className="font-bold text-emerald-600">R$ {(item.realGains?.tangible || []).reduce((acc, t) => acc + (t.value || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                                     </div>
                                   </div>
                                   <ReportField label="Link evidência do acompanhamento" value={item.evidence || 'N/A'} />

@@ -97,44 +97,49 @@ export default function DashboardView({ projects, users, actions, onProjectClick
       .slice(0, 5);
 
     // Gain Impact
-    const projectGains = filteredProjects.map(p => {
-      let totalGain = 0;
-      (p.subtasks || []).forEach(subtask => {
-        subtask.pdcaCycles.forEach(cycle => {
-          // Apenas PDCAs finalizados
-          if (cycle.status !== 'Concluído') return;
-          
-          const cycleGain = cycle.plan.actionPlan.reduce((s, action) => {
-            if (action.finalProblemStatus === 'Resolvido') {
+    const projectGains = filteredProjects
+      .filter(p => p.status === 'Concluído')
+      .map(p => {
+        let totalGain = 0;
+        (p.subtasks || []).forEach(subtask => {
+          subtask.pdcaCycles.forEach(cycle => {
+            // Apenas PDCAs finalizados
+            if (cycle.status !== 'Concluído') return;
+            
+            const cycleGain = cycle.plan.actionPlan.reduce((s, action) => {
+              // Somar ganhos tangíveis de ações concluídas informados na aba CHECK
+              if (action.status !== 'Concluído' || action.ativo === false) return s;
               const tangibleSum = (action.realGains?.tangible || []).reduce((acc, t) => acc + (t.value || 0), 0);
               return s + tangibleSum;
-            }
-            return s;
-          }, 0);
-          totalGain += cycleGain;
+            }, 0);
+            totalGain += cycleGain;
+          });
         });
-      });
-      return { name: p.name, gain: totalGain };
-    }).filter(g => g.gain > 0).sort((a, b) => b.gain - a.gain).slice(0, 5);
+        return { name: p.name, gain: totalGain };
+      })
+      .filter(g => g.gain > 0)
+      .sort((a, b) => b.gain - a.gain)
+      .slice(0, 5);
 
-    const totalGainValue = filteredProjects.reduce((sum, p) => {
-      let pGain = 0;
-      (p.subtasks || []).forEach(subtask => {
-        subtask.pdcaCycles.forEach(cycle => {
-          // Considerar apenas PDCAs finalizados
-          if (cycle.status !== 'Concluído') return;
-          
-          pGain += cycle.plan.actionPlan.reduce((acc, action) => {
-            // Considerar apenas ações resolvidas
-            if (action.finalProblemStatus === 'Resolvido') {
-              return acc + (action.gainImpact || 0);
-            }
-            return acc;
-          }, 0);
+    const totalGainValue = filteredProjects
+      .filter(p => p.status === 'Concluído')
+      .reduce((sum, p) => {
+        let pGain = 0;
+        (p.subtasks || []).forEach(subtask => {
+          subtask.pdcaCycles.forEach(cycle => {
+            // Considerar apenas PDCAs finalizados
+            if (cycle.status !== 'Concluído') return;
+            
+            pGain += cycle.plan.actionPlan.reduce((acc, action) => {
+              // Somar ganhos tangíveis de ações concluídas informados na aba CHECK
+              if (action.status !== 'Concluído' || action.ativo === false) return acc;
+              const tangibleSum = (action.realGains?.tangible || []).reduce((tAcc, t) => tAcc + (t.value || 0), 0);
+              return acc + tangibleSum;
+            }, 0);
+          });
         });
-      });
-      return sum + pGain;
-    }, 0);
+        return sum + pGain;
+      }, 0);
 
     // Project Progress
     const projectProgressList = filteredProjects.map(p => ({
@@ -371,13 +376,13 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                         }}
                         itemStyle={{ color: '#ffffff' }}
                         labelStyle={{ color: '#ffffff', fontWeight: 700 }}
-                        formatter={(value: number) => [`R$ ${value.toLocaleString()}`, 'Ganho']}
+                        formatter={(value: number) => [formatCurrency(value), 'Ganho']}
                       />
                       <Bar dataKey="gain" fill="#3b82f6" radius={[0, 8, 8, 0]} barSize={20}>
                         <LabelList 
                           dataKey="gain" 
                           position="right" 
-                          formatter={(value: number) => `R$ ${value.toLocaleString()}`}
+                          formatter={(value: number) => formatCurrency(value)}
                           style={{ fontSize: 9, fontWeight: 800, fill: '#94a3b8' }}
                           offset={10}
                         />
@@ -598,11 +603,40 @@ export default function DashboardView({ projects, users, actions, onProjectClick
   );
 }
 
-function formatCompactNumber(number: number) {
-  if (number < 1000) return number.toString();
-  if (number >= 1000 && number < 1000000) return (number / 1000).toFixed(number % 1000 === 0 ? 0 : 1) + 'K';
-  if (number >= 1000000) return (number / 1000000).toFixed(number % 1000000 === 0 ? 0 : 1) + 'M';
-  return number.toString();
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    minimumFractionDigits: 2
+  }).format(value);
+}
+
+function formatCompactValue(value: number, isCurrency: boolean = false) {
+  const absValue = Math.abs(value);
+  if (absValue < 1000) {
+    return isCurrency ? formatCurrency(value) : value.toString();
+  }
+
+  let suffix = '';
+  let divisor = 1;
+
+  if (absValue >= 1e9) {
+    suffix = 'B';
+    divisor = 1e9;
+  } else if (absValue >= 1e6) {
+    suffix = 'M';
+    divisor = 1e6;
+  } else if (absValue >= 1e3) {
+    suffix = 'K';
+    divisor = 1e3;
+  }
+
+  const formattedNumber = new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+  }).format(value / divisor);
+
+  return isCurrency ? `R$ ${formattedNumber}${suffix}` : `${formattedNumber}${suffix}`;
 }
 
 function StatCard({ 
@@ -620,22 +654,28 @@ function StatCard({
   highlight?: boolean,
   isCurrency?: boolean
 }) {
-  const displayValue = typeof value === 'number' ? formatCompactNumber(value) : value;
-  const finalValue = isCurrency ? `R$ ${displayValue}` : displayValue;
+  const fullValue = typeof value === 'number' 
+    ? (isCurrency ? formatCurrency(value) : value.toLocaleString('pt-BR'))
+    : value;
+
+  const displayValue = typeof value === 'number' 
+    ? formatCompactValue(value, isCurrency)
+    : value;
 
   return (
     <motion.div 
       whileHover={{ y: -3 }}
       className={cn(
-        "p-4 md:p-5 rounded-2xl md:rounded-3xl border shadow-sm flex items-center justify-between gap-4 transition-all min-h-[80px] md:min-h-[100px] min-w-0",
+        "p-4 md:p-5 rounded-2xl md:rounded-3xl border shadow-sm flex items-center justify-between gap-4 transition-all min-h-[80px] md:min-h-[100px] min-w-0 group",
         highlight 
           ? "bg-slate-900 dark:bg-black border-slate-800 dark:border-slate-800 text-white" 
           : "bg-theme-card border-theme-border text-theme-foreground"
       )}
+      title={fullValue.toString()}
     >
       <div className="flex items-center gap-4 min-w-0 flex-1">
         <div className={cn(
-          "w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center text-white shadow-md shrink-0", 
+          "w-10 h-10 md:w-12 md:h-12 rounded-xl flex items-center justify-center text-white shadow-md shrink-0 transition-transform group-hover:scale-110", 
           color
         )}>
           {icon}
@@ -643,17 +683,14 @@ function StatCard({
         <div className="min-w-0 flex-1 overflow-hidden">
           <p className={cn(
             "text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400 truncate"
-          )} title={title}>{title}</p>
+          )}>{title}</p>
           <h4 
-            className="font-black tracking-tight text-xl md:text-2xl lg:text-3xl"
+            className="font-black tracking-tight leading-none overflow-hidden text-ellipsis whitespace-nowrap"
             style={{ 
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis'
+              fontSize: 'clamp(1.1rem, 2.5vw, 1.75rem)'
             }}
-            title={value.toString()}
           >
-            {finalValue}
+            {displayValue}
           </h4>
         </div>
       </div>

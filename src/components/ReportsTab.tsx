@@ -255,7 +255,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                 },
                 {
                   columns: [
-                    { width: '*', text: `FLOWPROCESS - Melhoria Contínua`, style: 'footerText' },
+                    { width: '*', text: `GIP FLOW - Melhoria Contínua`, style: 'footerText' },
                     { width: 'auto', text: `Página ${currentPage} de ${pageCount}`, alignment: 'right', style: 'footerText' }
                   ]
                 }

@@ -390,7 +390,7 @@ export default function BPMNModeler({
           <div className="flex items-center gap-2">
             <div className="w-auto h-10 bg-white dark:bg-slate-800 rounded-lg flex items-center justify-center shadow-md border border-slate-100 dark:border-slate-700 p-1">
               <img 
-                src="/assets/logo-flowprocess.svg" 
+                src="/assets/logo-gipflow.svg" 
                 alt="Logo" 
                 style={{ height: '36px', width: 'auto', objectFit: 'contain' }}
                 referrerPolicy="no-referrer"

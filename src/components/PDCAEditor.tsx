@@ -550,7 +550,7 @@ export default function PDCAEditor({
               {
                 columns: [
                   { width: 100, text: '', style: 'footerText' },
-                  { width: '*', text: `FLOWPROCESS – Melhoria Contínua`, style: 'footerText', alignment: 'center' },
+                  { width: '*', text: `GIP FLOW – Melhoria Contínua`, style: 'footerText', alignment: 'center' },
                   { width: 100, text: `Página ${currentPage} de ${pageCount}`, alignment: 'right', style: 'footerText' }
                 ],
                 margin: [0, 10, 0, 0]

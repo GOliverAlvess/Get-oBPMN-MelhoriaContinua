@@ -752,7 +752,7 @@ export default function App() {
         )}>
           <div className="p-4 border-b border-theme-border flex flex-col items-center gap-4 shrink-0">
             <div className="flex items-center justify-between w-full min-w-0">
-              <div className={cn("flex items-center gap-3 overflow-hidden transition-all duration-300", isSidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100 min-w-0 flex-1")}>
+              <div className={cn("flex items-center overflow-hidden transition-all duration-300", isSidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100 min-w-0 flex-1")}>
                 <div className="w-auto h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-slate-100 p-1 flex-shrink-0 dark:bg-slate-100">
                   <img 
                     src="/assets/logo-gipflow.svg" 
@@ -761,7 +761,6 @@ export default function App() {
                     referrerPolicy="no-referrer"
                   />
                 </div>
-                <h1 className="font-bold text-lg tracking-tight text-indigo-700 dark:text-indigo-400 whitespace-nowrap truncate">GIP Flow</h1>
               </div>
               <button 
                 onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}

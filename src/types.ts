@@ -22,6 +22,10 @@ export interface ProjectScope {
   startDate: string;
   forecastCompletion: string;
   ods?: string;
+  odsSelecionadas?: number[];
+  esgSelecionado?: string[];
+  odsDescricao?: string;
+  esgDescricao?: string;
   esgEnvironmental?: string;
   esgSocial?: string;
   esgGovernance?: string;
@@ -154,6 +158,7 @@ export interface PDCACycle {
   id: string;
   taskId: string; // Link to BPMN element
   title: string;
+  nomePdca?: string; // New editable PDCA name field
   createdAt: string;
   status: PDCAStatus;
   etapaAtual?: 'PLAN' | 'DO' | 'CHECK' | 'ACT' | 'REPORT';

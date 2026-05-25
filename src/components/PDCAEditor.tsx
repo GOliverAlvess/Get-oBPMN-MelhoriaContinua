@@ -1,16 +1,16 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { 
-  RefreshCw, 
-  AlertCircle, 
-  ChevronRight, 
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import {
+  RefreshCw,
+  AlertCircle,
+  ChevronRight,
   ChevronDown,
   Users,
-  Plus, 
-  Trash2, 
-  CheckCircle2, 
-  Target, 
+  Plus,
+  Trash2,
+  CheckCircle2,
+  Target,
   Percent,
-  FileText, 
+  FileText,
   ArrowRight,
   ArrowLeft,
   TrendingUp,
@@ -24,30 +24,41 @@ import {
   Layers,
   Lock,
   Zap,
-  Award
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { v4 as uuidv4 } from 'uuid';
-import { format } from 'date-fns';
-import html2pdf from 'html2pdf.js';
-import pdfMake from 'pdfmake/build/pdfmake';
-import * as pdfFonts from 'pdfmake/build/vfs_fonts';
+  Award,
+} from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { v4 as uuidv4 } from "uuid";
+import { format } from "date-fns";
+import html2pdf from "html2pdf.js";
+import pdfMake from "pdfmake/build/pdfmake";
+import * as pdfFonts from "pdfmake/build/vfs_fonts";
 
-import { Project, Subtask, PDCACycle, ParetoItem, ActionPlanItem, PDCAStatus, PDCAPriority, ActionPlanType, GainsStructure, GlobalConfig } from '../types';
-import ParetoDiagram from './ParetoDiagram';
-import GainsEditor from './GainsEditor';
-import { cn, isValidUrl, formatUrl, exportarCSVPadrao } from '../lib/utils';
+import {
+  Project,
+  Subtask,
+  PDCACycle,
+  ParetoItem,
+  ActionPlanItem,
+  PDCAStatus,
+  PDCAPriority,
+  ActionPlanType,
+  GainsStructure,
+  GlobalConfig,
+} from "../types";
+import ParetoDiagram from "./ParetoDiagram";
+import GainsEditor from "./GainsEditor";
+import { cn, isValidUrl, formatUrl, exportarCSVPadrao } from "../lib/utils";
 
-import { SYSTEM_LOGO_PATH } from '../constants/pdfLogo';
-import { getBase64ImageFromUrl } from '../lib/utils';
+import { SYSTEM_LOGO_PATH } from "../constants/pdfLogo";
+import { getBase64ImageFromUrl } from "../lib/utils";
 
 const STATUS_MAP: Record<string, string> = {
-  'pending': 'Pendente',
-  'in_progress': 'Em andamento',
-  'done': 'Concluído'
+  pending: "Pendente",
+  in_progress: "Em andamento",
+  done: "Concluído",
 };
 
-const SYSTEM_LOGO_PRIMARY_COLOR = '#003489';
+const SYSTEM_LOGO_PRIMARY_COLOR = "#003489";
 
 const translateStatus = (status: string) => STATUS_MAP[status] || status;
 
@@ -58,23 +69,25 @@ if (pdfFonts && (pdfFonts as any).pdfMake) {
   (pdfMake as any).vfs = (pdfFonts as any).vfs;
 }
 
-export default function PDCAEditor({ 
-  project, 
-  subtask, 
-  onUpdateSubtask, 
-  onBack, 
+export default function PDCAEditor({
+  project,
+  subtask,
+  onUpdateSubtask,
+  onBack,
   defaultTaskId,
-  globalConfig
-}: { 
-  project: Project, 
-  subtask: Subtask,
-  onUpdateSubtask: (s: Subtask) => void,
-  onBack: () => void,
-  defaultTaskId?: string,
-  globalConfig?: GlobalConfig
+  globalConfig,
+}: {
+  project: Project;
+  subtask: Subtask;
+  onUpdateSubtask: (s: Subtask) => void;
+  onBack: () => void;
+  defaultTaskId?: string;
+  globalConfig?: GlobalConfig;
 }) {
   const [activeCycleId, setActiveCycleId] = useState<string | null>(null);
-  const [activePhase, setActivePhase] = useState<'PLAN' | 'DO' | 'CHECK' | 'ACT' | 'REPORT'>('PLAN');
+  const [activePhase, setActivePhase] = useState<
+    "PLAN" | "DO" | "CHECK" | "ACT" | "REPORT"
+  >("PLAN");
   const [activePlanStep, setActivePlanStep] = useState<number>(1);
   const [expandedActionId, setExpandedActionId] = useState<string | null>(null);
   const [showValidationErrors, setShowValidationErrors] = useState(false);
@@ -84,22 +97,29 @@ export default function PDCAEditor({
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [showActConfirmation, setShowActConfirmation] = useState(false);
 
-  const [confirmingLog, setConfirmingLog] = useState<{ id: string, updates: any, obsInputId: string } | null>(null);
+  const [confirmingLog, setConfirmingLog] = useState<{
+    id: string;
+    updates: any;
+    obsInputId: string;
+  } | null>(null);
+
+  const [isEditingPdcaName, setIsEditingPdcaName] = useState(false);
+  const [editingPdcaNameValue, setEditingPdcaNameValue] = useState("");
 
   // Filter cycles if defaultTaskId is provided
   const cycles = useMemo(() => {
     if (defaultTaskId) {
-      return subtask.pdcaCycles.filter(c => c.taskId === defaultTaskId);
+      return subtask.pdcaCycles.filter((c) => c.taskId === defaultTaskId);
     }
     return subtask.pdcaCycles;
   }, [subtask.pdcaCycles, defaultTaskId]);
 
-  const activeCycle = subtask.pdcaCycles.find(c => c.id === activeCycleId);
+  const activeCycle = subtask.pdcaCycles.find((c) => c.id === activeCycleId);
 
   const isPlanPhaseValid = useMemo(() => {
     if (!activeCycle) return false;
     const { rootCauseAnalysis } = activeCycle.plan;
-    if (rootCauseAnalysis.type === 'ishikawa') {
+    if (rootCauseAnalysis.type === "ishikawa") {
       return (rootCauseAnalysis.priorityCauses || []).length > 0;
     }
     return !!rootCauseAnalysis.identifiedRootCause?.trim();
@@ -107,30 +127,35 @@ export default function PDCAEditor({
 
   const isDoPhaseValid = useMemo(() => {
     if (!activeCycle || activeCycle.plan.actionPlan.length === 0) return false;
-    return activeCycle.plan.actionPlan.some(item => {
-      return item.status === 'Concluído';
+    return activeCycle.plan.actionPlan.some((item) => {
+      return item.status === "Concluído";
     });
   }, [activeCycle]);
 
   const isCheckPhaseValid = useMemo(() => {
     if (!activeCycle) return false;
-    return activeCycle.plan.actionPlan.some(item => {
+    return activeCycle.plan.actionPlan.some((item) => {
       const hasMonitoring = !!item.monitoringTool?.trim();
       const hasEvidence = !!item.evidence?.trim();
       const hasWorked = !!item.worked;
-      const hasFailureReason = (item.worked === 'Sim' || !item.worked) || !!item.failureReason?.trim();
-      
+      const hasFailureReason =
+        item.worked === "Sim" || !item.worked || !!item.failureReason?.trim();
+
       return hasMonitoring && hasEvidence && hasWorked && hasFailureReason;
     });
   }, [activeCycle]);
 
   const isActPhaseValid = useMemo(() => {
     if (!activeCycle) return false;
-    return activeCycle.plan.actionPlan.some(item => {
+    return activeCycle.plan.actionPlan.some((item) => {
       const hasFinalStatus = !!item.finalProblemStatus;
       const hasFinalAction = !!item.finalAction;
-      if (item.finalAction === 'Padronizar processo') {
-        return hasFinalStatus && hasFinalAction && (item.standardizationModels || []).length > 0;
+      if (item.finalAction === "Padronizar processo") {
+        return (
+          hasFinalStatus &&
+          hasFinalAction &&
+          (item.standardizationModels || []).length > 0
+        );
       }
       return hasFinalStatus && hasFinalAction;
     });
@@ -138,75 +163,129 @@ export default function PDCAEditor({
 
   const cycleProgress = useMemo(() => {
     if (!activeCycle) return 0;
-    const planItems = (activeCycle.plan.actionPlan || []).filter(item => item.ativo !== false && item.status !== 'Cancelado');
+    const planItems = (activeCycle.plan.actionPlan || []).filter(
+      (item) => item.ativo !== false && item.status !== "Cancelado",
+    );
     if (planItems.length === 0) return isPlanPhaseValid ? 25 : 0;
 
-    const itemsProgress = planItems.map(item => {
+    const itemsProgress = planItems.map((item) => {
       let p = 25; // PLAN is done if item exists in a cycle with PLAN valid
 
       // DO progress
-      const isDoDone = item.status === 'Concluído';
-      
+      const isDoDone = item.status === "Concluído";
+
       if (isDoDone) {
         p += 25;
         // CHECK progress
-        const isCheckDone = !!item.monitoringTool?.trim() && !!item.evidence?.trim() && !!item.worked && (item.worked === 'Sim' || !!item.failureReason?.trim());
+        const isCheckDone =
+          !!item.monitoringTool?.trim() &&
+          !!item.evidence?.trim() &&
+          !!item.worked &&
+          (item.worked === "Sim" || !!item.failureReason?.trim());
         if (isCheckDone) {
           p += 25;
           // ACT progress
-          const isActDone = !!item.finalProblemStatus && !!item.finalAction && (item.finalAction !== 'Padronizar processo' || (item.standardizationModels || []).length > 0);
+          const isActDone =
+            !!item.finalProblemStatus &&
+            !!item.finalAction &&
+            (item.finalAction !== "Padronizar processo" ||
+              (item.standardizationModels || []).length > 0);
           if (isActDone) p += 25;
         }
-      } else if (item.status === 'Em andamento') {
+      } else if (item.status === "Em andamento") {
         p += 10; // Partial DO
       }
 
       return p;
     });
 
-    const averageProgress = itemsProgress.reduce((acc, p) => acc + p, 0) / itemsProgress.length;
+    const averageProgress =
+      itemsProgress.reduce((acc, p) => acc + p, 0) / itemsProgress.length;
     return Math.round(averageProgress);
   }, [activeCycle, isPlanPhaseValid]);
 
   // Sync progress with subtask overall progress
   useEffect(() => {
     if (activeCycle) {
-      const newCycles = subtask.pdcaCycles.map(c => 
-        c.id === activeCycle.id ? { ...c, progress: cycleProgress } : c
+      const newCycles = subtask.pdcaCycles.map((c) =>
+        c.id === activeCycle.id ? { ...c, progress: cycleProgress } : c,
       );
-      
+
       // Calculate overall subtask progress
       // As per rule: "Se houver mais de uma subtarefa no card, deverá ser dividida para considerar o progresso total no kanban."
       // I assume this PDCAEditor is for a single subtask. I should update that subtask's progress.
       // If there are multiple cycles for the same taskId, we take the best one or average?
       // "Cards concluídos não estão chegando a 100%" implies we want the card progress to reflect PDCA completion.
-      
-      const totalPDCAProgress = newCycles.reduce((acc, c) => acc + (c.progress || 0), 0) / (newCycles.length || 1);
-      
+
+      const totalPDCAProgress =
+        newCycles.reduce((acc, c) => acc + (c.progress || 0), 0) /
+        (newCycles.length || 1);
+
       if (subtask.progress !== Math.round(totalPDCAProgress)) {
-        onUpdateSubtask({ 
-          ...subtask, 
+        onUpdateSubtask({
+          ...subtask,
           pdcaCycles: newCycles,
           progress: Math.round(totalPDCAProgress),
-          status: totalPDCAProgress === 100 ? 'Concluído' : totalPDCAProgress > 0 ? 'Em andamento' : 'Pendente'
+          status:
+            totalPDCAProgress === 100
+              ? "Concluído"
+              : totalPDCAProgress > 0
+                ? "Em andamento"
+                : "Pendente",
         });
       }
     }
   }, [cycleProgress, activeCycle?.id]);
 
-  const ishikawaDefaultCategories = useMemo(() => [
-    { id: uuidv4(), name: 'Método' as const, description: 'Procedimentos, fluxos e formas de trabalho.', entries: [] },
-    { id: uuidv4(), name: 'Máquina' as const, description: 'Equipamentos, ferramentas e tecnologia.', entries: [] },
-    { id: uuidv4(), name: 'Mão de obra' as const, description: 'Pessoas, competências e treinamento.', entries: [] },
-    { id: uuidv4(), name: 'Material' as const, description: 'Insumos, peças e qualidade da matéria-prima.', entries: [] },
-    { id: uuidv4(), name: 'Meio ambiente' as const, description: 'Local de trabalho, clima e condições externas.', entries: [] },
-    { id: uuidv4(), name: 'Medida' as const, description: 'Indicadores, métricas e calibração.', entries: [] },
-  ], []);
+  const ishikawaDefaultCategories = useMemo(
+    () => [
+      {
+        id: uuidv4(),
+        name: "Método" as const,
+        description: "Procedimentos, fluxos e formas de trabalho.",
+        entries: [],
+      },
+      {
+        id: uuidv4(),
+        name: "Máquina" as const,
+        description: "Equipamentos, ferramentas e tecnologia.",
+        entries: [],
+      },
+      {
+        id: uuidv4(),
+        name: "Mão de obra" as const,
+        description: "Pessoas, competências e treinamento.",
+        entries: [],
+      },
+      {
+        id: uuidv4(),
+        name: "Material" as const,
+        description: "Insumos, peças e qualidade da matéria-prima.",
+        entries: [],
+      },
+      {
+        id: uuidv4(),
+        name: "Meio ambiente" as const,
+        description: "Local de trabalho, clima e condições externas.",
+        entries: [],
+      },
+      {
+        id: uuidv4(),
+        name: "Medida" as const,
+        description: "Indicadores, métricas e calibração.",
+        entries: [],
+      },
+    ],
+    [],
+  );
 
   const allIshikawaCauses = useMemo(() => {
-    if (activeCycle?.plan.rootCauseAnalysis.type !== 'ishikawa') return [];
-    const categories = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
-    const causes = categories.flatMap(cat => cat.entries.map(e => e.text.trim())).filter(t => t !== '');
+    if (activeCycle?.plan.rootCauseAnalysis.type !== "ishikawa") return [];
+    const categories =
+      activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
+    const causes = categories
+      .flatMap((cat) => cat.entries.map((e) => e.text.trim()))
+      .filter((t) => t !== "");
     return Array.from(new Set(causes));
   }, [activeCycle?.plan.rootCauseAnalysis.ishikawa, ishikawaDefaultCategories]);
 
@@ -217,39 +296,53 @@ export default function PDCAEditor({
       .filter(([id, data]) => {
         if (!data.isProblemStep) return false;
         // Check if task already has a cycle
-        const hasCycle = subtask.pdcaCycles.some(c => c.taskId === id);
+        const hasCycle = subtask.pdcaCycles.some((c) => c.taskId === id);
         // User requested: "Se o ciclo estiver concluído, a task NÃO deve aparecer novamente em Identificar Problemas"
-        const hasFinishedCycle = subtask.pdcaCycles.some(c => c.taskId === id && c.status === 'Concluído');
-        const hasActiveCycle = subtask.pdcaCycles.some(c => c.taskId === id && c.status === 'Ativo');
-        
+        const hasFinishedCycle = subtask.pdcaCycles.some(
+          (c) => c.taskId === id && c.status === "Concluído",
+        );
+        const hasActiveCycle = subtask.pdcaCycles.some(
+          (c) => c.taskId === id && c.status === "Ativo",
+        );
+
         // Only show if it doesn't have an active cycle and doesn't have a finished cycle
-        // Rule: Only allow new cycle if there is explicit user action (the modal IS the explicit action here, 
+        // Rule: Only allow new cycle if there is explicit user action (the modal IS the explicit action here,
         // but the rule says hide finished ones from Identify Problems)
         return !hasActiveCycle && !hasFinishedCycle;
       })
       .map(([id, data]) => ({
         id,
-        label: data.description || 'Sem descrição',
+        label: data.description || "Sem descrição",
         time: data.timeInMinutes || 0,
-        role: data.responsibleRole || ''
+        role: data.responsibleRole || "",
       }));
   }, [subtask.mapping.customData, subtask.pdcaCycles]);
 
   const relatedCycles = useMemo(() => {
     if (!activeCycle) return [];
     return subtask.pdcaCycles
-      .filter(c => c.taskId === activeCycle.taskId)
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      .filter((c) => c.taskId === activeCycle.taskId)
+      .sort(
+        (a, b) =>
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+      );
   }, [subtask.pdcaCycles, activeCycle?.taskId]);
 
   const isIshikawaValid = useMemo(() => {
-    if (!activeCycle || activeCycle.plan.rootCauseAnalysis.type !== 'ishikawa') return true;
+    if (!activeCycle || activeCycle.plan.rootCauseAnalysis.type !== "ishikawa")
+      return true;
     const { priorityCauses } = activeCycle.plan.rootCauseAnalysis;
     return priorityCauses && priorityCauses.length > 0;
   }, [activeCycle]);
 
   const handlePhaseChange = (newPhase: typeof activePhase) => {
-    const phases: (typeof activePhase)[] = ['PLAN', 'DO', 'CHECK', 'ACT', 'REPORT'];
+    const phases: (typeof activePhase)[] = [
+      "PLAN",
+      "DO",
+      "CHECK",
+      "ACT",
+      "REPORT",
+    ];
     const currentIdx = phases.indexOf(activePhase);
     const newIdx = phases.indexOf(newPhase);
 
@@ -262,26 +355,32 @@ export default function PDCAEditor({
 
     // Rules for blocking:
     // DO: Bloqueado até PLAN = concluído
-    if (newPhase === 'DO' && !isPlanPhaseValid) {
+    if (newPhase === "DO" && !isPlanPhaseValid) {
       setShowValidationErrors(true);
       setSaveFeedback("Finalize a etapa PLAN para desbloquear o DO.");
       return;
     }
 
     // CHECK: Bloqueado até DO = concluído
-    if (newPhase === 'CHECK' && !isDoPhaseValid) {
+    if (newPhase === "CHECK" && !isDoPhaseValid) {
       setSaveFeedback("Finalize a etapa DO para desbloquear o CHECK.");
       return;
     }
 
     // ACT: Bloqueado até CHECK = concluído
-    if (newPhase === 'ACT' && !isCheckPhaseValid) {
+    if (newPhase === "ACT" && !isCheckPhaseValid) {
       setSaveFeedback("Finalize a etapa CHECK para desbloquear o ACT.");
       return;
     }
 
-    if (newPhase === 'REPORT' && !isActPhaseValid && activeCycle?.status !== 'Concluído') {
-      setSaveFeedback("Finalize o ciclo (ACT) para visualizar o relatório completo.");
+    if (
+      newPhase === "REPORT" &&
+      !isActPhaseValid &&
+      activeCycle?.status !== "Concluído"
+    ) {
+      setSaveFeedback(
+        "Finalize o ciclo (ACT) para visualizar o relatório completo.",
+      );
       return;
     }
 
@@ -295,159 +394,274 @@ export default function PDCAEditor({
 
   const createNewCycle = (taskId: string, taskLabel: string) => {
     // Check if any cycle already exists for this task to avoid automatic duplicates
-    const existingActiveCycle = subtask.pdcaCycles.find(c => c.taskId === taskId && c.status === 'Ativo');
+    const existingActiveCycle = subtask.pdcaCycles.find(
+      (c) => c.taskId === taskId && c.status === "Ativo",
+    );
     if (existingActiveCycle) {
       setActiveCycleId(existingActiveCycle.id);
-      setActivePhase(existingActiveCycle.etapaAtual || 'PLAN');
+      setActivePhase(existingActiveCycle.etapaAtual || "PLAN");
       setShowDashboard(false);
       setShowProblemsModal(false);
-      setSaveFeedback('Já existe um ciclo ativo para esta etapa.');
+      setSaveFeedback("Já existe um ciclo ativo para esta etapa.");
       return;
     }
 
-    const existingFinishedCycle = subtask.pdcaCycles.find(c => c.taskId === taskId && c.status === 'Concluído');
-    if (existingFinishedCycle && !confirm('Já existe um ciclo concluído para esta etapa. Deseja iniciar um NOVO ciclo de melhoria?')) {
+    const existingFinishedCycle = subtask.pdcaCycles.find(
+      (c) => c.taskId === taskId && c.status === "Concluído",
+    );
+    if (
+      existingFinishedCycle &&
+      !confirm(
+        "Já existe um ciclo concluído para esta etapa. Deseja iniciar um NOVO ciclo de melhoria?",
+      )
+    ) {
       return;
     }
-    
-    const cycleCount = subtask.pdcaCycles.filter(c => c.taskId === taskId).length;
+
+    const cycleCount = subtask.pdcaCycles.filter(
+      (c) => c.taskId === taskId,
+    ).length;
     const newCycle: PDCACycle = {
       id: uuidv4(),
       taskId,
-      title: cycleCount > 0 ? `Ciclo PDCA ${cycleCount + 1} - ${taskLabel}` : `Ciclo PDCA - ${taskLabel}`,
+      title:
+        cycleCount > 0
+          ? `Ciclo PDCA ${cycleCount + 1} - ${taskLabel}`
+          : `Ciclo PDCA - ${taskLabel}`,
+      nomePdca: "", // Initialized to empty so the fallback will be utilized
       createdAt: new Date().toISOString(),
-      status: 'Ativo',
-      etapaAtual: 'PLAN',
+      status: "Ativo",
+      etapaAtual: "PLAN",
       plan: {
         problemDescription: taskLabel,
         rootCauseAnalysis: {
-          type: '5whys',
+          type: "5whys",
           entries: [
-            { id: uuidv4(), text: '' },
-            { id: uuidv4(), text: '' },
-            { id: uuidv4(), text: '' },
-            { id: uuidv4(), text: '' },
-            { id: uuidv4(), text: '' }
-          ]
+            { id: uuidv4(), text: "" },
+            { id: uuidv4(), text: "" },
+            { id: uuidv4(), text: "" },
+            { id: uuidv4(), text: "" },
+            { id: uuidv4(), text: "" },
+          ],
         },
         impact: {
-          description: '',
+          description: "",
           value: 0,
-          goal: 0
+          goal: 0,
         },
-        actionPlan: []
-      }
+        actionPlan: [],
+      },
     };
 
-    onUpdateSubtask({ ...subtask, pdcaCycles: [newCycle, ...subtask.pdcaCycles] });
+    onUpdateSubtask({
+      ...subtask,
+      pdcaCycles: [newCycle, ...subtask.pdcaCycles],
+    });
     setActiveCycleId(newCycle.id);
-    setActivePhase('PLAN');
+    setActivePhase("PLAN");
     setShowDashboard(false);
     setShowProblemsModal(false);
   };
 
   const updateCycle = (newData: Partial<PDCACycle>) => {
     if (!activeCycleId) return;
-    const newCycles = subtask.pdcaCycles.map(c => c.id === activeCycleId ? { ...c, ...newData } : c);
+    const newCycles = subtask.pdcaCycles.map((c) =>
+      c.id === activeCycleId ? { ...c, ...newData } : c,
+    );
     onUpdateSubtask({ ...subtask, pdcaCycles: newCycles });
   };
 
   const handleSave = () => {
-    setSaveFeedback('Dados salvos com sucesso!');
+    setSaveFeedback("Dados salvos com sucesso!");
     setTimeout(() => setSaveFeedback(null), 3000);
   };
 
   const exportToCSV = () => {
     if (relatedCycles.length === 0) return;
-    
+
+    const formatExpectedTangibleGains = (gains: any): string => {
+      if (!gains || !gains.tangible || gains.tangible.length === 0) return "";
+      return gains.tangible
+        .map((t: any) => `${t.type || ""}: ${t.unit || ""} ${t.value ?? ""}`)
+        .filter(Boolean)
+        .join(" | ");
+    };
+
+    const formatExpectedIntangibleGains = (gains: any): string => {
+      if (!gains || !gains.intangible || gains.intangible.length === 0)
+        return "";
+      return gains.intangible
+        .map(
+          (i: any) =>
+            `${i.type || ""} (${i.impactLevel || ""})${i.description ? ` - ${i.description}` : ""}`,
+        )
+        .filter(Boolean)
+        .join(" | ");
+    };
+
+    const formatRealGainsStr = (gains: any): string => {
+      if (!gains) return "";
+      const tangible = (gains.tangible || [])
+        .map((t: any) => `${t.type || ""}: ${t.unit || ""} ${t.value ?? ""}`)
+        .filter(Boolean)
+        .join(" | ");
+      const intangible = (gains.intangible || [])
+        .map(
+          (i: any) =>
+            `${i.type || ""} (${i.impactLevel || ""})${i.description ? ` - ${i.description}` : ""}`,
+        )
+        .filter(Boolean)
+        .join(" | ");
+      if (!tangible && !intangible) return "";
+      return [tangible, intangible].filter(Boolean).join(" || ");
+    };
+
+    const getRootCausa = (cycle: any): string => {
+      const rca = cycle.plan?.rootCauseAnalysis;
+      if (!rca) return "";
+      if (rca.identifiedRootCause && rca.identifiedRootCause.trim() !== "") {
+        return rca.identifiedRootCause;
+      }
+      if (rca.priorityCauses && rca.priorityCauses.length > 0) {
+        return rca.priorityCauses.filter(Boolean).join(" | ");
+      }
+      return "";
+    };
+
+    const formatCsvDate = (dateStr: string | undefined): string => {
+      if (!dateStr) return "";
+      try {
+        const d = new Date(dateStr);
+        if (isNaN(d.getTime())) return dateStr;
+        return format(d, "dd/MM/yyyy");
+      } catch (error) {
+        return dateStr;
+      }
+    };
+
     const headers = [
       "ID do Processo",
       "Nome do Problema",
-      "Descrição do Problema",
+      "PLAN - Descrição do Problema",
       "PLAN - Causa Raiz",
-      "PLAN - Impacto Descrição",
-      "PLAN - Impacto Valor Atual",
-      "PLAN - % Melhoria Esperada",
+      "PLAN - Impacto - Descrição",
+      "PLAN - Impacto - Valor Atual",
       "PLAN - Meta (%)",
-      "DO - Ação (What)",
-      "DO - Responsável",
-      "DO - Setor",
+      "PLAN - Impacto - Ganhos Esperados Tangíveis",
+      "PLAN - Impacto - Ganhos Esperados Intangíveis",
+      "ODS",
+      "ODS (Descrição)",
+      "ESG",
+      "ESG (Descrição)",
+      "Plano de ação - What (O que será feito)",
+      "Plano de ação - Why (Por que será feito)",
+      "Plano de ação - Where (Onde)",
+      "Plano de ação - When (Quando)",
+      "Plano de ação - Who (Responsável)",
+      "Plano de ação - How (Como será feito)",
+      "Plano de ação - How Much (Custo)",
+      "Plano de ação - Tipo de Plano (Processual / Operacional / Inovação)",
       "DO - Status",
-      "DO - Data Início",
-      "DO - Data Conclusão",
+      "DO - Data de Início",
+      "DO - Data de Conclusão",
       "CHECK - Modo Acompanhamento",
       "CHECK - Período",
       "CHECK - Como Acompanha",
       "CHECK - Funcionou",
       "CHECK - Link evidência do acompanhamento",
-      "CHECK - Impacto de ganho",
+      "CHECK - Ganho real obtido",
       "ACT - Status Final",
       "ACT - Ação Final",
-      "ACT - Padronização"
+      "ACT - Padronização",
     ];
 
     const rows: any[][] = [];
 
     relatedCycles.forEach((cycle) => {
       cycle.plan.actionPlan
-        .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+        .filter((item) => item.status !== "Cancelado" && item.ativo !== false)
         .forEach((item) => {
-        rows.push([
-          cycle.id,
-          cycle.title,
-          cycle.plan.problemDescription,
-          cycle.plan.rootCauseAnalysis.identifiedRootCause || '',
-          cycle.plan.impact.description,
-          cycle.plan.impact.value || '',
-          cycle.plan.impact.improvementPercentage || '',
-          cycle.plan.impact.goal || '',
-          item.what,
-          item.who,
-          item.sector || '',
-          translateStatus(item.status),
-          item.startDate ? format(new Date(item.startDate), 'dd/MM/yyyy') : 'N/A',
-          item.endDate ? format(new Date(item.endDate), 'dd/MM/yyyy') : 'N/A',
-          item.monitoringMode || '',
-          item.monitoringPeriod || '',
-          item.monitoringTool || '',
-          item.worked || '',
-          item.evidence || '',
-          (item.realGains?.tangible || []).reduce((acc, t) => acc + (t.value || 0), 0),
-          item.finalProblemStatus || '',
-          item.finalAction || '',
-          (item.standardizationModels || []).join('; ')
-        ]);
-      });
+          rows.push([
+            cycle.id,
+            cycle.title,
+            cycle.plan.problemDescription,
+            getRootCausa(cycle),
+            cycle.plan.impact.description || "",
+            cycle.plan.impact.value ?? "",
+            cycle.plan.impact.goal ?? "",
+            formatExpectedTangibleGains(cycle.plan.impact.expectedGains),
+            formatExpectedIntangibleGains(cycle.plan.impact.expectedGains),
+            (project.scope?.odsSelecionadas && project.scope.odsSelecionadas.length > 0) ? project.scope.odsSelecionadas.join(", ") : "",
+            project.scope?.odsDescricao || project.scope?.ods || "",
+            (project.scope?.esgSelecionado && project.scope.esgSelecionado.length > 0) ? project.scope.esgSelecionado.join(", ") : "",
+            project.scope?.esgDescricao || [
+              project.scope?.esgEnvironmental ? `E: ${project.scope.esgEnvironmental}` : "",
+              project.scope?.esgSocial ? `S: ${project.scope.esgSocial}` : "",
+              project.scope?.esgGovernance ? `G: ${project.scope.esgGovernance}` : ""
+            ].filter(Boolean).join(" | ") || "",
+            item.what || "",
+            item.why || "",
+            item.where || "",
+            item.when || "",
+            item.who || "",
+            item.how || "",
+            item.howMuch || "",
+            item.actionType || "",
+            translateStatus(item.status),
+            formatCsvDate(item.startDate),
+            formatCsvDate(item.endDate),
+            item.monitoringMode || "",
+            item.monitoringPeriod || "",
+            item.monitoringTool || "",
+            item.worked || "",
+            item.evidence || "",
+            formatRealGainsStr(item.realGains),
+            item.finalProblemStatus || "",
+            item.finalAction || "",
+            (item.standardizationModels || []).join(", "),
+          ]);
+        });
     });
 
-    const fileName = `Relatorio_PDCA_${activeCycle?.title.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
+    const fileName = `Relatorio_PDCA_${activeCycle?.title.replace(/\s+/g, "_")}_${format(new Date(), "yyyyMMdd_HHmm")}.csv`;
     exportarCSVPadrao(headers, rows, fileName);
   };
 
   const normalizeColors = (element: HTMLElement) => {
     // Force a temporary class for PDF specific overrides
-    element.classList.add('pdf-mode');
-    
+    element.classList.add("pdf-mode");
+
     const all = element.querySelectorAll("*");
-    all.forEach(el => {
+    all.forEach((el) => {
       const htmlEl = el as HTMLElement;
       const style = window.getComputedStyle(htmlEl);
-      
+
       // Extensive list of properties to check
-      ['color', 'backgroundColor', 'borderColor', 'outlineColor', 'fill', 'stroke'].forEach(prop => {
+      [
+        "color",
+        "backgroundColor",
+        "borderColor",
+        "outlineColor",
+        "fill",
+        "stroke",
+      ].forEach((prop) => {
         const val = (style as any)[prop];
         if (val && (val.includes("oklab") || val.includes("oklch"))) {
           // Robust fallback strategy
-          if (prop === 'backgroundColor') htmlEl.style.backgroundColor = "rgb(255, 255, 255)";
-          else if (prop === 'borderColor') htmlEl.style.borderColor = "rgb(226, 232, 240)";
+          if (prop === "backgroundColor")
+            htmlEl.style.backgroundColor = "rgb(255, 255, 255)";
+          else if (prop === "borderColor")
+            htmlEl.style.borderColor = "rgb(226, 232, 240)";
           else htmlEl.style.setProperty(prop, "rgb(30, 41, 59)", "important");
         }
       });
 
       // Force simple colors for specific classes
-      if (htmlEl.classList.contains('bg-indigo-600')) htmlEl.style.backgroundColor = "rgb(79, 70, 229)";
-      if (htmlEl.classList.contains('text-indigo-600')) htmlEl.style.color = "rgb(79, 70, 229)";
-      
+      if (htmlEl.classList.contains("bg-indigo-600"))
+        htmlEl.style.backgroundColor = "rgb(79, 70, 229)";
+      if (htmlEl.classList.contains("text-indigo-600"))
+        htmlEl.style.color = "rgb(79, 70, 229)";
+
       const shadow = style.boxShadow;
       if (shadow && (shadow.includes("oklab") || shadow.includes("oklch"))) {
         htmlEl.style.boxShadow = "none";
@@ -455,18 +669,34 @@ export default function PDCAEditor({
     });
   };
 
-  const PDFHeader = ({ projectName, cycleTitle }: { projectName: string, cycleTitle?: string }) => (
+  const PDFHeader = ({
+    projectName,
+    cycleTitle,
+  }: {
+    projectName: string;
+    cycleTitle?: string;
+  }) => (
     <div className="flex justify-between items-end border-b border-slate-100 pb-4 mb-8">
       <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-[10px]">FP</div>
+        <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-[10px]">
+          FP
+        </div>
         <div className="flex flex-col">
-          <span className="text-[10px] font-black text-indigo-600 tracking-wider">GESTÃO PRO</span>
-          <span className="text-[8px] text-slate-400 font-bold uppercase">PDCA Expert Analysis</span>
+          <span className="text-[10px] font-black text-indigo-600 tracking-wider">
+            GESTÃO PRO
+          </span>
+          <span className="text-[8px] text-slate-400 font-bold uppercase">
+            PDCA Expert Analysis
+          </span>
         </div>
       </div>
       <div className="text-right">
-        <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight truncate max-w-[300px]">{projectName}</p>
-        <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">{cycleTitle || 'Relatório PDCA'}</p>
+        <p className="text-[10px] font-black text-slate-800 uppercase tracking-tight truncate max-w-[300px]">
+          {projectName}
+        </p>
+        <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest">
+          {cycleTitle || "Relatório PDCA"}
+        </p>
       </div>
     </div>
   );
@@ -474,520 +704,856 @@ export default function PDCAEditor({
   const exportToPDF = async () => {
     if (!activeCycle) return;
     setIsExportingPDF(true);
-    
+
     try {
       const logoBase64 = await getBase64ImageFromUrl(SYSTEM_LOGO_PATH);
 
       // Cálculos para as novas seções
-      const validActions = (activeCycle.plan.actionPlan || []).filter(item => item.status !== 'Cancelado' && item.ativo !== false);
-      
+      const validActions = (activeCycle.plan.actionPlan || []).filter(
+        (item) => item.status !== "Cancelado" && item.ativo !== false,
+      );
+
       // Map execution status
-      const mappedActions = validActions.map(action => {
+      const mappedActions = validActions.map((action) => {
         return {
           ...action,
           displayStatus: translateStatus(action.status),
-          effectiveStatus: action.status
+          effectiveStatus: action.status,
         };
       });
 
       const totalActions = mappedActions.length;
-      const doneActions = mappedActions.filter(item => item.effectiveStatus === 'Concluído').length;
+      const doneActions = mappedActions.filter(
+        (item) => item.effectiveStatus === "Concluído",
+      ).length;
       const pendingActions = totalActions - doneActions;
-      const completionRate = totalActions > 0 ? Math.round((doneActions / totalActions) * 100) : 0;
+      const completionRate =
+        totalActions > 0 ? Math.round((doneActions / totalActions) * 100) : 0;
 
-      const doDates = mappedActions.flatMap(a => [a.startDate, a.endDate]).filter(Boolean).map(d => new Date(d!).getTime());
-      const minDoDate = doDates.length > 0 ? format(new Date(Math.min(...doDates)), 'dd/MM/yyyy') : '---';
-      const maxDoDate = doDates.length > 0 ? format(new Date(Math.max(...doDates)), 'dd/MM/yyyy') : '---';
+      const doDates = mappedActions
+        .flatMap((a) => [a.startDate, a.endDate])
+        .filter(Boolean)
+        .map((d) => new Date(d!).getTime());
+      const minDoDate =
+        doDates.length > 0
+          ? format(new Date(Math.min(...doDates)), "dd/MM/yyyy")
+          : "---";
+      const maxDoDate =
+        doDates.length > 0
+          ? format(new Date(Math.max(...doDates)), "dd/MM/yyyy")
+          : "---";
+
+      const userLogsRows = mappedActions
+        .flatMap((action) =>
+          (action.executionLogs || [])
+            .filter((log) => log.observation && log.observation.trim() !== "")
+            .map((log) => ({
+              timestamp: log.timestamp
+                ? new Date(log.timestamp).getTime()
+                : 0,
+              row: [
+                {
+                  text: log.timestamp
+                    ? format(
+                        new Date(log.timestamp),
+                        "dd/MM/yy HH:mm",
+                      )
+                    : "---",
+                  style: "tableCellTiny",
+                },
+                {
+                  text: log.responsible || "---",
+                  style: "tableCellTiny",
+                },
+                {
+                  text: log.observation,
+                  style: "tableCellTiny",
+                },
+              ],
+            })),
+        )
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .map((item) => item.row);
 
       const renderGainsTable = (gains: GainsStructure | undefined) => {
         if (!gains || !gains.tangible || gains.tangible.length === 0) {
-          return { text: 'Nenhum ganho tangível registrado.', style: 'bodyTextSmall', italic: true };
+          return {
+            text: "Nenhum ganho tangível registrado.",
+            style: "bodyTextSmall",
+            italic: true,
+          };
         }
 
         return {
           table: {
-            widths: ['*', 'auto', 'auto'],
+            widths: ["*", "auto", "auto"],
             headerRows: 1,
             body: [
               [
-                { text: 'TIPO DE GANHO', style: 'tableHeader' },
-                { text: 'VALOR', style: 'tableHeader', alignment: 'right' },
-                { text: 'UNIDADE', style: 'tableHeader' }
+                { text: "TIPO DE GANHO", style: "tableHeader" },
+                { text: "VALOR", style: "tableHeader", alignment: "right" },
+                { text: "UNIDADE", style: "tableHeader" },
               ],
-              ...gains.tangible.map(t => [
-                { text: t.type || '---', style: 'tableCell' },
-                { text: t.value?.toString() || '0', style: 'tableCell', alignment: 'right' },
-                { text: t.unit || '---', style: 'tableCell' }
-              ])
-            ]
+              ...gains.tangible.map((t) => [
+                { text: t.type || "---", style: "tableCell" },
+                {
+                  text: t.value?.toString() || "0",
+                  style: "tableCell",
+                  alignment: "right",
+                },
+                { text: t.unit || "---", style: "tableCell" },
+              ]),
+            ],
           },
           layout: {
             hLineWidth: () => 0.5,
             vLineWidth: () => 0.5,
-            hLineColor: () => '#D3D3D3',
-            vLineColor: () => '#D3D3D3',
+            hLineColor: () => "#D3D3D3",
+            vLineColor: () => "#D3D3D3",
             paddingLeft: () => 8,
             paddingRight: () => 8,
             paddingTop: () => 4,
-            paddingBottom: () => 4
-          }
+            paddingBottom: () => 4,
+          },
         };
       };
 
       const docDefinition: any = {
-        pageSize: 'A4',
+        pageSize: "A4",
         pageMargins: [40, 40, 40, 60],
         images: {
-          logo: logoBase64
+          logo: logoBase64,
         },
         footer: (currentPage: number, pageCount: number) => {
           return {
             margin: [40, 10, 40, 0],
             stack: [
               {
-                canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#D3D3D3' }]
+                canvas: [
+                  {
+                    type: "line",
+                    x1: 0,
+                    y1: 0,
+                    x2: 515,
+                    y2: 0,
+                    lineWidth: 0.5,
+                    lineColor: "#D3D3D3",
+                  },
+                ],
               },
               {
                 columns: [
-                  { width: 100, text: '', style: 'footerText' },
-                  { width: '*', text: `GIP FLOW – Melhoria Contínua`, style: 'footerText', alignment: 'center' },
-                  { width: 100, text: `Página ${currentPage} de ${pageCount}`, alignment: 'right', style: 'footerText' }
+                  { width: 100, text: "", style: "footerText" },
+                  {
+                    width: "*",
+                    text: `GIP FLOW – Melhoria Contínua`,
+                    style: "footerText",
+                    alignment: "center",
+                  },
+                  {
+                    width: 100,
+                    text: `Página ${currentPage} de ${pageCount}`,
+                    alignment: "right",
+                    style: "footerText",
+                  },
                 ],
-                margin: [0, 10, 0, 0]
-              }
-            ]
+                margin: [0, 10, 0, 0],
+              },
+            ],
           };
         },
         content: [
           // TOPO: LOGO (Regra: width 220px, height auto, no clipping)
           {
-            image: 'logo',
+            image: "logo",
             width: 220,
-            alignment: 'left',
-            margin: [0, 0, 0, 24]
+            alignment: "left",
+            margin: [0, 0, 0, 24],
           },
           // CABEÇALHO PRINCIPAL
           {
-            text: 'RELATÓRIO TÉCNICO DE MELHORIA',
-            style: 'mainTitle',
-            alignment: 'center',
-            margin: [0, 0, 0, 15]
+            text: "RELATÓRIO TÉCNICO DE MELHORIA",
+            style: "mainTitle",
+            alignment: "center",
+            margin: [0, 0, 0, 15],
           },
           {
             table: {
-              widths: ['*'],
+              widths: ["*"],
               body: [
-                [{
-                  columns: [
-                    { text: `Projeto Mãe: ${project.name.toUpperCase()}`, style: 'metadataText' },
-                    { text: `Emissão: ${format(new Date(), 'dd/MM/yyyy')}`, style: 'metadataText', alignment: 'right' }
-                  ],
-                  margin: [8, 4, 8, 4]
-                }]
-              ]
+                [
+                  {
+                    columns: [
+                      {
+                        text: `Projeto Mãe: ${project.name.toUpperCase()}`,
+                        style: "metadataText",
+                      },
+                      {
+                        text: `Emissão: ${format(new Date(), "dd/MM/yyyy")}`,
+                        style: "metadataText",
+                        alignment: "right",
+                      },
+                    ],
+                    margin: [8, 4, 8, 4],
+                  },
+                ],
+              ],
             },
             layout: {
-              fillColor: () => '#f3f4f6',
+              fillColor: () => "#f3f4f6",
               hLineWidth: () => 0,
-              vLineWidth: () => 0
+              vLineWidth: () => 0,
             },
-            margin: [0, 0, 0, 20]
+            margin: [0, 0, 0, 20],
           },
 
           // SEÇÃO 01: RESUMO EXECUTIVO
           {
             table: {
-              widths: ['*'],
-              body: [[{ text: '01. RESUMO EXECUTIVO', style: 'sectionHeader' }]]
+              widths: ["*"],
+              body: [
+                [{ text: "01. RESUMO EXECUTIVO", style: "sectionHeader" }],
+              ],
             },
-            layout: 'noBorders',
-            margin: [0, 10, 0, 5]
+            layout: "noBorders",
+            margin: [0, 10, 0, 5],
           },
           {
             stack: [
-              { text: 'DEFINIÇÃO DO PROBLEMA', style: 'fieldLabel', margin: [0, 8, 0, 4] },
+              {
+                text: "DEFINIÇÃO DO PROBLEMA",
+                style: "fieldLabel",
+                margin: [0, 8, 0, 4],
+              },
               {
                 table: {
-                  widths: ['*'],
+                  widths: ["*"],
                   body: [
-                    [{ 
-                      text: activeCycle.plan.problemDescription || 'Não descrito.', 
-                      style: 'bodyHighlight',
-                      margin: [10, 8, 10, 8]
-                    }]
-                  ]
+                    [
+                      {
+                        text:
+                          activeCycle.plan.problemDescription ||
+                          "Não descrito.",
+                        style: "bodyHighlight",
+                        margin: [10, 8, 10, 8],
+                      },
+                    ],
+                  ],
                 },
                 layout: {
-                  fillColor: () => '#f9fafb',
+                  fillColor: () => "#f9fafb",
                   hLineWidth: () => 1,
                   vLineWidth: () => 1,
-                  hLineColor: () => '#D3D3D3',
-                  vLineColor: () => '#D3D3D3'
-                }
-              }
+                  hLineColor: () => "#D3D3D3",
+                  vLineColor: () => "#D3D3D3",
+                },
+              },
             ],
-            margin: [0, 0, 0, 16]
+            margin: [0, 0, 0, 16],
           },
           {
             columns: [
               {
-                width: '50%',
+                width: "50%",
                 stack: [
-                  { text: 'CAUSA RAIZ PRIORITÁRIA', style: 'fieldLabel', margin: [0, 0, 0, 4] },
-                  { text: activeCycle.plan.rootCauseAnalysis.identifiedRootCause || 'Pendente de análise profunda', style: 'bodyHighlight', bold: true, color: '#003489' }
-                ]
+                  {
+                    text: "CAUSA RAIZ PRIORITÁRIA",
+                    style: "fieldLabel",
+                    margin: [0, 0, 0, 4],
+                  },
+                  {
+                    text:
+                      activeCycle.plan.rootCauseAnalysis.identifiedRootCause ||
+                      "Pendente de análise profunda",
+                    style: "bodyHighlight",
+                    bold: true,
+                    color: "#003489",
+                  },
+                ],
               },
               {
-                width: '50%',
+                width: "50%",
                 stack: [
-                  { text: 'GANHOS TANGÍVEIS (ALVO)', style: 'fieldLabel', margin: [0, 0, 0, 4] },
-                  renderGainsTable(activeCycle.plan.impact.expectedGains)
-                ]
-              }
+                  {
+                    text: "GANHOS TANGÍVEIS (ALVO)",
+                    style: "fieldLabel",
+                    margin: [0, 0, 0, 4],
+                  },
+                  renderGainsTable(activeCycle.plan.impact.expectedGains),
+                ],
+              },
             ],
             columnGap: 24,
-            margin: [0, 0, 0, 24]
+            margin: [0, 0, 0, 24],
           },
 
           // SEÇÃO 02: ANÁLISE DE CAUSA RAIZ (5 PORQUÊS)
           {
             table: {
-              widths: ['*'],
-              body: [[{ text: '02. ANÁLISE DE CAUSA RAIZ (5 PORQUÊS)', style: 'sectionHeader' }]]
+              widths: ["*"],
+              body: [
+                [
+                  {
+                    text: "02. ANÁLISE DE CAUSA RAIZ (5 PORQUÊS)",
+                    style: "sectionHeader",
+                  },
+                ],
+              ],
             },
-            layout: 'noBorders',
-            margin: [0, 10, 0, 5]
+            layout: "noBorders",
+            margin: [0, 10, 0, 5],
           },
           {
             table: {
-              widths: [100, '*'],
+              widths: [100, "*"],
               body: [
                 [
-                  { text: 'NÍVEL', style: 'tableHeader' },
-                  { text: 'RESPOSTA / CAUSA IDENTIFICADA', style: 'tableHeader' }
+                  { text: "NÍVEL", style: "tableHeader" },
+                  {
+                    text: "RESPOSTA / CAUSA IDENTIFICADA",
+                    style: "tableHeader",
+                  },
                 ],
                 ...Array.from({ length: 5 }).map((_, i) => {
-                  const entry = activeCycle.plan.rootCauseAnalysis.type === '5whys' ? activeCycle.plan.rootCauseAnalysis.entries[i] : null;
+                  const entry =
+                    activeCycle.plan.rootCauseAnalysis.type === "5whys"
+                      ? activeCycle.plan.rootCauseAnalysis.entries[i]
+                      : null;
                   return [
-                    { text: `${i + 1}º Por quê`, style: 'tableCell', bold: true, alignment: 'center' },
-                    { text: entry?.text || '---', style: 'tableCell' }
+                    {
+                      text: `${i + 1}º Por quê`,
+                      style: "tableCell",
+                      bold: true,
+                      alignment: "center",
+                    },
+                    { text: entry?.text || "---", style: "tableCell" },
                   ];
-                })
-              ]
+                }),
+              ],
             },
             layout: {
               hLineWidth: () => 1,
               vLineWidth: () => 1,
-              hLineColor: () => '#D3D3D3',
-              vLineColor: () => '#D3D3D3',
+              hLineColor: () => "#D3D3D3",
+              vLineColor: () => "#D3D3D3",
               paddingLeft: () => 10,
               paddingRight: () => 10,
               paddingTop: () => 8,
-              paddingBottom: () => 8
+              paddingBottom: () => 8,
             },
-            margin: [0, 5, 0, 24]
+            margin: [0, 5, 0, 24],
           },
 
           // SEÇÃO 03: PLANO DE AÇÃO (5W2H)
           {
             table: {
-              widths: ['*'],
-              body: [[{ text: '03. PLANO DE AÇÃO (5W2H)', style: 'sectionHeader' }]]
+              widths: ["*"],
+              body: [
+                [{ text: "03. PLANO DE AÇÃO (5W2H)", style: "sectionHeader" }],
+              ],
             },
-            layout: 'noBorders',
-            margin: [0, 10, 0, 5]
+            layout: "noBorders",
+            margin: [0, 10, 0, 5],
           },
           {
             table: {
               headerRows: 1,
-              widths: ['15%', '15%', '14%', '14%', '14%', '14%', '14%'],
+              widths: ["15%", "15%", "14%", "14%", "14%", "14%", "14%"],
               body: [
                 [
-                  { text: 'O QUÊ', style: 'tableHeaderTiny' },
-                  { text: 'POR QUÊ', style: 'tableHeaderTiny' },
-                  { text: 'ONDE', style: 'tableHeaderTiny' },
-                  { text: 'QUANDO', style: 'tableHeaderTiny' },
-                  { text: 'QUEM', style: 'tableHeaderTiny' },
-                  { text: 'COMO', style: 'tableHeaderTiny' },
-                  { text: 'QUANTO', style: 'tableHeaderTiny' }
+                  { text: "O QUÊ", style: "tableHeaderTiny" },
+                  { text: "POR QUÊ", style: "tableHeaderTiny" },
+                  { text: "ONDE", style: "tableHeaderTiny" },
+                  { text: "QUANDO", style: "tableHeaderTiny" },
+                  { text: "QUEM", style: "tableHeaderTiny" },
+                  { text: "COMO", style: "tableHeaderTiny" },
+                  { text: "QUANTO", style: "tableHeaderTiny" },
                 ],
                 ...(activeCycle.plan.actionPlan || [])
-                  .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
-                  .map(action => [
-                    { text: action.what || '---', style: 'tableCellTiny' },
-                    { text: action.why || '---', style: 'tableCellTiny' },
-                    { text: action.where || '---', style: 'tableCellTiny' },
-                    { text: action.when || '---', style: 'tableCellTiny' },
-                    { text: action.who || '---', style: 'tableCellTiny' },
-                    { text: action.how || '---', style: 'tableCellTiny' },
-                    { text: action.howMuch || '---', style: 'tableCellTiny' }
-                  ])
-              ]
+                  .filter(
+                    (item) =>
+                      item.status !== "Cancelado" && item.ativo !== false,
+                  )
+                  .map((action) => [
+                    { text: action.what || "---", style: "tableCellTiny" },
+                    { text: action.why || "---", style: "tableCellTiny" },
+                    { text: action.where || "---", style: "tableCellTiny" },
+                    { text: action.when || "---", style: "tableCellTiny" },
+                    { text: action.who || "---", style: "tableCellTiny" },
+                    { text: action.how || "---", style: "tableCellTiny" },
+                    { text: action.howMuch || "---", style: "tableCellTiny" },
+                  ]),
+              ],
             },
             layout: {
               hLineWidth: () => 1,
               vLineWidth: () => 1,
-              hLineColor: () => '#D3D3D3',
-              vLineColor: () => '#D3D3D3',
+              hLineColor: () => "#D3D3D3",
+              vLineColor: () => "#D3D3D3",
               paddingLeft: () => 4,
               paddingRight: () => 4,
               paddingTop: () => 6,
-              paddingBottom: () => 6
+              paddingBottom: () => 6,
             },
             margin: [0, 5, 0, 24],
-            unbreakable: true
+            unbreakable: true,
           },
 
           // SEÇÃO 04: FASE DO – EXECUÇÃO
           {
             table: {
-              widths: ['*'],
-              body: [[{ text: '04. FASE DO – EXECUÇÃO', style: 'sectionHeader' }]]
+              widths: ["*"],
+              body: [
+                [{ text: "04. FASE DO – EXECUÇÃO", style: "sectionHeader" }],
+              ],
             },
-            layout: 'noBorders',
-            margin: [0, 10, 0, 5]
+            layout: "noBorders",
+            margin: [0, 10, 0, 5],
           },
           {
             stack: [
-              { text: 'RESUMO DA EXECUÇÃO', style: 'fieldLabel', margin: [0, 8, 0, 4] },
+              {
+                text: "RESUMO DA EXECUÇÃO",
+                style: "fieldLabel",
+                margin: [0, 8, 0, 4],
+              },
               {
                 columns: [
-                  { 
-                    width: '60%', 
+                  {
+                    width: "60%",
                     text: [
-                      { text: 'OBJETIVO: ', bold: true, color: '#003489', fontSize: 8 },
-                      { text: activeCycle.plan.problemDescription || 'Executar plano de ação para solução do problema.', fontSize: 9 }
-                    ]
+                      {
+                        text: "OBJETIVO: ",
+                        bold: true,
+                        color: "#003489",
+                        fontSize: 8,
+                      },
+                      {
+                        text:
+                          activeCycle.plan.problemDescription ||
+                          "Executar plano de ação para solução do problema.",
+                        fontSize: 9,
+                      },
+                    ],
                   },
                   {
-                    width: '40%',
+                    width: "40%",
                     text: [
-                      { text: 'PERÍODO: ', bold: true, color: '#003489', fontSize: 8 },
-                      { text: `${minDoDate} a ${maxDoDate}`, fontSize: 9 }
+                      {
+                        text: "PERÍODO: ",
+                        bold: true,
+                        color: "#003489",
+                        fontSize: 8,
+                      },
+                      { text: `${minDoDate} a ${maxDoDate}`, fontSize: 9 },
                     ],
-                    alignment: 'right'
-                  }
+                    alignment: "right",
+                  },
                 ],
-                margin: [0, 0, 0, 12]
+                margin: [0, 0, 0, 12],
               },
-              { text: 'LISTA DE AÇÕES EXECUTADAS', style: 'fieldLabel', margin: [0, 8, 0, 4] },
+              {
+                text: "LISTA DE AÇÕES EXECUTADAS",
+                style: "fieldLabel",
+                margin: [0, 8, 0, 4],
+              },
               {
                 table: {
                   headerRows: 1,
-                  widths: ['35%', '20%', '15%', '15%', '15%'],
+                  widths: ["35%", "20%", "15%", "15%", "15%"],
                   body: [
                     [
-                      { text: 'AÇÃO', style: 'tableHeaderTiny' },
-                      { text: 'RESPONSÁVEL', style: 'tableHeaderTiny' },
-                      { text: 'INÍCIO', style: 'tableHeaderTiny' },
-                      { text: 'TÉRMINO', style: 'tableHeaderTiny' },
-                      { text: 'STATUS', style: 'tableHeaderTiny' }
+                      { text: "AÇÃO", style: "tableHeaderTiny" },
+                      { text: "RESPONSÁVEL", style: "tableHeaderTiny" },
+                      { text: "INÍCIO", style: "tableHeaderTiny" },
+                      { text: "TÉRMINO", style: "tableHeaderTiny" },
+                      { text: "STATUS", style: "tableHeaderTiny" },
                     ],
-                    ...mappedActions.map(action => [
-                      { text: action.what || '---', style: 'tableCellTiny' },
-                      { text: action.who || '---', style: 'tableCellTiny' },
-                      { text: action.startDate ? format(new Date(action.startDate), 'dd/MM/yyyy') : '---', style: 'tableCellTiny' },
-                      { text: action.endDate ? format(new Date(action.endDate), 'dd/MM/yyyy') : '---', style: 'tableCellTiny' },
-                      { text: action.displayStatus, style: 'tableCellTiny', bold: true }
-                    ])
-                  ]
+                    ...mappedActions.map((action) => [
+                      { text: action.what || "---", style: "tableCellTiny" },
+                      { text: action.who || "---", style: "tableCellTiny" },
+                      {
+                        text: action.startDate
+                          ? format(new Date(action.startDate), "dd/MM/yyyy")
+                          : "---",
+                        style: "tableCellTiny",
+                      },
+                      {
+                        text: action.endDate
+                          ? format(new Date(action.endDate), "dd/MM/yyyy")
+                          : "---",
+                        style: "tableCellTiny",
+                      },
+                      {
+                        text: action.displayStatus,
+                        style: "tableCellTiny",
+                        bold: true,
+                      },
+                    ]),
+                  ],
                 },
-                layout: 'lightHorizontalLines'
+                layout: "lightHorizontalLines",
               },
-              { text: 'EVIDÊNCIAS / REGISTROS', style: 'fieldLabel', margin: [0, 12, 0, 4] },
-              { 
+              {
+                text: "EVIDÊNCIAS / REGISTROS",
+                style: "fieldLabel",
+                margin: [0, 12, 0, 4],
+              },
+              {
                 ul: (activeCycle.plan.actionPlan || [])
-                  .filter(item => item.status !== 'Cancelado' && item.ativo !== false && item.evidence)
-                  .map(item => ({ text: `${item.what}: ${item.evidence}`, fontSize: 8, margin: [0, 2] })),
-                margin: [10, 0, 0, 12]
+                  .filter(
+                    (item) =>
+                      item.status !== "Cancelado" &&
+                      item.ativo !== false &&
+                      item.evidence,
+                  )
+                  .map((item) => ({
+                    text: `${item.what}: ${item.evidence}`,
+                    fontSize: 8,
+                    margin: [0, 2],
+                  })),
+                margin: [10, 0, 0, 12],
               },
-              { text: 'HISTÓRICO DE ALTERAÇÕES (LOGS)', style: 'fieldLabel', margin: [0, 8, 0, 4] },
+              {
+                text: "HISTÓRICO DE ATUALIZAÇÕES",
+                style: "fieldLabel",
+                margin: [0, 8, 0, 4],
+              },
               {
                 table: {
                   headerRows: 1,
-                  widths: ['15%', '15%', '70%'],
+                  widths: ["15%", "15%", "70%"],
                   body: [
                     [
-                      { text: 'DATA/HORA', style: 'tableHeaderTiny' },
-                      { text: 'USUÁRIO', style: 'tableHeaderTiny' },
-                      { text: 'DESCRIÇÃO DA ALTERAÇÃO', style: 'tableHeaderTiny' }
+                      { text: "DATA/HORA", style: "tableHeaderTiny" },
+                      { text: "USUÁRIO", style: "tableHeaderTiny" },
+                      {
+                        text: "DESCRIÇÃO DA ALTERAÇÃO",
+                        style: "tableHeaderTiny",
+                      },
                     ],
-                    ...mappedActions
-                      .flatMap(action => (action.executionLogs || []).map(log => ({
-                        timestamp: log.timestamp ? new Date(log.timestamp).getTime() : 0,
-                        row: [
-                          { text: log.timestamp ? format(new Date(log.timestamp), 'dd/MM/yy HH:mm') : '---', style: 'tableCellTiny' },
-                          { text: log.responsible || '---', style: 'tableCellTiny' },
-                          { text: `[${action.what}] ${log.observation || 'Atualização de status'}`, style: 'tableCellTiny' }
-                        ]
-                      })))
-                      .sort((a, b) => b.timestamp - a.timestamp)
-                      .map(item => item.row)
-                      .slice(0, 15)
-                  ]
+                    ...(userLogsRows.length > 0
+                      ? userLogsRows
+                      : [
+                          [
+                            {
+                              text: "Nenhum histórico de atualização com observações registrado.",
+                              colSpan: 3,
+                              style: "tableCellTiny",
+                              italic: true,
+                            },
+                            {},
+                            {},
+                          ],
+                        ]),
+                  ],
                 },
-                layout: 'lightHorizontalLines'
-              }
+                layout: "lightHorizontalLines",
+              },
             ],
-            margin: [0, 0, 0, 20]
+            margin: [0, 0, 0, 20],
           },
 
           // SEÇÃO 05: FASE CHECK – VERIFICAÇÃO
           {
             table: {
-              widths: ['*'],
-              body: [[{ text: '05. FASE CHECK – VERIFICAÇÃO', style: 'sectionHeader' }]]
+              widths: ["*"],
+              body: [
+                [
+                  {
+                    text: "05. FASE CHECK – VERIFICAÇÃO",
+                    style: "sectionHeader",
+                  },
+                ],
+              ],
             },
-            layout: 'noBorders',
-            margin: [0, 10, 0, 5]
+            layout: "noBorders",
+            margin: [0, 10, 0, 5],
           },
           {
             stack: [
               {
                 columns: [
                   {
-                    width: '50%',
+                    width: "50%",
                     stack: [
-                      { text: 'INDICADORES DE DESEMPENHO (KPIs)', style: 'fieldLabel', margin: [0, 8, 0, 4] },
+                      {
+                        text: "INDICADORES DE DESEMPENHO (KPIs)",
+                        style: "fieldLabel",
+                        margin: [0, 8, 0, 4],
+                      },
                       {
                         table: {
-                          widths: ['*', 'auto'],
+                          widths: ["*", "auto"],
                           body: [
-                            [{ text: 'Ações Totais', style: 'tableCellTiny' }, { text: totalActions.toString(), style: 'tableCellTiny', bold: true }],
-                            [{ text: 'Ações Concluídas', style: 'tableCellTiny' }, { text: doneActions.toString(), style: 'tableCellTiny', bold: true }],
-                            [{ text: 'Ações Pendentes/Andamento', style: 'tableCellTiny' }, { text: pendingActions.toString(), style: 'tableCellTiny', bold: true }],
-                            [{ text: '% de Conclusão', style: 'tableCellTiny', bold: true, color: '#003489' }, { text: `${completionRate}%`, style: 'tableCellTiny', bold: true, color: '#003489' }]
-                          ]
-                        }
-                      }
-                    ]
+                            [
+                              { text: "Ações Totais", style: "tableCellTiny" },
+                              {
+                                text: totalActions.toString(),
+                                style: "tableCellTiny",
+                                bold: true,
+                              },
+                            ],
+                            [
+                              {
+                                text: "Ações Concluídas",
+                                style: "tableCellTiny",
+                              },
+                              {
+                                text: doneActions.toString(),
+                                style: "tableCellTiny",
+                                bold: true,
+                              },
+                            ],
+                            [
+                              {
+                                text: "Ações Pendentes/Andamento",
+                                style: "tableCellTiny",
+                              },
+                              {
+                                text: pendingActions.toString(),
+                                style: "tableCellTiny",
+                                bold: true,
+                              },
+                            ],
+                            [
+                              {
+                                text: "% de Conclusão",
+                                style: "tableCellTiny",
+                                bold: true,
+                                color: "#003489",
+                              },
+                              {
+                                text: `${completionRate}%`,
+                                style: "tableCellTiny",
+                                bold: true,
+                                color: "#003489",
+                              },
+                            ],
+                          ],
+                        },
+                      },
+                    ],
                   },
                   {
-                    width: '50%',
+                    width: "50%",
                     stack: [
-                      { text: 'PROBLEMAS IDENTIFICADOS NA EXECUÇÃO', style: 'fieldLabel', margin: [0, 8, 0, 4] },
+                      {
+                        text: "PROBLEMAS IDENTIFICADOS NA EXECUÇÃO",
+                        style: "fieldLabel",
+                        margin: [0, 8, 0, 4],
+                      },
                       {
                         ul: validActions
-                          .filter(item => (item.worked === 'Não' || item.worked === 'Parcial'))
-                          .map(item => ({ text: `${item.what}: ${item.failureReason || 'Não obteve o resultado esperado.'}`, fontSize: 8 }))
-                          .slice(0, 5)
-                      }
-                    ]
-                  }
+                          .filter(
+                            (item) =>
+                              item.worked === "Não" ||
+                              item.worked === "Parcial",
+                          )
+                          .map((item) => ({
+                            text: `${item.what}: ${item.failureReason || "Não obteve o resultado esperado."}`,
+                            fontSize: 8,
+                          }))
+                          .slice(0, 5),
+                      },
+                    ],
+                  },
                 ],
                 columnGap: 24,
-                margin: [0, 0, 0, 16]
+                margin: [0, 0, 0, 16],
               },
-              { text: 'RESULTADOS REGISTRADOS (GANHOS REAIS)', style: 'fieldLabel', margin: [0, 8, 0, 4] },
+              {
+                text: "RESULTADOS REGISTRADOS (GANHOS REAIS)",
+                style: "fieldLabel",
+                margin: [0, 8, 0, 4],
+              },
               ...mappedActions
-                .filter(item => item.effectiveStatus === 'Concluído' && item.realGains && (item.realGains.tangible.length > 0 || item.realGains.intangible.length > 0))
-                .flatMap(item => [
-                  { text: `Ação: ${item.what}`, fontSize: 8, bold: true, margin: [0, 4, 0, 2] },
+                .filter(
+                  (item) =>
+                    item.effectiveStatus === "Concluído" &&
+                    item.realGains &&
+                    (item.realGains.tangible.length > 0 ||
+                      item.realGains.intangible.length > 0),
+                )
+                .flatMap((item) => [
+                  {
+                    text: `Ação: ${item.what}`,
+                    fontSize: 8,
+                    bold: true,
+                    margin: [0, 4, 0, 2],
+                  },
                   renderGainsTable(item.realGains),
-                  item.realGains?.intangible && item.realGains.intangible.length > 0 ? {
-                    ul: item.realGains.intangible.map(ig => ({ text: `${ig.type}: ${ig.description} (Impacto: ${ig.impactLevel})`, fontSize: 7 })),
-                    margin: [10, 2, 0, 4]
-                  } : {}
+                  item.realGains?.intangible &&
+                  item.realGains.intangible.length > 0
+                    ? {
+                        ul: item.realGains.intangible.map((ig) => ({
+                          text: `${ig.type}: ${ig.description} (Impacto: ${ig.impactLevel})`,
+                          fontSize: 7,
+                        })),
+                        margin: [10, 2, 0, 4],
+                      }
+                    : {},
                 ]),
-              
-              { text: 'ANÁLISE (RESULTADOS ATINGIDOS)', style: 'fieldLabel', margin: [0, 12, 0, 4] },
+
+              {
+                text: "ANÁLISE (RESULTADOS ATINGIDOS)",
+                style: "fieldLabel",
+                margin: [0, 12, 0, 4],
+              },
               {
                 table: {
-                  widths: ['*'],
+                  widths: ["*"],
                   body: [
-                    [{ 
-                      text: mappedActions.some(i => i.worked === 'Não') 
-                          ? 'Algumas ações não atingiram o resultado esperado ou apresentaram falhas parciais. Problemas foram detectados na fase de execução, necessitando reavaliação nas diretrizes de ACT para correção de rota.'
-                          : 'As ações executadas demonstraram total eficácia conforme os critérios definidos na fase de planejamento. Os ganhos reais confirmam a mitigação da causa raiz identificada e estabilidade do processo.',
-                      style: 'bodyHighlight',
-                      margin: [10, 8, 10, 8]
-                    }]
-                  ]
+                    [
+                      {
+                        text: mappedActions.some((i) => i.worked === "Não")
+                          ? "Algumas ações não atingiram o resultado esperado ou apresentaram falhas parciais. Problemas foram detectados na fase de execução, necessitando reavaliação nas diretrizes de ACT para correção de rota."
+                          : "As ações executadas demonstraram total eficácia conforme os critérios definidos na fase de planejamento. Os ganhos reais confirmam a mitigação da causa raiz identificada e estabilidade do processo.",
+                        style: "bodyHighlight",
+                        margin: [10, 8, 10, 8],
+                      },
+                    ],
+                  ],
                 },
                 layout: {
-                  fillColor: () => '#f9fafb',
+                  fillColor: () => "#f9fafb",
                   hLineWidth: () => 1,
                   vLineWidth: () => 1,
-                  hLineColor: () => '#D3D3D3',
-                  vLineColor: () => '#D3D3D3'
+                  hLineColor: () => "#D3D3D3",
+                  vLineColor: () => "#D3D3D3",
                 },
-                margin: [0, 0, 0, 16]
+                margin: [0, 0, 0, 16],
               },
-              { text: 'CONCLUSÃO DA FASE CHECK', style: 'fieldLabel', margin: [0, 8, 0, 4] },
+              {
+                text: "CONCLUSÃO DA FASE CHECK",
+                style: "fieldLabel",
+                margin: [0, 8, 0, 4],
+              },
               {
                 text: [
-                  { text: 'STATUS FINAL: ', bold: true, color: '#003489', fontSize: 9 },
-                  { text: isCheckPhaseValid ? 'VERIFICADO E VALIDADO' : 'EM PROCESSO DE VERIFICAÇÃO', fontSize: 9, bold: true }
-                ]
-              }
+                  {
+                    text: "STATUS FINAL: ",
+                    bold: true,
+                    color: "#003489",
+                    fontSize: 9,
+                  },
+                  {
+                    text: isCheckPhaseValid
+                      ? "VERIFICADO E VALIDADO"
+                      : "EM PROCESSO DE VERIFICAÇÃO",
+                    fontSize: 9,
+                    bold: true,
+                  },
+                ],
+              },
             ],
-            margin: [0, 0, 0, 20]
+            margin: [0, 0, 0, 20],
           },
 
           // SEÇÃO 06: PADRONIZAÇÃO E ENCERRAMENTO (ACT)
           {
             table: {
-              widths: ['*'],
-              body: [[{ text: '06. PADRONIZAÇÃO E ENCERRAMENTO (ACT)', style: 'sectionHeader' }]]
+              widths: ["*"],
+              body: [
+                [
+                  {
+                    text: "06. PADRONIZAÇÃO E ENCERRAMENTO (ACT)",
+                    style: "sectionHeader",
+                  },
+                ],
+              ],
             },
-            layout: 'noBorders',
-            margin: [0, 10, 0, 5]
+            layout: "noBorders",
+            margin: [0, 10, 0, 5],
           },
           {
             stack: [
-              { text: 'AÇÕES E STATUS FINAIS', style: 'fieldLabel', margin: [0, 8, 0, 4] },
+              {
+                text: "AÇÕES E STATUS FINAIS",
+                style: "fieldLabel",
+                margin: [0, 8, 0, 4],
+              },
               {
                 table: {
                   headerRows: 1,
-                  widths: ['40%', '20%', '20%', '20%'],
+                  widths: ["40%", "20%", "20%", "20%"],
                   body: [
                     [
-                      { text: 'AÇÃO', style: 'tableHeaderTiny' },
-                      { text: 'STATUS FINAL', style: 'tableHeaderTiny' },
-                      { text: 'AÇÃO FINAL', style: 'tableHeaderTiny' },
-                      { text: 'PADRONIZAÇÃO', style: 'tableHeaderTiny' }
+                      { text: "AÇÃO", style: "tableHeaderTiny" },
+                      { text: "STATUS FINAL", style: "tableHeaderTiny" },
+                      { text: "AÇÃO FINAL", style: "tableHeaderTiny" },
+                      { text: "PADRONIZAÇÃO", style: "tableHeaderTiny" },
                     ],
-                    ...mappedActions.map(item => [
-                      { text: item.what || '---', style: 'tableCellTiny' },
-                      { text: item.finalProblemStatus || '---', style: 'tableCellTiny', color: item.finalProblemStatus === 'Resolvido' ? '#059669' : '#DC2626' },
-                      { text: item.finalAction || '---', style: 'tableCellTiny' },
-                      { text: item.standardizationModels?.join(', ') || 'N/A', style: 'tableCellTiny' }
-                    ])
-                  ]
+                    ...mappedActions.map((item) => [
+                      { text: item.what || "---", style: "tableCellTiny" },
+                      {
+                        text: item.finalProblemStatus || "---",
+                        style: "tableCellTiny",
+                        color:
+                          item.finalProblemStatus === "Resolvido"
+                            ? "#059669"
+                            : "#DC2626",
+                      },
+                      {
+                        text: item.finalAction || "---",
+                        style: "tableCellTiny",
+                      },
+                      {
+                        text: item.standardizationModels?.join(", ") || "N/A",
+                        style: "tableCellTiny",
+                      },
+                    ]),
+                  ],
                 },
-                layout: 'lightHorizontalLines'
-              }
-            ]
-          }
+                layout: "lightHorizontalLines",
+              },
+            ],
+          },
         ],
         styles: {
-          mainTitle: { fontSize: 18, bold: true, color: '#003489' },
-          metadataText: { fontSize: 9, bold: true, color: '#4b5563' },
-          sectionHeader: { 
-            fontSize: 12, 
-            bold: true, 
-            color: '#FFFFFF', 
-            fillColor: '#003489',
-            margin: [8, 4, 8, 4]
+          mainTitle: { fontSize: 18, bold: true, color: "#003489" },
+          metadataText: { fontSize: 9, bold: true, color: "#4b5563" },
+          sectionHeader: {
+            fontSize: 12,
+            bold: true,
+            color: "#FFFFFF",
+            fillColor: "#003489",
+            margin: [8, 4, 8, 4],
           },
-          fieldLabel: { fontSize: 8, bold: true, color: '#64748b' },
-          bodyHighlight: { fontSize: 10, color: '#1e293b' },
-          bodyTextSmall: { fontSize: 9, color: '#4b5563', lineHeight: 1.4 },
-          tableHeader: { fontSize: 9, bold: true, color: '#FFFFFF', fillColor: '#003489', alignment: 'center' },
-          tableHeaderTiny: { fontSize: 7, bold: true, color: '#FFFFFF', fillColor: '#003489', alignment: 'center' },
-          tableCell: { fontSize: 9, color: '#334155' },
-          tableCellTiny: { fontSize: 7, color: '#334155', alignment: 'center' },
-          footerText: { fontSize: 8, bold: true, color: '#64748b' }
+          fieldLabel: { fontSize: 8, bold: true, color: "#64748b" },
+          bodyHighlight: { fontSize: 10, color: "#1e293b" },
+          bodyTextSmall: { fontSize: 9, color: "#4b5563", lineHeight: 1.4 },
+          tableHeader: {
+            fontSize: 9,
+            bold: true,
+            color: "#FFFFFF",
+            fillColor: "#003489",
+            alignment: "center",
+          },
+          tableHeaderTiny: {
+            fontSize: 7,
+            bold: true,
+            color: "#FFFFFF",
+            fillColor: "#003489",
+            alignment: "center",
+          },
+          tableCell: { fontSize: 9, color: "#334155" },
+          tableCellTiny: { fontSize: 7, color: "#334155", alignment: "center" },
+          footerText: { fontSize: 8, bold: true, color: "#64748b" },
         },
         defaultStyle: {
-          font: 'Roboto'
-        }
+          font: "Roboto",
+        },
       };
 
-      pdfMake.createPdf(docDefinition).download(`PDCA_${activeCycle.title.replace(/\s+/g, '_')}_${format(new Date(), 'yyyyMMdd')}.pdf`);
+      pdfMake
+        .createPdf(docDefinition)
+        .download(
+          `PDCA_${activeCycle.title.replace(/\s+/g, "_")}_${format(new Date(), "yyyyMMdd")}.pdf`,
+        );
       setSaveFeedback("PDF gerado com sucesso!");
     } catch (error) {
-      console.error('Erro ao gerar PDF:', error);
+      console.error("Erro ao gerar PDF:", error);
       setSaveFeedback("Erro na geração do PDF.");
     } finally {
       setIsExportingPDF(false);
@@ -1004,24 +1570,53 @@ export default function PDCAEditor({
     return (
       <div className="space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {(activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories).map((cat, catIdx) => (
-            <div key={cat.id} className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4 shadow-sm">
+          {(
+            activeCycle.plan.rootCauseAnalysis.ishikawa ||
+            ishikawaDefaultCategories
+          ).map((cat, catIdx) => (
+            <div
+              key={cat.id}
+              className="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-4 shadow-sm"
+            >
               <div className="flex items-center justify-between">
                 <div>
-                  <h5 className="font-black text-slate-800 text-xs uppercase tracking-widest">{cat.name}</h5>
-                  <p className="text-[10px] text-slate-400 font-medium">{cat.description}</p>
+                  <h5 className="font-black text-slate-800 text-xs uppercase tracking-widest">
+                    {cat.name}
+                  </h5>
+                  <p className="text-[10px] text-slate-400 font-medium">
+                    {cat.description}
+                  </p>
                 </div>
-                <button 
+                <button
                   disabled={(cat.entries?.length || 0) >= 3}
                   onClick={() => {
-                    const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
+                    const currentIshikawa =
+                      activeCycle.plan.rootCauseAnalysis.ishikawa ||
+                      ishikawaDefaultCategories;
                     const newIshikawa = currentIshikawa.map((c, i) => {
-                      if (i === catIdx) return { ...c, entries: [...(c.entries || []), { id: uuidv4(), text: '' }] };
+                      if (i === catIdx)
+                        return {
+                          ...c,
+                          entries: [
+                            ...(c.entries || []),
+                            { id: uuidv4(), text: "" },
+                          ],
+                        };
                       return c;
                     });
-                    updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, ishikawa: newIshikawa } });
+                    updatePlan({
+                      rootCauseAnalysis: {
+                        ...activeCycle.plan.rootCauseAnalysis,
+                        ishikawa: newIshikawa,
+                      },
+                    });
                   }}
-                  className={cn("p-2 rounded-lg transition-all", (cat.entries?.length || 0) >= 3 ? "text-slate-300" : "bg-white text-indigo-600 hover:bg-indigo-600 hover:text-white shadow-sm")}
+                  className={cn(
+                    "p-2 rounded-lg transition-all",
+                    (cat.entries?.length || 0) >= 3
+                      ? "text-slate-300"
+                      : "bg-white text-indigo-600 hover:bg-indigo-600 hover:text-white shadow-sm",
+                  )}
                 >
                   <Plus size={14} />
                 </button>
@@ -1029,26 +1624,51 @@ export default function PDCAEditor({
               <div className="space-y-2">
                 {cat.entries.map((entry, entryIdx) => (
                   <div key={entry.id} className="flex gap-2">
-                    <input 
+                    <input
                       type="text"
                       placeholder="Causa..."
-                      value={entry.text || ''}
+                      value={entry.text || ""}
                       onChange={(e) => {
-                        const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
+                        const currentIshikawa =
+                          activeCycle.plan.rootCauseAnalysis.ishikawa ||
+                          ishikawaDefaultCategories;
                         const newIshikawa = [...currentIshikawa];
                         const newEntries = [...newIshikawa[catIdx].entries];
-                        newEntries[entryIdx] = { ...newEntries[entryIdx], text: e.target.value };
-                        newIshikawa[catIdx] = { ...newIshikawa[catIdx], entries: newEntries };
-                        updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, ishikawa: newIshikawa } });
+                        newEntries[entryIdx] = {
+                          ...newEntries[entryIdx],
+                          text: e.target.value,
+                        };
+                        newIshikawa[catIdx] = {
+                          ...newIshikawa[catIdx],
+                          entries: newEntries,
+                        };
+                        updatePlan({
+                          rootCauseAnalysis: {
+                            ...activeCycle.plan.rootCauseAnalysis,
+                            ishikawa: newIshikawa,
+                          },
+                        });
                       }}
                       className="flex-1 p-2 bg-white border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-medium shadow-sm transition-all"
                     />
-                    <button 
+                    <button
                       onClick={() => {
-                        const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
+                        const currentIshikawa =
+                          activeCycle.plan.rootCauseAnalysis.ishikawa ||
+                          ishikawaDefaultCategories;
                         const newIshikawa = [...currentIshikawa];
-                        newIshikawa[catIdx] = { ...newIshikawa[catIdx], entries: newIshikawa[catIdx].entries.filter((_, i) => i !== entryIdx) };
-                        updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, ishikawa: newIshikawa } });
+                        newIshikawa[catIdx] = {
+                          ...newIshikawa[catIdx],
+                          entries: newIshikawa[catIdx].entries.filter(
+                            (_, i) => i !== entryIdx,
+                          ),
+                        };
+                        updatePlan({
+                          rootCauseAnalysis: {
+                            ...activeCycle.plan.rootCauseAnalysis,
+                            ishikawa: newIshikawa,
+                          },
+                        });
                       }}
                       className="text-slate-300 hover:text-rose-500 transition-colors"
                     >
@@ -1061,33 +1681,70 @@ export default function PDCAEditor({
           ))}
         </div>
 
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-slate-900 p-8 rounded-[2rem] text-white space-y-6">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-slate-900 p-8 rounded-[2rem] text-white space-y-6"
+        >
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-indigo-500 rounded-2xl flex items-center justify-center">
               <Target size={24} />
             </div>
             <div>
-              <h4 className="text-lg font-black tracking-tight">Causas Prioritárias</h4>
-              <p className="text-slate-400 text-xs font-medium">Selecione até 3 causas principais para focar no plano de ação.</p>
+              <h4 className="text-lg font-black tracking-tight">
+                Causas Prioritárias
+              </h4>
+              <p className="text-slate-400 text-xs font-medium">
+                Selecione até 3 causas principais para focar no plano de ação.
+              </p>
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {allIshikawaCauses.length === 0 ? (
-              <p className="text-slate-500 text-xs italic p-4 border border-dashed border-slate-800 rounded-2xl col-span-full text-center">Preencha as causas acima para priorizar.</p>
+              <p className="text-slate-500 text-xs italic p-4 border border-dashed border-slate-800 rounded-2xl col-span-full text-center">
+                Preencha as causas acima para priorizar.
+              </p>
             ) : (
-              allIshikawaCauses.map(cause => {
-                const isSelected = (activeCycle.plan.rootCauseAnalysis.priorityCauses || []).includes(cause);
+              allIshikawaCauses.map((cause) => {
+                const isSelected = (
+                  activeCycle.plan.rootCauseAnalysis.priorityCauses || []
+                ).includes(cause);
                 return (
                   <button
                     key={cause}
                     onClick={() => {
-                      const current = activeCycle.plan.rootCauseAnalysis.priorityCauses || [];
-                      if (isSelected) updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, priorityCauses: current.filter(c => c !== cause) } });
-                      else updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, priorityCauses: [...current, cause] } });
+                      const current =
+                        activeCycle.plan.rootCauseAnalysis.priorityCauses || [];
+                      if (isSelected)
+                        updatePlan({
+                          rootCauseAnalysis: {
+                            ...activeCycle.plan.rootCauseAnalysis,
+                            priorityCauses: current.filter((c) => c !== cause),
+                          },
+                        });
+                      else
+                        updatePlan({
+                          rootCauseAnalysis: {
+                            ...activeCycle.plan.rootCauseAnalysis,
+                            priorityCauses: [...current, cause],
+                          },
+                        });
                     }}
-                    className={cn("flex items-center gap-3 p-4 rounded-2xl border transition-all text-left", isSelected ? "bg-indigo-600 border-indigo-400 text-white shadow-lg" : "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600")}
+                    className={cn(
+                      "flex items-center gap-3 p-4 rounded-2xl border transition-all text-left",
+                      isSelected
+                        ? "bg-indigo-600 border-indigo-400 text-white shadow-lg"
+                        : "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600",
+                    )}
                   >
-                    <div className={cn("w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0", isSelected ? "border-white bg-white text-indigo-600" : "border-slate-600")}>
+                    <div
+                      className={cn(
+                        "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0",
+                        isSelected
+                          ? "border-white bg-white text-indigo-600"
+                          : "border-slate-600",
+                      )}
+                    >
                       {isSelected && <CheckCircle2 size={12} />}
                     </div>
                     <span className="text-xs font-bold truncate">{cause}</span>
@@ -1096,13 +1753,24 @@ export default function PDCAEditor({
               })
             )}
           </div>
-          {(activeCycle.plan.rootCauseAnalysis.priorityCauses || []).length > 0 && (
+          {(activeCycle.plan.rootCauseAnalysis.priorityCauses || []).length >
+            0 && (
             <div className="pt-4 border-t border-slate-800">
-              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Selecionadas ({activeCycle.plan.rootCauseAnalysis.priorityCauses?.length})</p>
+              <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">
+                Selecionadas (
+                {activeCycle.plan.rootCauseAnalysis.priorityCauses?.length})
+              </p>
               <div className="flex flex-wrap gap-2">
-                {activeCycle.plan.rootCauseAnalysis.priorityCauses?.map((cause, cIdx) => (
-                  <span key={`${cause}-${cIdx}`} className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">{cause}</span>
-                ))}
+                {activeCycle.plan.rootCauseAnalysis.priorityCauses?.map(
+                  (cause, cIdx) => (
+                    <span
+                      key={`${cause}-${cIdx}`}
+                      className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest"
+                    >
+                      {cause}
+                    </span>
+                  ),
+                )}
               </div>
             </div>
           )}
@@ -1119,25 +1787,48 @@ export default function PDCAEditor({
           {activeCycle.plan.rootCauseAnalysis.entries.map((entry, idx) => (
             <div key={entry.id} className="flex items-center gap-4 group">
               <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 font-black shadow-sm shrink-0 group-focus-within:bg-indigo-50 group-focus-within:text-indigo-600 group-focus-within:border-indigo-100 transition-all">
-                {activeCycle.plan.rootCauseAnalysis.type === '5whys' ? idx + 1 : <HelpCircle size={16} />}
+                {activeCycle.plan.rootCauseAnalysis.type === "5whys" ? (
+                  idx + 1
+                ) : (
+                  <HelpCircle size={16} />
+                )}
               </div>
               <div className="flex-1 flex gap-2">
-                <input 
-                  type="text" 
-                  placeholder={activeCycle.plan.rootCauseAnalysis.type === '5whys' ? `Por quê ${idx + 1}?` : "Descreva a causa..."}
-                  value={entry.text || ''}
+                <input
+                  type="text"
+                  placeholder={
+                    activeCycle.plan.rootCauseAnalysis.type === "5whys"
+                      ? `Por quê ${idx + 1}?`
+                      : "Descreva a causa..."
+                  }
+                  value={entry.text || ""}
                   onChange={(e) => {
-                    const newEntries = [...activeCycle.plan.rootCauseAnalysis.entries];
+                    const newEntries = [
+                      ...activeCycle.plan.rootCauseAnalysis.entries,
+                    ];
                     newEntries[idx].text = e.target.value;
-                    updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, entries: newEntries } });
+                    updatePlan({
+                      rootCauseAnalysis: {
+                        ...activeCycle.plan.rootCauseAnalysis,
+                        entries: newEntries,
+                      },
+                    });
                   }}
                   className="flex-1 p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-inner transition-all"
                 />
-                {activeCycle.plan.rootCauseAnalysis.type === 'list' && (
-                  <button 
+                {activeCycle.plan.rootCauseAnalysis.type === "list" && (
+                  <button
                     onClick={() => {
-                      const newEntries = activeCycle.plan.rootCauseAnalysis.entries.filter((_, i) => i !== idx);
-                      updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, entries: newEntries } });
+                      const newEntries =
+                        activeCycle.plan.rootCauseAnalysis.entries.filter(
+                          (_, i) => i !== idx,
+                        );
+                      updatePlan({
+                        rootCauseAnalysis: {
+                          ...activeCycle.plan.rootCauseAnalysis,
+                          entries: newEntries,
+                        },
+                      });
                     }}
                     className="p-4 text-slate-300 hover:text-rose-500 transition-colors"
                   >
@@ -1147,9 +1838,19 @@ export default function PDCAEditor({
               </div>
             </div>
           ))}
-          {activeCycle.plan.rootCauseAnalysis.type === 'list' && (
-            <button 
-              onClick={() => updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, entries: [...activeCycle.plan.rootCauseAnalysis.entries, { id: uuidv4(), text: '' }] } })}
+          {activeCycle.plan.rootCauseAnalysis.type === "list" && (
+            <button
+              onClick={() =>
+                updatePlan({
+                  rootCauseAnalysis: {
+                    ...activeCycle.plan.rootCauseAnalysis,
+                    entries: [
+                      ...activeCycle.plan.rootCauseAnalysis.entries,
+                      { id: uuidv4(), text: "" },
+                    ],
+                  },
+                })
+              }
               className="w-full py-4 border-2 border-dashed border-slate-100 rounded-2xl text-slate-400 font-black text-xs hover:border-indigo-300 hover:text-indigo-600 transition-all flex items-center justify-center gap-2"
             >
               <Plus size={16} /> Adicionar Causa
@@ -1162,17 +1863,33 @@ export default function PDCAEditor({
             <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm">
               <Target size={18} />
             </div>
-            <h5 className="font-black text-xs uppercase tracking-widest">Causa raiz identificada</h5>
+            <h5 className="font-black text-xs uppercase tracking-widest">
+              Causa raiz identificada
+            </h5>
           </div>
-          <textarea 
+          <textarea
             placeholder="Após a análise, qual a causa raiz definitiva?"
-            value={activeCycle.plan.rootCauseAnalysis.identifiedRootCause || ''}
-            onChange={(e) => updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, identifiedRootCause: e.target.value } })}
-            className={cn("w-full p-6 bg-white border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm min-h-[120px] transition-all", showValidationErrors && !activeCycle.plan.rootCauseAnalysis.identifiedRootCause?.trim() ? "border-rose-300 ring-4 ring-rose-50" : "border-indigo-100")}
+            value={activeCycle.plan.rootCauseAnalysis.identifiedRootCause || ""}
+            onChange={(e) =>
+              updatePlan({
+                rootCauseAnalysis: {
+                  ...activeCycle.plan.rootCauseAnalysis,
+                  identifiedRootCause: e.target.value,
+                },
+              })
+            }
+            className={cn(
+              "w-full p-6 bg-white border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm min-h-[120px] transition-all",
+              showValidationErrors &&
+                !activeCycle.plan.rootCauseAnalysis.identifiedRootCause?.trim()
+                ? "border-rose-300 ring-4 ring-rose-50"
+                : "border-indigo-100",
+            )}
           />
           {!activeCycle.plan.rootCauseAnalysis.identifiedRootCause && (
             <div className="flex items-center gap-2 text-rose-500 text-[10px] font-black uppercase tracking-widest animate-pulse">
-              <AlertCircle size={14} /> Identificação obrigatória para prosseguir
+              <AlertCircle size={14} /> Identificação obrigatória para
+              prosseguir
             </div>
           )}
         </div>
@@ -1182,143 +1899,164 @@ export default function PDCAEditor({
 
   const renderActionPlanItem = (item: ActionPlanItem, index: number) => {
     return (
-      <div key={item.id} className="bg-slate-50/50 p-8 rounded-[2.5rem] border border-slate-100 space-y-6 relative group transition-all hover:bg-white hover:border-slate-200 hover:shadow-xl hover:shadow-slate-200/50">
+      <div
+        key={item.id}
+        className="bg-slate-50/50 p-8 rounded-[2.5rem] border border-slate-100 space-y-6 relative group transition-all hover:bg-white hover:border-slate-200 hover:shadow-xl hover:shadow-slate-200/50"
+      >
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white font-black text-sm shadow-lg shadow-indigo-200">
               {index + 1}
             </div>
             <div>
-              <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ação Corretiva</h5>
-              <p className="text-xs font-bold text-slate-600">Planejamento 5W2H</p>
+              <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                Ação Corretiva
+              </h5>
+              <p className="text-xs font-bold text-slate-600">
+                Planejamento 5W2H
+              </p>
             </div>
           </div>
-          <button onClick={() => removeActionPlanItem(item.id)} className="text-slate-300 hover:text-rose-500 transition-colors p-2 bg-white rounded-xl shadow-sm border border-slate-100">
+          <button
+            onClick={() => removeActionPlanItem(item.id)}
+            className="text-slate-300 hover:text-rose-500 transition-colors p-2 bg-white rounded-xl shadow-sm border border-slate-100"
+          >
             <Trash2 size={18} />
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 px-1">
-              <Layers size={12} className="text-indigo-400" /> Tipo da Ação
-            </label>
-            <select 
-              value={item.actionType || ''} 
-              onChange={(e) => updateActionPlan(item.id, { actionType: e.target.value as any })}
-              className={cn("w-full p-4 bg-white border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold transition-all shadow-sm", !item.actionType ? "border-amber-200 ring-4 ring-amber-50" : "border-slate-100")}
-            >
-              <option value="">Selecione...</option>
-              <option value="Processual">Processual</option>
-              <option value="Operacional">Operacional</option>
-              <option value="Inovação">Inovação</option>
-            </select>
-          </div>
-        </div>
-
-        {item.actionType ? (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="space-y-6 pt-6 border-t border-slate-100 overflow-hidden">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">What (O que?)</label>
-                <textarea 
-                  value={item.what || ''} 
-                  placeholder="Descrição clara da ação..."
-                  onChange={(e) => updateActionPlan(item.id, { what: e.target.value }, true)}
-                  onBlur={() => updateActionPlan(item.id, {})}
-                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 min-h-[100px] shadow-sm resize-none"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Why (Por que?)</label>
-                <textarea 
-                  value={item.why || ''} 
-                  placeholder="Motivo desta ação..."
-                  onChange={(e) => updateActionPlan(item.id, { why: e.target.value }, true)}
-                  onBlur={() => updateActionPlan(item.id, {})}
-                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 min-h-[100px] shadow-sm resize-none"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Where (Onde?)</label>
-                <input 
-                  value={item.where || ''} placeholder="Local..."
-                  onChange={(e) => updateActionPlan(item.id, { where: e.target.value }, true)}
-                  onBlur={() => updateActionPlan(item.id, {})}
-                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">When (Quando?)</label>
-                <input 
-                  type="date"
-                  value={item.when || ''} 
-                  onChange={(e) => updateActionPlan(item.id, { when: e.target.value }, true)}
-                  onBlur={() => updateActionPlan(item.id, {})}
-                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm h-[58px]"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Who (Quem?)</label>
-                <input 
-                  value={item.who || ''} placeholder="Responsável..."
-                  onChange={(e) => updateActionPlan(item.id, { who: e.target.value }, true)}
-                  onBlur={() => updateActionPlan(item.id, {})}
-                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
-                />
-              </div>
-            </div>
-
+        <div className="space-y-6 pt-6 border-t border-slate-100">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">How (Como?)</label>
-              <textarea 
-                value={item.how || ''} 
-                placeholder="Método de execução..."
-                onChange={(e) => updateActionPlan(item.id, { how: e.target.value }, true)}
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+                What (O que?)
+              </label>
+              <textarea
+                value={item.what || ""}
+                placeholder="Descrição clara da ação..."
+                onChange={(e) =>
+                  updateActionPlan(item.id, { what: e.target.value }, true)
+                }
                 onBlur={() => updateActionPlan(item.id, {})}
-                className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 min-h-[80px] shadow-sm resize-none"
+                className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 min-h-[100px] shadow-sm resize-none"
               />
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">How Much (Custo)</label>
-                <input 
-                  value={item.howMuch || ''} placeholder="Ex: R$ 0,00"
-                  onChange={(e) => updateActionPlan(item.id, { howMuch: e.target.value }, true)}
-                  onBlur={() => updateActionPlan(item.id, {})}
-                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Setor</label>
-                <input 
-                  value={item.sector || ''} placeholder="Área..."
-                  onChange={(e) => updateActionPlan(item.id, { sector: e.target.value }, true)}
-                  onBlur={() => updateActionPlan(item.id, {})}
-                  className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
-                />
-              </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+                Why (Por que?)
+              </label>
+              <textarea
+                value={item.why || ""}
+                placeholder="Motivo desta ação..."
+                onChange={(e) =>
+                  updateActionPlan(item.id, { why: e.target.value }, true)
+                }
+                onBlur={() => updateActionPlan(item.id, {})}
+                className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 min-h-[100px] shadow-sm resize-none"
+              />
             </div>
-          </motion.div>
-        ) : (
-          <div className="bg-amber-50 p-8 rounded-3xl border border-amber-100 text-center space-y-2">
-            <HelpCircle size={24} className="mx-auto text-amber-400" />
-            <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">Selecione o Tipo da Ação para detalhar o 5W2H</p>
           </div>
-        )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+                Where (Onde?)
+              </label>
+              <input
+                value={item.where || ""}
+                placeholder="Local..."
+                onChange={(e) =>
+                  updateActionPlan(item.id, { where: e.target.value }, true)
+                }
+                onBlur={() => updateActionPlan(item.id, {})}
+                className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+                When (Quando?)
+              </label>
+              <input
+                type="date"
+                value={item.when || ""}
+                onChange={(e) =>
+                  updateActionPlan(item.id, { when: e.target.value }, true)
+                }
+                onBlur={() => updateActionPlan(item.id, {})}
+                className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm h-[58px]"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+                Who (Quem?)
+              </label>
+              <input
+                value={item.who || ""}
+                placeholder="Responsável..."
+                onChange={(e) =>
+                  updateActionPlan(item.id, { who: e.target.value }, true)
+                }
+                onBlur={() => updateActionPlan(item.id, {})}
+                className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+              How (Como?)
+            </label>
+            <textarea
+              value={item.how || ""}
+              placeholder="Método de execução..."
+              onChange={(e) =>
+                updateActionPlan(item.id, { how: e.target.value }, true)
+              }
+              onBlur={() => updateActionPlan(item.id, {})}
+              className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 min-h-[80px] shadow-sm resize-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+                How Much (Custo)
+              </label>
+              <input
+                value={item.howMuch || ""}
+                placeholder="Ex: R$ 0,00"
+                onChange={(e) =>
+                  updateActionPlan(item.id, { howMuch: e.target.value }, true)
+                }
+                onBlur={() => updateActionPlan(item.id, {})}
+                className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+                Setor
+              </label>
+              <input
+                value={item.sector || ""}
+                placeholder="Área..."
+                onChange={(e) =>
+                  updateActionPlan(item.id, { sector: e.target.value }, true)
+                }
+                onBlur={() => updateActionPlan(item.id, {})}
+                className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
+              />
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
 
   const dashboardStats = useMemo(() => {
     const total = cycles.length;
-    const resolved = cycles.filter(c => c.status === 'Concluído').length;
-    const inProgress = cycles.filter(c => c.status === 'Ativo').length;
-    
+    const resolved = cycles.filter((c) => c.status === "Concluído").length;
+    const inProgress = cycles.filter((c) => c.status === "Ativo").length;
+
     return { total, resolved, inProgress };
   }, [cycles]);
 
@@ -1327,7 +2065,10 @@ export default function PDCAEditor({
       <div className="flex flex-col h-full bg-slate-50">
         <div className="bg-white border-b border-slate-200 p-6 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button onClick={onBack} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500">
+            <button
+              onClick={onBack}
+              className="p-2 hover:bg-slate-100 rounded-lg text-slate-500"
+            >
               <ChevronRight size={24} className="rotate-180" />
             </button>
             <div className="flex items-center gap-3">
@@ -1335,12 +2076,16 @@ export default function PDCAEditor({
                 <RefreshCw size={28} />
               </div>
               <div>
-                <h3 className="text-xl font-black text-slate-800 tracking-tight">Dashboard PDCA</h3>
-                <p className="text-sm text-slate-400 font-medium">Melhoria Contínua Integrada</p>
+                <h3 className="text-xl font-black text-slate-800 tracking-tight">
+                  Dashboard PDCA
+                </h3>
+                <p className="text-sm text-slate-400 font-medium">
+                  Melhoria Contínua Integrada
+                </p>
               </div>
             </div>
           </div>
-          <button 
+          <button
             onClick={() => setShowProblemsModal(true)}
             className="bg-indigo-600 text-white px-6 py-3 rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center gap-2"
           >
@@ -1352,15 +2097,32 @@ export default function PDCAEditor({
         <div className="flex-1 overflow-y-auto p-8 space-y-8">
           {/* Stats */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            <StatCard title="Total" value={dashboardStats.total} icon={<AlertCircle />} color="indigo" />
-            <StatCard title="Andamento" value={dashboardStats.inProgress} icon={<Clock />} color="amber" />
-            <StatCard title="Resolvidos" value={dashboardStats.resolved} icon={<CheckCircle2 />} color="emerald" />
+            <StatCard
+              title="Total"
+              value={dashboardStats.total}
+              icon={<AlertCircle />}
+              color="indigo"
+            />
+            <StatCard
+              title="Andamento"
+              value={dashboardStats.inProgress}
+              icon={<Clock />}
+              color="amber"
+            />
+            <StatCard
+              title="Resolvidos"
+              value={dashboardStats.resolved}
+              icon={<CheckCircle2 />}
+              color="emerald"
+            />
           </div>
 
           {/* Cycles List */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">Acompanhamento de Ciclos</h4>
+              <h4 className="text-sm font-black text-slate-400 uppercase tracking-widest">
+                Acompanhamento de Ciclos
+              </h4>
               <div className="flex items-center gap-4 text-[10px] font-black uppercase tracking-widest">
                 <div className="flex items-center gap-1.5 text-indigo-600">
                   <div className="w-2 h-2 rounded-full bg-indigo-600" />
@@ -1376,45 +2138,60 @@ export default function PDCAEditor({
               <div className="py-20 bg-white border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center text-slate-400">
                 <Target size={48} className="mb-4 opacity-20" />
                 <p className="font-bold">Nenhum ciclo PDCA iniciado</p>
-                <p className="text-sm">Clique em "Identificar Problemas" para começar.</p>
+                <p className="text-sm">
+                  Clique em "Identificar Problemas" para começar.
+                </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {cycles.map(cycle => (
-                  <div 
+                {cycles.map((cycle) => (
+                  <div
                     key={cycle.id}
                     onClick={() => {
                       setActiveCycleId(cycle.id);
-                      setActivePhase(cycle.etapaAtual || 'PLAN');
+                      setActivePhase(cycle.etapaAtual || "PLAN");
                       setShowDashboard(false);
                     }}
                     className={cn(
                       "bg-white p-6 rounded-2xl border transition-all cursor-pointer group shadow-sm",
-                      cycle.status === 'Concluído' ? "border-slate-100 opacity-75 grayscale-[0.5]" : "border-slate-200 hover:border-indigo-300"
+                      cycle.status === "Concluído"
+                        ? "border-slate-100 opacity-75 grayscale-[0.5]"
+                        : "border-slate-200 hover:border-indigo-300",
                     )}
                   >
                     <div className="flex justify-between items-start mb-4">
                       <div>
-                        <h5 className={cn(
-                          "font-bold transition-colors",
-                          cycle.status === 'Concluído' ? "text-slate-500" : "text-slate-800 group-hover:text-indigo-600"
-                        )}>{cycle.title}</h5>
-                        <p className="text-xs text-slate-400 mt-1">Iniciado em {format(new Date(cycle.createdAt), 'dd/MM/yyyy')}</p>
+                        <h5
+                          className={cn(
+                            "font-bold transition-colors",
+                            cycle.status === "Concluído"
+                              ? "text-slate-500"
+                              : "text-slate-800 group-hover:text-indigo-600",
+                          )}
+                        >
+                          {cycle.title}
+                        </h5>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Iniciado em{" "}
+                          {format(new Date(cycle.createdAt), "dd/MM/yyyy")}
+                        </p>
                       </div>
                       <StatusBadge status={cycle.status} />
                     </div>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                          <span>Progresso</span>
-                          <span>{getProgress(cycle.status, cycle)}%</span>
-                        </div>
-                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-indigo-500 transition-all duration-500" 
-                            style={{ width: `${getProgress(cycle.status, cycle)}%` }}
-                          />
-                        </div>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        <span>Progresso</span>
+                        <span>{getProgress(cycle.status, cycle)}%</span>
                       </div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-indigo-500 transition-all duration-500"
+                          style={{
+                            width: `${getProgress(cycle.status, cycle)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1426,42 +2203,65 @@ export default function PDCAEditor({
         <AnimatePresence>
           {showProblemsModal && (
             <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden"
               >
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                  <h3 className="text-xl font-black text-slate-800">Identificar Problemas do Fluxo</h3>
-                  <button onClick={() => setShowProblemsModal(false)} className="text-slate-400 hover:text-slate-600">
+                  <h3 className="text-xl font-black text-slate-800">
+                    Identificar Problemas do Fluxo
+                  </h3>
+                  <button
+                    onClick={() => setShowProblemsModal(false)}
+                    className="text-slate-400 hover:text-slate-600"
+                  >
                     <Plus size={24} className="rotate-45" />
                   </button>
                 </div>
                 <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
                   {problemsFromMapping.length === 0 ? (
                     <div className="py-12 text-center space-y-4">
-                      <AlertCircle size={48} className="mx-auto text-slate-200" />
-                      <p className="text-slate-500 font-medium">Nenhuma "Etapa Problema" identificada no mapeamento.</p>
-                      <p className="text-xs text-slate-400">Marque as etapas críticas no fluxograma para que elas apareçam aqui.</p>
+                      <AlertCircle
+                        size={48}
+                        className="mx-auto text-slate-200"
+                      />
+                      <p className="text-slate-500 font-medium">
+                        Nenhuma "Etapa Problema" identificada no mapeamento.
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        Marque as etapas críticas no fluxograma para que elas
+                        apareçam aqui.
+                      </p>
                     </div>
                   ) : (
-                    problemsFromMapping.map(p => {
-                      const hasActiveCycle = subtask.pdcaCycles.some(c => c.taskId === p.id && c.status === 'Ativo');
-                      const completedCycles = subtask.pdcaCycles.filter(c => c.taskId === p.id && c.status === 'Concluído');
-                      const isCompleted = completedCycles.length > 0 && !hasActiveCycle;
+                    problemsFromMapping.map((p) => {
+                      const hasActiveCycle = subtask.pdcaCycles.some(
+                        (c) => c.taskId === p.id && c.status === "Ativo",
+                      );
+                      const completedCycles = subtask.pdcaCycles.filter(
+                        (c) => c.taskId === p.id && c.status === "Concluído",
+                      );
+                      const isCompleted =
+                        completedCycles.length > 0 && !hasActiveCycle;
 
                       return (
-                        <div 
+                        <div
                           key={p.id}
                           className={cn(
                             "p-4 border rounded-2xl flex items-center justify-between group transition-all",
-                            hasActiveCycle ? "bg-indigo-50 border-indigo-200" : 
-                            isCompleted ? "bg-slate-50 border-slate-200 opacity-80" : "bg-slate-50 border-slate-200 hover:border-indigo-300"
+                            hasActiveCycle
+                              ? "bg-indigo-50 border-indigo-200"
+                              : isCompleted
+                                ? "bg-slate-50 border-slate-200 opacity-80"
+                                : "bg-slate-50 border-slate-200 hover:border-indigo-300",
                           )}
                         >
                           <div>
-                            <p className="font-bold text-slate-800">{p.label}</p>
+                            <p className="font-bold text-slate-800">
+                              {p.label}
+                            </p>
                             <div className="flex items-center gap-3 mt-1">
                               <span className="text-[10px] font-black bg-[#FF6B6B] text-white px-2 py-0.5 rounded-full uppercase tracking-widest flex items-center gap-1 shadow-sm">
                                 <AlertCircle size={10} /> Problema
@@ -1470,10 +2270,16 @@ export default function PDCAEditor({
                               <span className="text-[10px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-1">
                                 <Clock size={10} /> {p.time} min
                               </span>
-                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{p.role}</span>
+                              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                {p.role}
+                              </span>
                               {hasActiveCycle && (
                                 <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1">
-                                  <RefreshCw size={10} className="animate-spin-slow" /> Ciclo Ativo
+                                  <RefreshCw
+                                    size={10}
+                                    className="animate-spin-slow"
+                                  />{" "}
+                                  Ciclo Ativo
                                 </span>
                               )}
                               {isCompleted && !hasActiveCycle && (
@@ -1484,20 +2290,27 @@ export default function PDCAEditor({
                             </div>
                           </div>
                           {!hasActiveCycle && (
-                            <button 
+                            <button
                               onClick={() => createNewCycle(p.id, p.label)}
                               className="bg-white text-indigo-600 px-4 py-2 rounded-xl text-xs font-black shadow-sm border border-slate-200 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all"
                             >
-                              {isCompleted ? 'Iniciar Novo Ciclo' : 'Iniciar PDCA'}
+                              {isCompleted
+                                ? "Iniciar Novo Ciclo"
+                                : "Iniciar PDCA"}
                             </button>
                           )}
                           {hasActiveCycle && (
-                            <button 
+                            <button
                               onClick={() => {
-                                const activeCycle = subtask.pdcaCycles.find(c => c.taskId === p.id && c.status === 'Ativo');
+                                const activeCycle = subtask.pdcaCycles.find(
+                                  (c) =>
+                                    c.taskId === p.id && c.status === "Ativo",
+                                );
                                 if (activeCycle) {
                                   setActiveCycleId(activeCycle.id);
-                                  setActivePhase(activeCycle.etapaAtual || 'PLAN');
+                                  setActivePhase(
+                                    activeCycle.etapaAtual || "PLAN",
+                                  );
                                   setShowDashboard(false);
                                   setShowProblemsModal(false);
                                 }
@@ -1527,7 +2340,10 @@ export default function PDCAEditor({
         {/* Cycle Info Header */}
         <div className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4 w-full sm:w-auto">
-            <button onClick={() => setShowDashboard(true)} className="p-2 hover:bg-slate-100/10 rounded-lg text-slate-400 shrink-0">
+            <button
+              onClick={() => setShowDashboard(true)}
+              className="p-2 hover:bg-slate-100/10 rounded-lg text-slate-400 shrink-0"
+            >
               <ChevronRight size={24} className="rotate-180" />
             </button>
             <div className="flex items-center gap-3 min-w-0">
@@ -1535,11 +2351,83 @@ export default function PDCAEditor({
                 <RefreshCw size={24} />
               </div>
               <div className="min-w-0">
-                <h3 className="font-bold text-theme-foreground truncate max-w-full sm:max-w-[300px]">{activeCycle?.title}</h3>
-                <div className="flex items-center gap-2">
-                  <StatusBadge status={activeCycle?.status || 'Ativo'} />
+                <div className="flex items-center gap-1 min-w-0 max-w-full sm:max-w-[400px]">
+                  <span className="font-extrabold text-indigo-600 dark:text-indigo-400 shrink-0 select-none">
+                    Ciclo PDCA -{" "}
+                  </span>
+                  {isEditingPdcaName ? (
+                    <input
+                      type="text"
+                      value={editingPdcaNameValue}
+                      onChange={(e) => setEditingPdcaNameValue(e.target.value)}
+                      onBlur={() => {
+                        setIsEditingPdcaName(false);
+                        const nextValue =
+                          editingPdcaNameValue.trim() ||
+                          activeCycle?.plan?.problemDescription ||
+                          "";
+                        updateCycle({
+                          nomePdca: nextValue,
+                          title: `Ciclo PDCA - ${nextValue}`,
+                        });
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          setIsEditingPdcaName(false);
+                          const nextValue =
+                            editingPdcaNameValue.trim() ||
+                            activeCycle?.plan?.problemDescription ||
+                            "";
+                          updateCycle({
+                            nomePdca: nextValue,
+                            title: `Ciclo PDCA - ${nextValue}`,
+                          });
+                        } else if (e.key === "Escape") {
+                          setIsEditingPdcaName(false);
+                        }
+                      }}
+                      className="bg-theme-card border-b border-indigo-500 outline-none text-theme-foreground font-black px-1 py-0.5 rounded text-sm sm:text-base w-full min-w-[150px] shadow-sm"
+                      autoFocus
+                    />
+                  ) : (
+                    <h3
+                      onClick={() => {
+                        setEditingPdcaNameValue(
+                          activeCycle?.nomePdca ||
+                            activeCycle?.plan?.problemDescription ||
+                            "",
+                        );
+                        setIsEditingPdcaName(true);
+                      }}
+                      className="group font-black text-theme-foreground truncate hover:bg-slate-100/50 dark:hover:bg-slate-800/50 px-1.5 py-0.5 rounded cursor-pointer transition-colors border border-transparent hover:border-slate-200 dark:hover:border-slate-700 min-w-[50px] inline-flex items-center gap-1.5"
+                      title="Clique para editar o nome do ciclo PDCA"
+                    >
+                      <span className="truncate">
+                        {activeCycle?.nomePdca ||
+                          activeCycle?.plan?.problemDescription ||
+                          "Sem Nome"}
+                      </span>
+                      <svg
+                        className="w-3.5 h-3.5 text-slate-400 shrink-0 opacity-0 group-hover:opacity-100 md:opacity-50 transition-opacity"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+                        />
+                      </svg>
+                    </h3>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  <StatusBadge status={activeCycle?.status || "Ativo"} />
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
-                    {activeCycle && format(new Date(activeCycle.createdAt), 'dd/MM/yyyy')}
+                    {activeCycle &&
+                      format(new Date(activeCycle.createdAt), "dd/MM/yyyy")}
                   </span>
                 </div>
               </div>
@@ -1548,7 +2436,7 @@ export default function PDCAEditor({
 
           <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
             {saveFeedback && (
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
@@ -1558,7 +2446,7 @@ export default function PDCAEditor({
                 {saveFeedback}
               </motion.div>
             )}
-            <select 
+            <select
               value={activeCycle?.status}
               onChange={(e) => updateCycle({ status: e.target.value as any })}
               className="bg-slate-100 border-none text-[10px] sm:text-xs font-black uppercase tracking-widest px-4 py-2 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 flex-1 sm:flex-none text-center"
@@ -1571,39 +2459,56 @@ export default function PDCAEditor({
 
         {activeCycle && (
           <div className="px-4 md:px-8 flex gap-4 md:gap-8 border-t border-theme-border overflow-x-auto no-scrollbar">
-            <PhaseTab active={activePhase === 'PLAN'} onClick={() => handlePhaseChange('PLAN')} label="PLAN" color="indigo" />
-            <PhaseTab 
-              active={activePhase === 'DO'} 
-              onClick={() => handlePhaseChange('DO')} 
-              label="DO" 
-              color="amber" 
+            <PhaseTab
+              active={activePhase === "PLAN"}
+              onClick={() => handlePhaseChange("PLAN")}
+              label="PLAN"
+              color="indigo"
+            />
+            <PhaseTab
+              active={activePhase === "DO"}
+              onClick={() => handlePhaseChange("DO")}
+              label="DO"
+              color="amber"
               disabled={!isPlanPhaseValid}
               icon={!isPlanPhaseValid ? <Lock size={12} /> : undefined}
-              lockTooltip={!isPlanPhaseValid ? "Finalize a etapa PLAN para desbloquear" : undefined}
+              lockTooltip={
+                !isPlanPhaseValid
+                  ? "Finalize a etapa PLAN para desbloquear"
+                  : undefined
+              }
             />
-            <PhaseTab 
-              active={activePhase === 'CHECK'} 
-              onClick={() => handlePhaseChange('CHECK')} 
-              label="CHECK" 
-              color="emerald" 
+            <PhaseTab
+              active={activePhase === "CHECK"}
+              onClick={() => handlePhaseChange("CHECK")}
+              label="CHECK"
+              color="emerald"
               disabled={!isDoPhaseValid}
               icon={!isDoPhaseValid ? <Lock size={12} /> : undefined}
-              lockTooltip={!isDoPhaseValid ? "Pelo menos um plano deve ser concluído no DO para liberar o CHECK" : undefined}
+              lockTooltip={
+                !isDoPhaseValid
+                  ? "Pelo menos um plano deve ser concluído no DO para liberar o CHECK"
+                  : undefined
+              }
             />
-            <PhaseTab 
-              active={activePhase === 'ACT'} 
-              onClick={() => handlePhaseChange('ACT')} 
-              label="ACT" 
-              color="rose" 
+            <PhaseTab
+              active={activePhase === "ACT"}
+              onClick={() => handlePhaseChange("ACT")}
+              label="ACT"
+              color="rose"
               disabled={!isCheckPhaseValid}
               icon={!isCheckPhaseValid ? <Lock size={12} /> : undefined}
-              lockTooltip={!isCheckPhaseValid ? "Pelo menos um plano deve concluir o CHECK para liberar o ACT" : undefined}
+              lockTooltip={
+                !isCheckPhaseValid
+                  ? "Pelo menos um plano deve concluir o CHECK para liberar o ACT"
+                  : undefined
+              }
             />
-            <PhaseTab 
-              active={activePhase === 'REPORT'} 
-              onClick={() => handlePhaseChange('REPORT')} 
-              label="RELATÓRIO" 
-              color="slate" 
+            <PhaseTab
+              active={activePhase === "REPORT"}
+              onClick={() => handlePhaseChange("REPORT")}
+              label="RELATÓRIO"
+              color="slate"
             />
           </div>
         )}
@@ -1615,8 +2520,8 @@ export default function PDCAEditor({
             {/* Phase Content */}
             <div className="flex-1 p-4 md:p-8 w-full max-w-full">
               <AnimatePresence mode="wait">
-                {activePhase === 'PLAN' && (
-                  <motion.div 
+                {activePhase === "PLAN" && (
+                  <motion.div
                     key="plan"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -1626,19 +2531,35 @@ export default function PDCAEditor({
                     {/* PLAN Steps Navigation */}
                     <div className="flex items-center justify-between bg-theme-card p-1 md:p-2 rounded-2xl md:rounded-3xl border border-theme-border shadow-sm mb-4 overflow-x-auto no-scrollbar">
                       {[
-                        { id: 1, title: 'Descrição', icon: <FileText size={16} /> },
-                        { id: 2, title: 'Causa Raiz', icon: <Target size={16} /> },
-                        { id: 3, title: 'Impacto', icon: <TrendingUp size={16} /> },
-                        { id: 4, title: 'Plano de Ação', icon: <GitBranch size={16} /> }
+                        {
+                          id: 1,
+                          title: "Descrição",
+                          icon: <FileText size={16} />,
+                        },
+                        {
+                          id: 2,
+                          title: "Causa Raiz",
+                          icon: <Target size={16} />,
+                        },
+                        {
+                          id: 3,
+                          title: "Impacto",
+                          icon: <TrendingUp size={16} />,
+                        },
+                        {
+                          id: 4,
+                          title: "Plano de Ação",
+                          icon: <GitBranch size={16} />,
+                        },
                       ].map((step) => (
                         <button
                           key={step.id}
                           onClick={() => setActivePlanStep(step.id)}
                           className={cn(
                             "flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl md:rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shrink-0",
-                            activePlanStep === step.id 
-                              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200" 
-                              : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50"
+                            activePlanStep === step.id
+                              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+                              : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50",
                           )}
                         >
                           {step.icon}
@@ -1650,281 +2571,508 @@ export default function PDCAEditor({
                     <div className="space-y-12">
                       {/* Step 1: Descrição */}
                       {activePlanStep === 1 && (
-                        <motion.section 
+                        <motion.section
                           initial={{ opacity: 0, x: 20 }}
                           animate={{ opacity: 1, x: 0 }}
                           className="space-y-6"
                         >
-                          <SectionHeader number="1" title="Descrição do Problema" />
-                          <textarea 
+                          <SectionHeader
+                            number="1"
+                            title="Descrição do Problema"
+                          />
+                          <textarea
                             placeholder="Descreva o problema de forma clara..."
-                            value={activeCycle.plan.problemDescription || ''}
-                            onChange={(e) => updatePlan({ problemDescription: e.target.value })}
+                            value={activeCycle.plan.problemDescription || ""}
+                            onChange={(e) =>
+                              updatePlan({ problemDescription: e.target.value })
+                            }
                             className="w-full p-8 bg-theme-card border border-theme-border rounded-[2.5rem] focus:ring-2 focus:ring-indigo-500 outline-none transition-all min-h-[300px] text-theme-foreground text-lg font-medium shadow-sm"
                           />
                         </motion.section>
                       )}
-                      
+
                       {/* Step 2: Causa Raiz */}
                       {activePlanStep === 2 && (
-                        <motion.section 
+                        <motion.section
                           initial={{ opacity: 0, x: 20 }}
                           animate={{ opacity: 1, x: 0 }}
                           className="space-y-8"
                         >
                           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                            <SectionHeader number="2" title="Análise de Causa Raiz" />
+                            <SectionHeader
+                              number="2"
+                              title="Análise de Causa Raiz"
+                            />
                             <div className="flex bg-theme-background p-1 rounded-xl border border-theme-border self-start md:self-auto">
-                              <button 
-                                onClick={() => updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, type: '5whys' } })}
+                              <button
+                                onClick={() =>
+                                  updatePlan({
+                                    rootCauseAnalysis: {
+                                      ...activeCycle.plan.rootCauseAnalysis,
+                                      type: "5whys",
+                                    },
+                                  })
+                                }
                                 className={cn(
                                   "px-6 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                                  activeCycle.plan.rootCauseAnalysis.type === '5whys' ? "bg-theme-card text-indigo-400 shadow-sm" : "text-slate-400"
-                                )}>
+                                  activeCycle.plan.rootCauseAnalysis.type ===
+                                    "5whys"
+                                    ? "bg-theme-card text-indigo-400 shadow-sm"
+                                    : "text-slate-400",
+                                )}
+                              >
                                 5 Porquês
                               </button>
-                              <button 
-                                onClick={() => updatePlan({ 
-                                  rootCauseAnalysis: { 
-                                    ...activeCycle.plan.rootCauseAnalysis, 
-                                    type: 'ishikawa',
-                                    ishikawa: activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories
-                                  } 
-                                })}
+                              <button
+                                onClick={() =>
+                                  updatePlan({
+                                    rootCauseAnalysis: {
+                                      ...activeCycle.plan.rootCauseAnalysis,
+                                      type: "ishikawa",
+                                      ishikawa:
+                                        activeCycle.plan.rootCauseAnalysis
+                                          .ishikawa ||
+                                        ishikawaDefaultCategories,
+                                    },
+                                  })
+                                }
                                 className={cn(
                                   "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                                  activeCycle.plan.rootCauseAnalysis.type === 'ishikawa' ? "bg-theme-card text-indigo-400 shadow-sm" : "text-slate-400"
-                                )}>
+                                  activeCycle.plan.rootCauseAnalysis.type ===
+                                    "ishikawa"
+                                    ? "bg-theme-card text-indigo-400 shadow-sm"
+                                    : "text-slate-400",
+                                )}
+                              >
                                 Ishikawa
                               </button>
-                              <button 
-                                onClick={() => updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, type: 'list' } })}
+                              <button
+                                onClick={() =>
+                                  updatePlan({
+                                    rootCauseAnalysis: {
+                                      ...activeCycle.plan.rootCauseAnalysis,
+                                      type: "list",
+                                    },
+                                  })
+                                }
                                 className={cn(
                                   "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
-                                  activeCycle.plan.rootCauseAnalysis.type === 'list' ? "bg-theme-card text-indigo-400 shadow-sm" : "text-slate-400"
-                                )}>
+                                  activeCycle.plan.rootCauseAnalysis.type ===
+                                    "list"
+                                    ? "bg-theme-card text-indigo-400 shadow-sm"
+                                    : "text-slate-400",
+                                )}
+                              >
                                 Lista de Causas
                               </button>
                             </div>
                           </div>
-                          
+
                           <div className="space-y-4">
-                            {activeCycle.plan.rootCauseAnalysis.type === 'ishikawa' ? (
+                            {activeCycle.plan.rootCauseAnalysis.type ===
+                            "ishikawa" ? (
                               <>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {(activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories).map((cat, catIdx) => (
-                                  <div key={cat.id} className="bg-theme-card p-6 rounded-2xl border border-theme-border space-y-4 min-w-0">
-                                    <div className="flex items-center justify-between gap-2 min-w-0">
-                                      <div className="min-w-0 flex-1">
-                                        <h5 className="font-black text-theme-foreground text-xs uppercase tracking-widest truncate">{cat.name}</h5>
-                                        <p className="text-[10px] text-slate-400 font-medium truncate">{cat.description}</p>
-                                      </div>
-                                      <button 
-                                        onClick={() => {
-                                          const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
-                                          const newIshikawa = currentIshikawa.map((c, i) => {
-                                            if (i === catIdx) {
-                                              return {
-                                                ...c,
-                                                entries: [...(c.entries || []), { id: uuidv4(), text: '' }]
-                                              };
-                                            }
-                                            return c;
-                                          });
-                                          updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, ishikawa: newIshikawa } });
-                                        }}
-                                        className="p-2 rounded-lg transition-all bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white"
-                                      >
-                                        <Plus size={14} />
-                                      </button>
-                                    </div>
-                                    <div className="space-y-2">
-                                      {cat.entries.map((entry, entryIdx) => (
-                                        <div key={entry.id} className="flex gap-2">
-                                          <div className="flex-1 min-w-0 flex gap-2">
-                                            <input 
-                                              type="text"
-                                              placeholder="Descreva a causa..."
-                                              value={entry.text || ''}
-                                              onChange={(e) => {
-                                                const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
-                                                const newIshikawa = [...currentIshikawa];
-                                                const newEntries = [...newIshikawa[catIdx].entries];
-                                                newEntries[entryIdx] = { ...newEntries[entryIdx], text: e.target.value };
-                                                newIshikawa[catIdx] = { ...newIshikawa[catIdx], entries: newEntries };
-                                                updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, ishikawa: newIshikawa } });
-                                              }}
-                                              className="flex-1 min-w-0 p-2 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-medium"
-                                            />
-                                            <button 
-                                              onClick={() => {
-                                                const currentIshikawa = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
-                                                const newIshikawa = [...currentIshikawa];
-                                                newIshikawa[catIdx] = {
-                                                  ...newIshikawa[catIdx],
-                                                  entries: newIshikawa[catIdx].entries.filter((_, i) => i !== entryIdx)
-                                                };
-                                                updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, ishikawa: newIshikawa } });
-                                              }}
-                                              className="text-slate-300 hover:text-rose-500 transition-colors shrink-0"
-                                            >
-                                              <Trash2 size={14} />
-                                            </button>
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-
-                              {activeCycle.plan.rootCauseAnalysis.type === 'ishikawa' && (
-                                    <motion.div 
-                                      initial={{ opacity: 0, y: 20 }}
-                                      animate={{ opacity: 1, y: 0 }}
-                                      className="mt-8 bg-slate-900 p-8 rounded-[2.5rem] text-white space-y-6"
+                                  {(
+                                    activeCycle.plan.rootCauseAnalysis
+                                      .ishikawa || ishikawaDefaultCategories
+                                  ).map((cat, catIdx) => (
+                                    <div
+                                      key={cat.id}
+                                      className="bg-theme-card p-6 rounded-2xl border border-theme-border space-y-4 min-w-0"
                                     >
-                                      <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
-                                          <Target size={24} />
+                                      <div className="flex items-center justify-between gap-2 min-w-0">
+                                        <div className="min-w-0 flex-1">
+                                          <h5 className="font-black text-theme-foreground text-xs uppercase tracking-widest truncate">
+                                            {cat.name}
+                                          </h5>
+                                          <p className="text-[10px] text-slate-400 font-medium truncate">
+                                            {cat.description}
+                                          </p>
                                         </div>
-                                        <div>
-                                          <h4 className="text-lg font-black tracking-tight">Causas Prioritárias</h4>
-                                          <p className="text-slate-400 text-xs font-medium">Selecione as causas principais para focar no plano de ação.</p>
-                                        </div>
+                                        <button
+                                          onClick={() => {
+                                            const currentIshikawa =
+                                              activeCycle.plan.rootCauseAnalysis
+                                                .ishikawa ||
+                                              ishikawaDefaultCategories;
+                                            const newIshikawa =
+                                              currentIshikawa.map((c, i) => {
+                                                if (i === catIdx) {
+                                                  return {
+                                                    ...c,
+                                                    entries: [
+                                                      ...(c.entries || []),
+                                                      {
+                                                        id: uuidv4(),
+                                                        text: "",
+                                                      },
+                                                    ],
+                                                  };
+                                                }
+                                                return c;
+                                              });
+                                            updatePlan({
+                                              rootCauseAnalysis: {
+                                                ...activeCycle.plan
+                                                  .rootCauseAnalysis,
+                                                ishikawa: newIshikawa,
+                                              },
+                                            });
+                                          }}
+                                          className="p-2 rounded-lg transition-all bg-indigo-50 text-indigo-600 hover:bg-indigo-600 hover:text-white"
+                                        >
+                                          <Plus size={14} />
+                                        </button>
                                       </div>
-
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 px-1">
-                                        {allIshikawaCauses.length === 0 ? (
-                                          <p className="text-slate-500 text-xs italic">Preencha as causas no diagrama acima para priorizar.</p>
-                                        ) : (
-                                          allIshikawaCauses.map(cause => {
-                                            const isSelected = (activeCycle.plan.rootCauseAnalysis.priorityCauses || []).includes(cause);
-                                            return (
-                                              <button
-                                                key={cause}
-                                                onClick={() => {
-                                                  const current = activeCycle.plan.rootCauseAnalysis.priorityCauses || [];
-                                                  if (isSelected) {
-                                                    updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, priorityCauses: current.filter(c => c !== cause) } });
-                                                  } else {
-                                                    updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, priorityCauses: [...current, cause] } });
-                                                  }
+                                      <div className="space-y-2">
+                                        {cat.entries.map((entry, entryIdx) => (
+                                          <div
+                                            key={entry.id}
+                                            className="flex gap-2"
+                                          >
+                                            <div className="flex-1 min-w-0 flex gap-2">
+                                              <input
+                                                type="text"
+                                                placeholder="Descreva a causa..."
+                                                value={entry.text || ""}
+                                                onChange={(e) => {
+                                                  const currentIshikawa =
+                                                    activeCycle.plan
+                                                      .rootCauseAnalysis
+                                                      .ishikawa ||
+                                                    ishikawaDefaultCategories;
+                                                  const newIshikawa = [
+                                                    ...currentIshikawa,
+                                                  ];
+                                                  const newEntries = [
+                                                    ...newIshikawa[catIdx]
+                                                      .entries,
+                                                  ];
+                                                  newEntries[entryIdx] = {
+                                                    ...newEntries[entryIdx],
+                                                    text: e.target.value,
+                                                  };
+                                                  newIshikawa[catIdx] = {
+                                                    ...newIshikawa[catIdx],
+                                                    entries: newEntries,
+                                                  };
+                                                  updatePlan({
+                                                    rootCauseAnalysis: {
+                                                      ...activeCycle.plan
+                                                        .rootCauseAnalysis,
+                                                      ishikawa: newIshikawa,
+                                                    },
+                                                  });
                                                 }}
+                                                className="flex-1 min-w-0 p-2 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-medium"
+                                              />
+                                              <button
+                                                onClick={() => {
+                                                  const currentIshikawa =
+                                                    activeCycle.plan
+                                                      .rootCauseAnalysis
+                                                      .ishikawa ||
+                                                    ishikawaDefaultCategories;
+                                                  const newIshikawa = [
+                                                    ...currentIshikawa,
+                                                  ];
+                                                  newIshikawa[catIdx] = {
+                                                    ...newIshikawa[catIdx],
+                                                    entries: newIshikawa[
+                                                      catIdx
+                                                    ].entries.filter(
+                                                      (_, i) => i !== entryIdx,
+                                                    ),
+                                                  };
+                                                  updatePlan({
+                                                    rootCauseAnalysis: {
+                                                      ...activeCycle.plan
+                                                        .rootCauseAnalysis,
+                                                      ishikawa: newIshikawa,
+                                                    },
+                                                  });
+                                                }}
+                                                className="text-slate-300 hover:text-rose-500 transition-colors shrink-0"
+                                              >
+                                                <Trash2 size={14} />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+
+                                {activeCycle.plan.rootCauseAnalysis.type ===
+                                  "ishikawa" && (
+                                  <motion.div
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    className="mt-8 bg-slate-900 p-8 rounded-[2.5rem] text-white space-y-6"
+                                  >
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
+                                        <Target size={24} />
+                                      </div>
+                                      <div>
+                                        <h4 className="text-lg font-black tracking-tight">
+                                          Causas Prioritárias
+                                        </h4>
+                                        <p className="text-slate-400 text-xs font-medium">
+                                          Selecione as causas principais para
+                                          focar no plano de ação.
+                                        </p>
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 px-1">
+                                      {allIshikawaCauses.length === 0 ? (
+                                        <p className="text-slate-500 text-xs italic">
+                                          Preencha as causas no diagrama acima
+                                          para priorizar.
+                                        </p>
+                                      ) : (
+                                        allIshikawaCauses.map((cause) => {
+                                          const isSelected = (
+                                            activeCycle.plan.rootCauseAnalysis
+                                              .priorityCauses || []
+                                          ).includes(cause);
+                                          return (
+                                            <button
+                                              key={cause}
+                                              onClick={() => {
+                                                const current =
+                                                  activeCycle.plan
+                                                    .rootCauseAnalysis
+                                                    .priorityCauses || [];
+                                                if (isSelected) {
+                                                  updatePlan({
+                                                    rootCauseAnalysis: {
+                                                      ...activeCycle.plan
+                                                        .rootCauseAnalysis,
+                                                      priorityCauses:
+                                                        current.filter(
+                                                          (c) => c !== cause,
+                                                        ),
+                                                    },
+                                                  });
+                                                } else {
+                                                  updatePlan({
+                                                    rootCauseAnalysis: {
+                                                      ...activeCycle.plan
+                                                        .rootCauseAnalysis,
+                                                      priorityCauses: [
+                                                        ...current,
+                                                        cause,
+                                                      ],
+                                                    },
+                                                  });
+                                                }
+                                              }}
+                                              className={cn(
+                                                "flex items-center gap-3 p-4 rounded-2xl border transition-all text-left",
+                                                isSelected
+                                                  ? "bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-900/20"
+                                                  : "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600",
+                                              )}
+                                            >
+                                              <div
                                                 className={cn(
-                                                  "flex items-center gap-3 p-4 rounded-2xl border transition-all text-left",
-                                                  isSelected 
-                                                    ? "bg-indigo-600 border-indigo-400 text-white shadow-lg shadow-indigo-900/20" 
-                                                    : "bg-slate-800 border-slate-700 text-slate-300 hover:border-slate-600"
+                                                  "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0",
+                                                  isSelected
+                                                    ? "border-white bg-white text-indigo-600"
+                                                    : "border-slate-600",
                                                 )}
                                               >
-                                                <div className={cn(
-                                                  "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0",
-                                                  isSelected ? "border-white bg-white text-indigo-600" : "border-slate-600"
-                                                )}>
-                                                  {isSelected && <CheckCircle2 size={12} />}
-                                                </div>
-                                                <span className="text-xs font-bold">{cause}</span>
-                                              </button>
-                                            );
-                                          })
-                                        )}
-                                      </div>
-                                      
-                                      {(activeCycle.plan.rootCauseAnalysis.priorityCauses || []).length > 0 && (
-                                        <div className="pt-4 border-t border-slate-800">
-                                          <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">Causas Selecionadas ({activeCycle.plan.rootCauseAnalysis.priorityCauses?.length})</p>
-                                          <div className="flex flex-wrap gap-2">
-                                            {activeCycle.plan.rootCauseAnalysis.priorityCauses?.map(cause => (
-                                              <span key={cause} className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
+                                                {isSelected && (
+                                                  <CheckCircle2 size={12} />
+                                                )}
+                                              </div>
+                                              <span className="text-xs font-bold">
                                                 {cause}
                                               </span>
-                                            ))}
-                                          </div>
-                                        </div>
+                                            </button>
+                                          );
+                                        })
                                       )}
-                                    </motion.div>
-                                  )}
-                                  {activeCycle.plan.rootCauseAnalysis.type === 'ishikawa' && (!activeCycle.plan.rootCauseAnalysis.priorityCauses || activeCycle.plan.rootCauseAnalysis.priorityCauses.length === 0) && showValidationErrors && (
+                                    </div>
+
+                                    {(
+                                      activeCycle.plan.rootCauseAnalysis
+                                        .priorityCauses || []
+                                    ).length > 0 && (
+                                      <div className="pt-4 border-t border-slate-800">
+                                        <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">
+                                          Causas Selecionadas (
+                                          {
+                                            activeCycle.plan.rootCauseAnalysis
+                                              .priorityCauses?.length
+                                          }
+                                          )
+                                        </p>
+                                        <div className="flex flex-wrap gap-2">
+                                          {activeCycle.plan.rootCauseAnalysis.priorityCauses?.map(
+                                            (cause) => (
+                                              <span
+                                                key={cause}
+                                                className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest"
+                                              >
+                                                {cause}
+                                              </span>
+                                            ),
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </motion.div>
+                                )}
+                                {activeCycle.plan.rootCauseAnalysis.type ===
+                                  "ishikawa" &&
+                                  (!activeCycle.plan.rootCauseAnalysis
+                                    .priorityCauses ||
+                                    activeCycle.plan.rootCauseAnalysis
+                                      .priorityCauses.length === 0) &&
+                                  showValidationErrors && (
                                     <div className="mt-4 p-4 bg-rose-50 border border-rose-200 rounded-2xl flex items-center gap-3 text-rose-600 animate-pulse">
                                       <AlertCircle size={20} />
-                                      <p className="text-xs font-black uppercase tracking-widest">Selecione as causas prioritárias para avançar</p>
+                                      <p className="text-xs font-black uppercase tracking-widest">
+                                        Selecione as causas prioritárias para
+                                        avançar
+                                      </p>
                                     </div>
                                   )}
-                                </>
-                              ) : activeCycle.plan.rootCauseAnalysis.entries.map((entry, idx) => (
-                              <div key={entry.id} className="flex items-center gap-4">
-                                <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-black shadow-sm shrink-0">
-                                  {activeCycle.plan.rootCauseAnalysis.type === '5whys' ? idx + 1 : <AlertCircle size={16} />}
-                                </div>
-                                <div className="flex-1 min-w-0 flex gap-2">
-                                  <input 
-                                    type="text" 
-                                    placeholder={activeCycle.plan.rootCauseAnalysis.type === '5whys' ? `Por quê ${idx + 1}?` : "Descreva a causa..."}
-                                    value={entry.text || ''}
-                                    onChange={(e) => {
-                                      const newEntries = [...activeCycle.plan.rootCauseAnalysis.entries];
-                                      newEntries[idx].text = e.target.value;
-                                      updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, entries: newEntries } });
-                                    }}
-                                    className="flex-1 min-w-0 p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm"
-                                  />
-                                  {activeCycle.plan.rootCauseAnalysis.type === 'list' && (
-                                    <button 
-                                      onClick={() => {
-                                        const newEntries = activeCycle.plan.rootCauseAnalysis.entries.filter((_, i) => i !== idx);
-                                        updatePlan({ rootCauseAnalysis: { ...activeCycle.plan.rootCauseAnalysis, entries: newEntries } });
-                                      }}
-                                      className="p-4 text-slate-300 hover:text-rose-500 transition-colors"
-                                    >
-                                      <Trash2 size={18} />
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                              
-                              {/* Root Cause Conclusion for 5 Whys and List */}
-                              {(activeCycle.plan.rootCauseAnalysis.type === '5whys' || activeCycle.plan.rootCauseAnalysis.type === 'list') && (
-                                <div className="mt-8 p-6 bg-indigo-50 rounded-2xl border border-indigo-100 space-y-3">
-                                  <div className="flex items-center gap-2 text-indigo-600">
-                                    <Target size={18} />
-                                    <h5 className="font-black text-xs uppercase tracking-widest">Causa raiz identificada</h5>
+                              </>
+                            ) : (
+                              activeCycle.plan.rootCauseAnalysis.entries.map(
+                                (entry, idx) => (
+                                  <div
+                                    key={entry.id}
+                                    className="flex items-center gap-4"
+                                  >
+                                    <div className="w-10 h-10 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 font-black shadow-sm shrink-0">
+                                      {activeCycle.plan.rootCauseAnalysis
+                                        .type === "5whys" ? (
+                                        idx + 1
+                                      ) : (
+                                        <AlertCircle size={16} />
+                                      )}
+                                    </div>
+                                    <div className="flex-1 min-w-0 flex gap-2">
+                                      <input
+                                        type="text"
+                                        placeholder={
+                                          activeCycle.plan.rootCauseAnalysis
+                                            .type === "5whys"
+                                            ? `Por quê ${idx + 1}?`
+                                            : "Descreva a causa..."
+                                        }
+                                        value={entry.text || ""}
+                                        onChange={(e) => {
+                                          const newEntries = [
+                                            ...activeCycle.plan
+                                              .rootCauseAnalysis.entries,
+                                          ];
+                                          newEntries[idx].text = e.target.value;
+                                          updatePlan({
+                                            rootCauseAnalysis: {
+                                              ...activeCycle.plan
+                                                .rootCauseAnalysis,
+                                              entries: newEntries,
+                                            },
+                                          });
+                                        }}
+                                        className="flex-1 min-w-0 p-4 bg-white border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm"
+                                      />
+                                      {activeCycle.plan.rootCauseAnalysis
+                                        .type === "list" && (
+                                        <button
+                                          onClick={() => {
+                                            const newEntries =
+                                              activeCycle.plan.rootCauseAnalysis.entries.filter(
+                                                (_, i) => i !== idx,
+                                              );
+                                            updatePlan({
+                                              rootCauseAnalysis: {
+                                                ...activeCycle.plan
+                                                  .rootCauseAnalysis,
+                                                entries: newEntries,
+                                              },
+                                            });
+                                          }}
+                                          className="p-4 text-slate-300 hover:text-rose-500 transition-colors"
+                                        >
+                                          <Trash2 size={18} />
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
-                                  <textarea 
-                                    placeholder="Descreva aqui a causa raiz final identificada após a análise..."
-                                    value={activeCycle.plan.rootCauseAnalysis.identifiedRootCause || ''}
-                                    onChange={(e) => updatePlan({ 
-                                      rootCauseAnalysis: { 
-                                        ...activeCycle.plan.rootCauseAnalysis, 
-                                        identifiedRootCause: e.target.value 
-                                      } 
-                                    })}
-                                    className={cn(
-                                      "w-full p-4 bg-white border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm min-h-[100px] transition-all",
-                                      showValidationErrors && !activeCycle.plan.rootCauseAnalysis.identifiedRootCause?.trim() 
-                                        ? "border-rose-300 bg-rose-50/30" 
-                                        : "border-indigo-100"
-                                    )}
-                                  />
-                                  <p className="text-[10px] text-indigo-400 font-bold italic">* Campo obrigatório para conclusão do PLAN</p>
-                                  {!activeCycle.plan.rootCauseAnalysis.identifiedRootCause && (
-                                    <div className="flex items-center gap-1.5 text-rose-500 text-[10px] font-black uppercase tracking-widest animate-pulse">
-                                      <AlertCircle size={12} />
-                                      Atenção: Identifique a causa raiz para prosseguir
-                                    </div>
-                                  )}
-                                </div>
-                              )}
+                                ),
+                              )
+                            )}
 
-                              {activeCycle.plan.rootCauseAnalysis.type === 'list' && (
-                              <button 
+                            {/* Root Cause Conclusion for 5 Whys and List */}
+                            {(activeCycle.plan.rootCauseAnalysis.type ===
+                              "5whys" ||
+                              activeCycle.plan.rootCauseAnalysis.type ===
+                                "list") && (
+                              <div className="mt-8 p-6 bg-indigo-50 rounded-2xl border border-indigo-100 space-y-3">
+                                <div className="flex items-center gap-2 text-indigo-600">
+                                  <Target size={18} />
+                                  <h5 className="font-black text-xs uppercase tracking-widest">
+                                    Causa raiz identificada
+                                  </h5>
+                                </div>
+                                <textarea
+                                  placeholder="Descreva aqui a causa raiz final identificada após a análise..."
+                                  value={
+                                    activeCycle.plan.rootCauseAnalysis
+                                      .identifiedRootCause || ""
+                                  }
+                                  onChange={(e) =>
+                                    updatePlan({
+                                      rootCauseAnalysis: {
+                                        ...activeCycle.plan.rootCauseAnalysis,
+                                        identifiedRootCause: e.target.value,
+                                      },
+                                    })
+                                  }
+                                  className={cn(
+                                    "w-full p-4 bg-white border rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-slate-700 shadow-sm min-h-[100px] transition-all",
+                                    showValidationErrors &&
+                                      !activeCycle.plan.rootCauseAnalysis.identifiedRootCause?.trim()
+                                      ? "border-rose-300 bg-rose-50/30"
+                                      : "border-indigo-100",
+                                  )}
+                                />
+                                <p className="text-[10px] text-indigo-400 font-bold italic">
+                                  * Campo obrigatório para conclusão do PLAN
+                                </p>
+                                {!activeCycle.plan.rootCauseAnalysis
+                                  .identifiedRootCause && (
+                                  <div className="flex items-center gap-1.5 text-rose-500 text-[10px] font-black uppercase tracking-widest animate-pulse">
+                                    <AlertCircle size={12} />
+                                    Atenção: Identifique a causa raiz para
+                                    prosseguir
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {activeCycle.plan.rootCauseAnalysis.type ===
+                              "list" && (
+                              <button
                                 onClick={() => {
-                                  updatePlan({ 
-                                    rootCauseAnalysis: { 
-                                      ...activeCycle.plan.rootCauseAnalysis, 
-                                      entries: [...activeCycle.plan.rootCauseAnalysis.entries, { id: uuidv4(), text: '' }] 
-                                    } 
+                                  updatePlan({
+                                    rootCauseAnalysis: {
+                                      ...activeCycle.plan.rootCauseAnalysis,
+                                      entries: [
+                                        ...activeCycle.plan.rootCauseAnalysis
+                                          .entries,
+                                        { id: uuidv4(), text: "" },
+                                      ],
+                                    },
                                   });
                                 }}
                                 className="w-full py-4 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 font-black text-xs hover:border-indigo-300 hover:text-indigo-600 transition-all flex items-center justify-center gap-2"
@@ -1939,70 +3087,123 @@ export default function PDCAEditor({
 
                       {/* Step 3: Impacto */}
                       {activePlanStep === 3 && (
-                        <motion.section 
+                        <motion.section
                           initial={{ opacity: 0, x: 20 }}
                           animate={{ opacity: 1, x: 0 }}
                           className="space-y-8"
                         >
                           <div className="bg-theme-card p-10 rounded-[2.5rem] border border-theme-border shadow-sm space-y-12">
-                            <SectionHeader number="3" title="Impacto do Problema" />
-                            
+                            <SectionHeader
+                              number="3"
+                              title="Impacto do Problema"
+                            />
+
                             {/* 1. Impacto Atual */}
                             <div className="space-y-8">
                               <div className="flex items-center gap-3 pb-2 border-b border-theme-border">
                                 <div className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
                                   <RefreshCw size={18} />
                                 </div>
-                                <h4 className="text-sm font-black uppercase tracking-widest text-slate-700">1. Impacto Atual</h4>
+                                <h4 className="text-sm font-black uppercase tracking-widest text-slate-700">
+                                  1. Impacto Atual
+                                </h4>
                               </div>
 
                               <div className="space-y-6">
                                 <div className="space-y-4">
                                   <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                    <FileText size={14} className="text-indigo-500" />
+                                    <FileText
+                                      size={14}
+                                      className="text-indigo-500"
+                                    />
                                     Descrição do Impacto
                                   </label>
-                                  <textarea 
+                                  <textarea
                                     placeholder="Descreva detalhadamente o prejuízo ou problema atual..."
-                                    value={activeCycle.plan.impact.description || ''}
-                                    onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, description: e.target.value } })}
+                                    value={
+                                      activeCycle.plan.impact.description || ""
+                                    }
+                                    onChange={(e) =>
+                                      updatePlan({
+                                        impact: {
+                                          ...activeCycle.plan.impact,
+                                          description: e.target.value,
+                                        },
+                                      })
+                                    }
                                     className="w-full p-6 bg-theme-background border border-theme-border rounded-[2rem] outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-theme-foreground min-h-[150px] transition-all"
                                   />
                                 </div>
 
                                 <div className="max-w-md space-y-4">
                                   <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                    <TrendingUp size={14} className="text-emerald-500" />
+                                    <TrendingUp
+                                      size={14}
+                                      className="text-emerald-500"
+                                    />
                                     Valor do Impacto
                                   </label>
                                   <div className="relative">
-                                    <input 
+                                    <input
                                       type="number"
                                       placeholder="0.00"
-                                      value={activeCycle.plan.impact.value || ''}
-                                      onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, value: parseFloat(e.target.value) || 0 } })}
+                                      value={
+                                        activeCycle.plan.impact.value || ""
+                                      }
+                                      onChange={(e) =>
+                                        updatePlan({
+                                          impact: {
+                                            ...activeCycle.plan.impact,
+                                            value:
+                                              parseFloat(e.target.value) || 0,
+                                          },
+                                        })
+                                      }
                                       className="w-full p-6 bg-theme-background border border-theme-border rounded-3xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground pl-12"
                                     />
-                                    <span className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-slate-300">R$</span>
+                                    <span className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-slate-300">
+                                      R$
+                                    </span>
                                   </div>
                                 </div>
 
                                 <div className="max-w-md space-y-4">
                                   <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                    <Percent size={14} className="text-indigo-500" />
+                                    <Percent
+                                      size={14}
+                                      className="text-indigo-500"
+                                    />
                                     % de melhoria esperada
                                   </label>
                                   <div className="relative">
-                                    <input 
+                                    <input
                                       type="number"
                                       min="0"
                                       max="100"
                                       placeholder="0"
-                                      value={activeCycle.plan.impact.improvementPercentage || ''}
-                                      onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, improvementPercentage: Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)) } })}
+                                      value={
+                                        activeCycle.plan.impact
+                                          .improvementPercentage || ""
+                                      }
+                                      onChange={(e) =>
+                                        updatePlan({
+                                          impact: {
+                                            ...activeCycle.plan.impact,
+                                            improvementPercentage: Math.min(
+                                              100,
+                                              Math.max(
+                                                0,
+                                                parseFloat(e.target.value) || 0,
+                                              ),
+                                            ),
+                                          },
+                                        })
+                                      }
                                       className="w-full p-6 bg-theme-background border border-theme-border rounded-3xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground pr-12"
                                     />
-                                    <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-slate-300">%</span>
+                                    <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-slate-300">
+                                      %
+                                    </span>
                                   </div>
                                 </div>
                               </div>
@@ -2014,7 +3215,9 @@ export default function PDCAEditor({
                                 <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500">
                                   <TrendingUp size={18} />
                                 </div>
-                                <h4 className="text-sm font-black uppercase tracking-widest text-slate-700">2. Ganhos Esperados</h4>
+                                <h4 className="text-sm font-black uppercase tracking-widest text-slate-700">
+                                  2. Ganhos Esperados
+                                </h4>
                               </div>
 
                               {/* Tangíveis */}
@@ -2022,13 +3225,34 @@ export default function PDCAEditor({
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-2">
                                     <Zap size={16} className="text-amber-500" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Ganhos Tangíveis</span>
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                      Ganhos Tangíveis
+                                    </span>
                                   </div>
-                                  <button 
+                                  <button
                                     onClick={() => {
-                                      const current = activeCycle.plan.impact.expectedGains?.tangible || [];
-                                      const newGains = [...current, { id: uuidv4(), type: '', value: 0, unit: '' }];
-                                      updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, tangible: newGains } } });
+                                      const current =
+                                        activeCycle.plan.impact.expectedGains
+                                          ?.tangible || [];
+                                      const newGains = [
+                                        ...current,
+                                        {
+                                          id: uuidv4(),
+                                          type: "",
+                                          value: 0,
+                                          unit: "",
+                                        },
+                                      ];
+                                      updatePlan({
+                                        impact: {
+                                          ...activeCycle.plan.impact,
+                                          expectedGains: {
+                                            ...activeCycle.plan.impact
+                                              .expectedGains,
+                                            tangible: newGains,
+                                          },
+                                        },
+                                      });
                                     }}
                                     className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-100 transition-all border border-amber-100 shadow-sm"
                                   >
@@ -2038,93 +3262,212 @@ export default function PDCAEditor({
                                 </div>
 
                                 <div className="space-y-4">
-                                  {(activeCycle.plan.impact.expectedGains?.tangible || []).map((gain, index) => (
-                                    <div key={gain.id} className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-theme-background/30 p-6 rounded-[2rem] border border-theme-border/50 items-end">
+                                  {(
+                                    activeCycle.plan.impact.expectedGains
+                                      ?.tangible || []
+                                  ).map((gain, index) => (
+                                    <div
+                                      key={gain.id}
+                                      className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-theme-background/30 p-6 rounded-[2rem] border border-theme-border/50 items-end"
+                                    >
                                       <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Tipo</label>
-                                          <select 
-                                            value={gain.type}
-                                            onChange={(e) => {
-                                              const newGains = [...activeCycle.plan.impact.expectedGains!.tangible];
-                                              const type = e.target.value;
-                                              let unit = gain.unit;
-                                              
-                                              // Auto-populate unit from structured configuration
-                                              if (globalConfig?.structuredTangibleGains) {
-                                                const configGain = globalConfig.structuredTangibleGains.find(g => g.name === type) as any;
-                                                const availableUnits = configGain?.units || (configGain?.unit ? [configGain.unit] : []);
-                                                
-                                                if (availableUnits.length > 0) {
-                                                  if (availableUnits.length === 1) {
-                                                    unit = availableUnits[0];
-                                                  } else if (!availableUnits.includes(gain.unit)) {
-                                                    unit = '';
-                                                  }
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
+                                          Tipo
+                                        </label>
+                                        <select
+                                          value={gain.type}
+                                          onChange={(e) => {
+                                            const newGains = [
+                                              ...activeCycle.plan.impact
+                                                .expectedGains!.tangible,
+                                            ];
+                                            const type = e.target.value;
+                                            let unit = gain.unit;
+
+                                            // Auto-populate unit from structured configuration
+                                            if (
+                                              globalConfig?.structuredTangibleGains
+                                            ) {
+                                              const configGain =
+                                                globalConfig.structuredTangibleGains.find(
+                                                  (g) => g.name === type,
+                                                ) as any;
+                                              const availableUnits =
+                                                configGain?.units ||
+                                                (configGain?.unit
+                                                  ? [configGain.unit]
+                                                  : []);
+
+                                              if (availableUnits.length > 0) {
+                                                if (
+                                                  availableUnits.length === 1
+                                                ) {
+                                                  unit = availableUnits[0];
+                                                } else if (
+                                                  !availableUnits.includes(
+                                                    gain.unit,
+                                                  )
+                                                ) {
+                                                  unit = "";
                                                 }
                                               }
-                                              
-                                              newGains[index] = { ...gain, type, unit };
-                                              updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, tangible: newGains } } });
-                                            }}
-                                            className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground text-xs"
-                                          >
+                                            }
+
+                                            newGains[index] = {
+                                              ...gain,
+                                              type,
+                                              unit,
+                                            };
+                                            updatePlan({
+                                              impact: {
+                                                ...activeCycle.plan.impact,
+                                                expectedGains: {
+                                                  ...activeCycle.plan.impact
+                                                    .expectedGains,
+                                                  tangible: newGains,
+                                                },
+                                              },
+                                            });
+                                          }}
+                                          className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground text-xs"
+                                        >
                                           <option value="">Selecione...</option>
-                                          {((globalConfig?.structuredTangibleGains?.filter(g => g.active).map(g => g.name)) || globalConfig?.tangibleGainTypes || []).map((t, tIdx) => <option key={`${t}-${tIdx}`} value={t}>{t}</option>)}
+                                          {(
+                                            globalConfig?.structuredTangibleGains
+                                              ?.filter((g) => g.active)
+                                              .map((g) => g.name) ||
+                                            globalConfig?.tangibleGainTypes ||
+                                            []
+                                          ).map((t, tIdx) => (
+                                            <option
+                                              key={`${t}-${tIdx}`}
+                                              value={t}
+                                            >
+                                              {t}
+                                            </option>
+                                          ))}
                                         </select>
                                       </div>
                                       <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Valor</label>
-                                        <input 
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
+                                          Valor
+                                        </label>
+                                        <input
                                           type="number"
-                                          value={gain.value || ''}
+                                          value={gain.value || ""}
                                           onChange={(e) => {
-                                            const newGains = [...activeCycle.plan.impact.expectedGains!.tangible];
-                                            newGains[index] = { ...gain, value: parseFloat(e.target.value) || 0 };
-                                            updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, tangible: newGains } } });
+                                            const newGains = [
+                                              ...activeCycle.plan.impact
+                                                .expectedGains!.tangible,
+                                            ];
+                                            newGains[index] = {
+                                              ...gain,
+                                              value:
+                                                parseFloat(e.target.value) || 0,
+                                            };
+                                            updatePlan({
+                                              impact: {
+                                                ...activeCycle.plan.impact,
+                                                expectedGains: {
+                                                  ...activeCycle.plan.impact
+                                                    .expectedGains,
+                                                  tangible: newGains,
+                                                },
+                                              },
+                                            });
                                           }}
                                           className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground text-xs"
                                         />
                                       </div>
                                       <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Unidade</label>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
+                                          Unidade
+                                        </label>
                                         {(() => {
-                                          const configGain = globalConfig?.structuredTangibleGains?.find(g => g.name === gain.type) as any;
-                                          const availableUnits = configGain?.units || (configGain?.unit ? [configGain.unit] : []);
-                                          const isDisabled = availableUnits.length <= 1;
+                                          const configGain =
+                                            globalConfig?.structuredTangibleGains?.find(
+                                              (g) => g.name === gain.type,
+                                            ) as any;
+                                          const availableUnits =
+                                            configGain?.units ||
+                                            (configGain?.unit
+                                              ? [configGain.unit]
+                                              : []);
+                                          const isDisabled =
+                                            availableUnits.length <= 1;
 
                                           return (
-                                            <select 
+                                            <select
                                               disabled={isDisabled}
                                               value={gain.unit}
                                               onChange={(e) => {
-                                                const newGains = [...activeCycle.plan.impact.expectedGains!.tangible];
-                                                newGains[index] = { ...gain, unit: e.target.value };
-                                                updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, tangible: newGains } } });
+                                                const newGains = [
+                                                  ...activeCycle.plan.impact
+                                                    .expectedGains!.tangible,
+                                                ];
+                                                newGains[index] = {
+                                                  ...gain,
+                                                  unit: e.target.value,
+                                                };
+                                                updatePlan({
+                                                  impact: {
+                                                    ...activeCycle.plan.impact,
+                                                    expectedGains: {
+                                                      ...activeCycle.plan.impact
+                                                        .expectedGains,
+                                                      tangible: newGains,
+                                                    },
+                                                  },
+                                                });
                                               }}
                                               className={cn(
                                                 "w-full p-4 border border-theme-border rounded-2xl outline-none font-bold text-xs transition-all",
-                                                isDisabled 
-                                                  ? "bg-theme-background text-slate-400 cursor-not-allowed" 
-                                                  : "bg-theme-card text-theme-foreground focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+                                                isDisabled
+                                                  ? "bg-theme-background text-slate-400 cursor-not-allowed"
+                                                  : "bg-theme-card text-theme-foreground focus:ring-2 focus:ring-indigo-500 cursor-pointer",
                                               )}
                                             >
-                                              <option value="">Selecione...</option>
-                                              {availableUnits.length > 0 ? (
-                                                availableUnits.map(u => (
-                                                  <option key={u} value={u}>{u}</option>
-                                                ))
-                                              ) : (
-                                                ((globalConfig?.structuredUnits?.filter(u => u.active).map(u => u.symbol)) || globalConfig?.units || []).map(u => <option key={u} value={u}>{u}</option>)
-                                              )}
+                                              <option value="">
+                                                Selecione...
+                                              </option>
+                                              {availableUnits.length > 0
+                                                ? availableUnits.map((u) => (
+                                                    <option key={u} value={u}>
+                                                      {u}
+                                                    </option>
+                                                  ))
+                                                : (
+                                                    globalConfig?.structuredUnits
+                                                      ?.filter((u) => u.active)
+                                                      .map((u) => u.symbol) ||
+                                                    globalConfig?.units ||
+                                                    []
+                                                  ).map((u) => (
+                                                    <option key={u} value={u}>
+                                                      {u}
+                                                    </option>
+                                                  ))}
                                             </select>
                                           );
                                         })()}
                                       </div>
                                       <div>
-                                        <button 
+                                        <button
                                           onClick={() => {
-                                            const newGains = activeCycle.plan.impact.expectedGains!.tangible.filter(g => g.id !== gain.id);
-                                            updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, tangible: newGains } } });
+                                            const newGains =
+                                              activeCycle.plan.impact.expectedGains!.tangible.filter(
+                                                (g) => g.id !== gain.id,
+                                              );
+                                            updatePlan({
+                                              impact: {
+                                                ...activeCycle.plan.impact,
+                                                expectedGains: {
+                                                  ...activeCycle.plan.impact
+                                                    .expectedGains,
+                                                  tangible: newGains,
+                                                },
+                                              },
+                                            });
                                           }}
                                           className="w-full p-4 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-2xl transition-all flex items-center justify-center border border-transparent hover:border-rose-100"
                                         >
@@ -2133,7 +3476,10 @@ export default function PDCAEditor({
                                       </div>
                                     </div>
                                   ))}
-                                  {(activeCycle.plan.impact.expectedGains?.tangible || []).length === 0 && (
+                                  {(
+                                    activeCycle.plan.impact.expectedGains
+                                      ?.tangible || []
+                                  ).length === 0 && (
                                     <div className="text-center p-8 border-2 border-dashed border-theme-border rounded-[2rem] text-slate-400 text-[10px] font-black uppercase tracking-widest">
                                       Nenhum ganho tangível adicionado
                                     </div>
@@ -2145,14 +3491,38 @@ export default function PDCAEditor({
                               <div className="space-y-6">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-2">
-                                    <Award size={16} className="text-indigo-500" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Ganhos Intangíveis</span>
+                                    <Award
+                                      size={16}
+                                      className="text-indigo-500"
+                                    />
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                      Ganhos Intangíveis
+                                    </span>
                                   </div>
-                                  <button 
+                                  <button
                                     onClick={() => {
-                                      const current = activeCycle.plan.impact.expectedGains?.intangible || [];
-                                      const newGains = [...current, { id: uuidv4(), type: '', description: '', impactLevel: 'Baixo' as const }];
-                                      updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, intangible: newGains } } });
+                                      const current =
+                                        activeCycle.plan.impact.expectedGains
+                                          ?.intangible || [];
+                                      const newGains = [
+                                        ...current,
+                                        {
+                                          id: uuidv4(),
+                                          type: "",
+                                          description: "",
+                                          impactLevel: "Baixo" as const,
+                                        },
+                                      ];
+                                      updatePlan({
+                                        impact: {
+                                          ...activeCycle.plan.impact,
+                                          expectedGains: {
+                                            ...activeCycle.plan.impact
+                                              .expectedGains,
+                                            intangible: newGains,
+                                          },
+                                        },
+                                      });
                                     }}
                                     className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-100 transition-all border border-indigo-100 shadow-sm"
                                   >
@@ -2162,65 +3532,151 @@ export default function PDCAEditor({
                                 </div>
 
                                 <div className="space-y-4">
-                                  {(activeCycle.plan.impact.expectedGains?.intangible || []).map((gain, index) => (
-                                    <div key={gain.id} className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-theme-background/30 p-6 rounded-[2rem] border border-theme-border/50 items-end">
+                                  {(
+                                    activeCycle.plan.impact.expectedGains
+                                      ?.intangible || []
+                                  ).map((gain, index) => (
+                                    <div
+                                      key={gain.id}
+                                      className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-theme-background/30 p-6 rounded-[2rem] border border-theme-border/50 items-end"
+                                    >
                                       <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Tipo</label>
-                                        <select 
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
+                                          Tipo
+                                        </label>
+                                        <select
                                           value={gain.type}
                                           onChange={(e) => {
-                                            const newGains = [...activeCycle.plan.impact.expectedGains!.intangible];
-                                            newGains[index] = { ...gain, type: e.target.value };
-                                            updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, intangible: newGains } } });
+                                            const newGains = [
+                                              ...activeCycle.plan.impact
+                                                .expectedGains!.intangible,
+                                            ];
+                                            newGains[index] = {
+                                              ...gain,
+                                              type: e.target.value,
+                                            };
+                                            updatePlan({
+                                              impact: {
+                                                ...activeCycle.plan.impact,
+                                                expectedGains: {
+                                                  ...activeCycle.plan.impact
+                                                    .expectedGains,
+                                                  intangible: newGains,
+                                                },
+                                              },
+                                            });
                                           }}
                                           className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground text-xs"
                                         >
                                           <option value="">Selecione...</option>
-                                          {((globalConfig?.structuredIntangibleGains?.filter(g => g.active).map(g => g.name)) || globalConfig?.intangibleGainTypes || []).map((t, tIdx) => <option key={`${t}-${tIdx}`} value={t}>{t}</option>)}
+                                          {(
+                                            globalConfig?.structuredIntangibleGains
+                                              ?.filter((g) => g.active)
+                                              .map((g) => g.name) ||
+                                            globalConfig?.intangibleGainTypes ||
+                                            []
+                                          ).map((t, tIdx) => (
+                                            <option
+                                              key={`${t}-${tIdx}`}
+                                              value={t}
+                                            >
+                                              {t}
+                                            </option>
+                                          ))}
                                         </select>
                                       </div>
                                       <div className="space-y-2 md:col-span-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Descrição</label>
-                                        <input 
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
+                                          Descrição
+                                        </label>
+                                        <input
                                           type="text"
-                                          value={gain.description || ''}
+                                          value={gain.description || ""}
                                           onChange={(e) => {
-                                            const newGains = [...activeCycle.plan.impact.expectedGains!.intangible];
-                                            newGains[index] = { ...gain, description: e.target.value };
-                                            updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, intangible: newGains } } });
+                                            const newGains = [
+                                              ...activeCycle.plan.impact
+                                                .expectedGains!.intangible,
+                                            ];
+                                            newGains[index] = {
+                                              ...gain,
+                                              description: e.target.value,
+                                            };
+                                            updatePlan({
+                                              impact: {
+                                                ...activeCycle.plan.impact,
+                                                expectedGains: {
+                                                  ...activeCycle.plan.impact
+                                                    .expectedGains,
+                                                  intangible: newGains,
+                                                },
+                                              },
+                                            });
                                           }}
                                           placeholder="Ex: Melhoria no clima..."
                                           className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-theme-foreground text-xs"
                                         />
                                       </div>
                                       <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Nível</label>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
+                                          Nível
+                                        </label>
                                         <div className="flex gap-1">
-                                          {['Baixo', 'Médio', 'Alto'].map((level) => (
-                                            <button 
-                                              key={level}
-                                              onClick={() => {
-                                                const newGains = [...activeCycle.plan.impact.expectedGains!.intangible];
-                                                newGains[index] = { ...gain, impactLevel: level as any };
-                                                updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, intangible: newGains } } });
-                                              }}
-                                              className={cn(
-                                                "flex-1 py-4 px-1 rounded-xl font-black text-[8px] uppercase tracking-tighter transition-all border",
-                                                gain.impactLevel === level 
-                                                  ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
-                                                  : "bg-theme-card text-slate-400 border-theme-border hover:border-indigo-200"
-                                              )}
-                                            >
-                                              {level}
-                                            </button>
-                                          ))}
+                                          {["Baixo", "Médio", "Alto"].map(
+                                            (level) => (
+                                              <button
+                                                key={level}
+                                                onClick={() => {
+                                                  const newGains = [
+                                                    ...activeCycle.plan.impact
+                                                      .expectedGains!
+                                                      .intangible,
+                                                  ];
+                                                  newGains[index] = {
+                                                    ...gain,
+                                                    impactLevel: level as any,
+                                                  };
+                                                  updatePlan({
+                                                    impact: {
+                                                      ...activeCycle.plan
+                                                        .impact,
+                                                      expectedGains: {
+                                                        ...activeCycle.plan
+                                                          .impact.expectedGains,
+                                                        intangible: newGains,
+                                                      },
+                                                    },
+                                                  });
+                                                }}
+                                                className={cn(
+                                                  "flex-1 py-4 px-1 rounded-xl font-black text-[8px] uppercase tracking-tighter transition-all border",
+                                                  gain.impactLevel === level
+                                                    ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
+                                                    : "bg-theme-card text-slate-400 border-theme-border hover:border-indigo-200",
+                                                )}
+                                              >
+                                                {level}
+                                              </button>
+                                            ),
+                                          )}
                                         </div>
                                       </div>
                                       <div>
-                                        <button 
+                                        <button
                                           onClick={() => {
-                                            const newGains = activeCycle.plan.impact.expectedGains!.intangible.filter(g => g.id !== gain.id);
-                                            updatePlan({ impact: { ...activeCycle.plan.impact, expectedGains: { ...activeCycle.plan.impact.expectedGains, intangible: newGains } } });
+                                            const newGains =
+                                              activeCycle.plan.impact.expectedGains!.intangible.filter(
+                                                (g) => g.id !== gain.id,
+                                              );
+                                            updatePlan({
+                                              impact: {
+                                                ...activeCycle.plan.impact,
+                                                expectedGains: {
+                                                  ...activeCycle.plan.impact
+                                                    .expectedGains,
+                                                  intangible: newGains,
+                                                },
+                                              },
+                                            });
                                           }}
                                           className="w-full p-4 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-2xl transition-all flex items-center justify-center border border-transparent hover:border-rose-100"
                                         >
@@ -2229,7 +3685,10 @@ export default function PDCAEditor({
                                       </div>
                                     </div>
                                   ))}
-                                  {(activeCycle.plan.impact.expectedGains?.intangible || []).length === 0 && (
+                                  {(
+                                    activeCycle.plan.impact.expectedGains
+                                      ?.intangible || []
+                                  ).length === 0 && (
                                     <div className="text-center p-8 border-2 border-dashed border-theme-border rounded-[2rem] text-slate-400 text-[10px] font-black uppercase tracking-widest">
                                       Nenhum ganho intangível adicionado
                                     </div>
@@ -2243,163 +3702,228 @@ export default function PDCAEditor({
 
                       {/* Step 4: Plano de Ação */}
                       {activePlanStep === 4 && (
-                        <motion.section 
+                        <motion.section
                           initial={{ opacity: 0, x: 20 }}
                           animate={{ opacity: 1, x: 0 }}
                           className="space-y-8"
                         >
-                          <SectionHeader number="4" title="Plano de Ação (5W2H)" />
+                          <SectionHeader
+                            number="4"
+                            title="Plano de Ação (5W2H)"
+                          />
                           <div className="space-y-6">
                             {activeCycle.plan.actionPlan
-                              .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+                              .filter(
+                                (item) =>
+                                  item.status !== "Cancelado" &&
+                                  item.ativo !== false,
+                              )
                               .map((item, index) => (
-                              <div key={item.id} className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm space-y-6 relative group transition-all hover:shadow-md">
-                                <div className="flex items-center justify-between mb-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-xs">
-                                      {index + 1}
+                                <div
+                                  key={item.id}
+                                  className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm space-y-6 relative group transition-all hover:shadow-md"
+                                >
+                                  <div className="flex items-center justify-between mb-4">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-black text-xs">
+                                        {index + 1}
+                                      </div>
+                                      <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        Ação #{index + 1}
+                                      </h5>
                                     </div>
-                                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ação #{index + 1}</h5>
-                                  </div>
-                                  <button 
-                                    onClick={() => removeActionPlanItem(item.id)}
-                                    className="text-slate-300 hover:text-rose-500 transition-colors p-1"
-                                    title="Remover Ação"
-                                  >
-                                    <Trash2 size={20} />
-                                  </button>
-                                </div>
-
-                                <div className="space-y-6">
-                                  <div className="max-w-md space-y-1">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Tipo do Plano de Ação (OBRIGATÓRIO)</label>
-                                    <select 
-                                      value={item.actionType || ''} 
-                                      onChange={(e) => updateActionPlan(item.id, { actionType: e.target.value as any })}
-                                      className={cn(
-                                        "w-full p-4 border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold transition-all",
-                                        !item.actionType ? "bg-amber-50 border-amber-200 text-amber-700" : "bg-slate-50 border-slate-100 text-slate-700"
-                                      )}
+                                    <button
+                                      onClick={() =>
+                                        removeActionPlanItem(item.id)
+                                      }
+                                      className="text-slate-300 hover:text-rose-500 transition-colors p-1"
+                                      title="Remover Ação"
                                     >
-                                      <option value="">Selecione o tipo...</option>
-                                      <option value="Processual">Processual</option>
-                                      <option value="Operacional">Operacional</option>
-                                      <option value="Inovação">Inovação</option>
-                                    </select>
+                                      <Trash2 size={20} />
+                                    </button>
                                   </div>
 
-                                  {/* 5W2H Section - Full Width */}
-                                  {item.actionType ? (
-                                    <motion.div 
-                                      initial={{ opacity: 0, height: 0 }}
-                                      animate={{ opacity: 1, height: 'auto' }}
-                                      className="space-y-6 pt-6 border-t border-slate-100 w-full"
-                                    >
+                                  <div className="space-y-6">
+                                    {/* 5W2H Section - Full Width */}
+                                    <div className="space-y-6 w-full">
                                       <div className="grid grid-cols-1 md:grid-cols-6 gap-6 w-full px-1">
                                         {/* Row 1: What & Why */}
                                         <div className="md:col-span-3 space-y-1 min-w-0">
-                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">What (O que será feito?)</label>
-                                          <textarea 
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                                            What (O que será feito?)
+                                          </label>
+                                          <textarea
                                             rows={3}
-                                            value={item.what || ''} 
+                                            value={item.what || ""}
                                             placeholder="Descreva o que será feito com detalhes..."
-                                            onChange={(e) => updateActionPlan(item.id, { what: e.target.value }, true)}
-                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            onChange={(e) =>
+                                              updateActionPlan(
+                                                item.id,
+                                                { what: e.target.value },
+                                                true,
+                                              )
+                                            }
+                                            onBlur={() =>
+                                              updateActionPlan(item.id, {})
+                                            }
                                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 resize-none min-h-[100px] box-border"
                                           />
                                         </div>
                                         <div className="md:col-span-3 space-y-1 min-w-0">
-                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Why (Por que será feito?)</label>
-                                          <textarea 
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                                            Why (Por que será feito?)
+                                          </label>
+                                          <textarea
                                             rows={3}
-                                            value={item.why || ''} 
+                                            value={item.why || ""}
                                             placeholder="Por que essa ação é necessária?"
-                                            onChange={(e) => updateActionPlan(item.id, { why: e.target.value }, true)}
-                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            onChange={(e) =>
+                                              updateActionPlan(
+                                                item.id,
+                                                { why: e.target.value },
+                                                true,
+                                              )
+                                            }
+                                            onBlur={() =>
+                                              updateActionPlan(item.id, {})
+                                            }
                                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 resize-none min-h-[100px] box-border"
                                           />
                                         </div>
 
                                         {/* Row 2: Where, When, Who */}
                                         <div className="md:col-span-2 space-y-1 min-w-0">
-                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Where (Onde?)</label>
-                                          <input 
-                                            value={item.where || ''} 
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                                            Where (Onde?)
+                                          </label>
+                                          <input
+                                            value={item.where || ""}
                                             placeholder="Local da execução"
-                                            onChange={(e) => updateActionPlan(item.id, { where: e.target.value }, true)}
-                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            onChange={(e) =>
+                                              updateActionPlan(
+                                                item.id,
+                                                { where: e.target.value },
+                                                true,
+                                              )
+                                            }
+                                            onBlur={() =>
+                                              updateActionPlan(item.id, {})
+                                            }
                                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
                                           />
                                         </div>
                                         <div className="md:col-span-2 space-y-1 min-w-0">
-                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">When (Quando?)</label>
-                                          <input 
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                                            When (Quando?)
+                                          </label>
+                                          <input
                                             type="date"
-                                            value={item.when || ''} 
-                                            onChange={(e) => updateActionPlan(item.id, { when: e.target.value }, true)}
-                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            value={item.when || ""}
+                                            onChange={(e) =>
+                                              updateActionPlan(
+                                                item.id,
+                                                { when: e.target.value },
+                                                true,
+                                              )
+                                            }
+                                            onBlur={() =>
+                                              updateActionPlan(item.id, {})
+                                            }
                                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 h-[54px] box-border"
                                           />
                                         </div>
                                         <div className="md:col-span-2 space-y-1 min-w-0">
-                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Who (Quem)</label>
-                                          <input 
-                                            value={item.who || ''} 
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                                            Who (Quem)
+                                          </label>
+                                          <input
+                                            value={item.who || ""}
                                             placeholder="Responsável"
-                                            onChange={(e) => updateActionPlan(item.id, { who: e.target.value }, true)}
-                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            onChange={(e) =>
+                                              updateActionPlan(
+                                                item.id,
+                                                { who: e.target.value },
+                                                true,
+                                              )
+                                            }
+                                            onBlur={() =>
+                                              updateActionPlan(item.id, {})
+                                            }
                                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
                                           />
                                         </div>
 
                                         {/* Row 3: How (Main focus) */}
                                         <div className="md:col-span-6 space-y-1 min-w-0">
-                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">How (Como será feito?)</label>
-                                          <textarea 
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                                            How (Como será feito?)
+                                          </label>
+                                          <textarea
                                             rows={2}
-                                            value={item.how || ''} 
+                                            value={item.how || ""}
                                             placeholder="Detalhe o passo a passo da execução..."
-                                            onChange={(e) => updateActionPlan(item.id, { how: e.target.value }, true)}
-                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            onChange={(e) =>
+                                              updateActionPlan(
+                                                item.id,
+                                                { how: e.target.value },
+                                                true,
+                                              )
+                                            }
+                                            onBlur={() =>
+                                              updateActionPlan(item.id, {})
+                                            }
                                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 resize-none min-h-[80px] box-border"
                                           />
                                         </div>
 
                                         {/* Row 4: How much, Sector */}
                                         <div className="md:col-span-3 space-y-1 min-w-0">
-                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">How much (Custo)</label>
-                                          <input 
-                                            value={item.howMuch || ''} 
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                                            How much (Custo)
+                                          </label>
+                                          <input
+                                            value={item.howMuch || ""}
                                             placeholder="Valor ou recurso necessário"
-                                            onChange={(e) => updateActionPlan(item.id, { howMuch: e.target.value }, true)}
-                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            onChange={(e) =>
+                                              updateActionPlan(
+                                                item.id,
+                                                { howMuch: e.target.value },
+                                                true,
+                                              )
+                                            }
+                                            onBlur={() =>
+                                              updateActionPlan(item.id, {})
+                                            }
                                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
                                           />
                                         </div>
                                         <div className="md:col-span-3 space-y-1 min-w-0">
-                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Setor</label>
-                                          <input 
-                                            value={item.sector || ''} 
+                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                                            Setor
+                                          </label>
+                                          <input
+                                            value={item.sector || ""}
                                             placeholder="Área responsável"
-                                            onChange={(e) => updateActionPlan(item.id, { sector: e.target.value }, true)}
-                                            onBlur={() => updateActionPlan(item.id, {})}
+                                            onChange={(e) =>
+                                              updateActionPlan(
+                                                item.id,
+                                                { sector: e.target.value },
+                                                true,
+                                              )
+                                            }
+                                            onBlur={() =>
+                                              updateActionPlan(item.id, {})
+                                            }
                                             className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
                                           />
                                         </div>
                                       </div>
-                                    </motion.div>
-                                  ) : (
-                                    <div className="bg-amber-50 p-6 rounded-3xl border border-amber-100 text-center">
-                                      <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest">
-                                        Defina o Tipo do Plano acima para liberar o preenchimento do 5W2H
-                                      </p>
                                     </div>
-                                  )}
+                                  </div>
                                 </div>
-                            </div>
-                          ))}
+                              ))}
 
-                            <button 
+                            <button
                               onClick={addActionPlanItem}
                               className="w-full py-8 border-2 border-dashed border-indigo-100 rounded-[2.5rem] font-black text-xs uppercase tracking-widest text-indigo-400 hover:border-indigo-300 hover:bg-indigo-50/50 hover:text-indigo-600 transition-all flex items-center justify-center gap-2"
                             >
@@ -2415,10 +3939,12 @@ export default function PDCAEditor({
                     <div className="flex items-center justify-between pt-10 border-t border-theme-border">
                       <button
                         disabled={activePlanStep === 1}
-                        onClick={() => setActivePlanStep(prev => prev - 1)}
+                        onClick={() => setActivePlanStep((prev) => prev - 1)}
                         className={cn(
                           "flex items-center gap-2 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all border border-theme-border hover:bg-theme-card",
-                          activePlanStep === 1 ? "opacity-0 invisible" : "opacity-100"
+                          activePlanStep === 1
+                            ? "opacity-0 invisible"
+                            : "opacity-100",
                         )}
                       >
                         <ArrowLeft size={18} />
@@ -2427,849 +3953,1406 @@ export default function PDCAEditor({
 
                       {activePlanStep < 4 ? (
                         <button
-                          onClick={() => setActivePlanStep(prev => prev + 1)}
+                          onClick={() => setActivePlanStep((prev) => prev + 1)}
                           className="flex items-center gap-2 bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all group"
                         >
                           Próximo Passo
-                          <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                          <ChevronRight
+                            size={18}
+                            className="group-hover:translate-x-1 transition-transform"
+                          />
                         </button>
                       ) : (
-                        <button 
-                          onClick={() => handlePhaseChange('DO')}
+                        <button
+                          onClick={() => handlePhaseChange("DO")}
                           className="flex items-center gap-2 bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all group"
                         >
                           Finalizar PLAN (Ir para DO)
-                          <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                          <ChevronRight
+                            size={18}
+                            className="group-hover:translate-x-1 transition-transform"
+                          />
                         </button>
                       )}
                     </div>
                   </motion.div>
                 )}
-                                {activePhase === 'DO' && (
-                  <motion.div 
-                    key="do" 
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }} 
+                {activePhase === "DO" && (
+                  <motion.div
+                    key="do"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     className="max-w-5xl mx-auto space-y-8"
                   >
                     <div className="bg-theme-card rounded-[2.5rem] border border-theme-border shadow-sm overflow-hidden">
                       <div className="p-8 border-b border-theme-border bg-theme-background/50">
-                        <h4 className="text-xl font-black text-theme-foreground tracking-tight">Execução e Histórico</h4>
-                        <p className="text-slate-400 text-sm mt-1">Registre cada atualização das ações planejadas.</p>
+                        <h4 className="text-xl font-black text-theme-foreground tracking-tight">
+                          Execução e Histórico
+                        </h4>
+                        <p className="text-slate-400 text-sm mt-1">
+                          Registre cada atualização das ações planejadas.
+                        </p>
                       </div>
                       <div className="divide-y divide-theme-border">
-                        {activeCycle.plan.actionPlan.filter(item => item.status !== 'Cancelado' && item.ativo !== false).length === 0 ? (
+                        {activeCycle.plan.actionPlan.filter(
+                          (item) =>
+                            item.status !== "Cancelado" && item.ativo !== false,
+                        ).length === 0 ? (
                           <div className="p-20 text-center text-slate-400 italic">
                             Nenhuma ação planejada (PLAN).
                           </div>
                         ) : (
                           activeCycle.plan.actionPlan
-                            .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+                            .filter(
+                              (item) =>
+                                item.status !== "Cancelado" &&
+                                item.ativo !== false,
+                            )
                             .map((item, filteredIdx) => {
                               const isExpanded = expandedActionId === item.id;
-                            
-                            return (
-                              <div key={item.id} className={cn(
-                                "border-b border-slate-100 last:border-0 transition-all",
-                                isExpanded ? "bg-white" : "hover:bg-slate-50/50"
-                              )}>
-                                {/* Accordion Header */}
-                                <button 
-                                  onClick={() => setExpandedActionId(isExpanded ? null : item.id)}
-                                  className="w-full p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left group"
+
+                              return (
+                                <div
+                                  key={item.id}
+                                  className={cn(
+                                    "border-b border-slate-100 last:border-0 transition-all",
+                                    isExpanded
+                                      ? "bg-white"
+                                      : "hover:bg-slate-50/50",
+                                  )}
                                 >
-                                  <div className="flex items-center gap-4 flex-1">
-                                    <span className={cn(
-                                      "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
-                                      isExpanded ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100"
-                                    )}>
-                                      {filteredIdx + 1}
-                                    </span>
-                                    <div className="min-w-0">
-                                      <h5 className="font-bold text-slate-800 text-lg truncate group-hover:text-indigo-600 transition-colors">
-                                        {item.what || 'Ação sem descrição'}
-                                      </h5>
-                                      <div className="flex items-center gap-3 mt-1">
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                          <Users size={12} className="text-slate-400" />
-                                          <span className="text-slate-600 font-black">{item.who}</span>
-                                        </p>
-                                        {item.when && (
-                                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                            <Clock size={12} className="text-slate-400" />
-                                            <span>{format(new Date(item.when), 'dd/MM/yyyy')}</span>
-                                          </p>
+                                  {/* Accordion Header */}
+                                  <button
+                                    onClick={() =>
+                                      setExpandedActionId(
+                                        isExpanded ? null : item.id,
+                                      )
+                                    }
+                                    className="w-full p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left group"
+                                  >
+                                    <div className="flex items-center gap-4 flex-1">
+                                      <span
+                                        className={cn(
+                                          "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
+                                          isExpanded
+                                            ? "bg-indigo-600 text-white"
+                                            : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100",
                                         )}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-6">
-                                    <div className="hidden sm:block">
-                                      <span className={cn(
-                                        "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
-                                        item.status === 'Concluído' ? "bg-emerald-100 text-emerald-700" :
-                                        item.status === 'Em andamento' ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"
-                                      )}>
-                                        {item.status}
+                                      >
+                                        {filteredIdx + 1}
                                       </span>
-                                    </div>
-                                    <div className={cn(
-                                      "w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 transition-transform duration-300 group-hover:border-indigo-200 group-hover:text-indigo-500",
-                                      isExpanded && "rotate-180 bg-indigo-50 border-indigo-200 text-indigo-600"
-                                    )}>
-                                      <ChevronDown size={18} />
-                                    </div>
-                                  </div>
-                                </button>
-
-                                {/* Accordion Content */}
-                                <AnimatePresence>
-                                  {isExpanded && (
-                                    <motion.div
-                                      initial={{ height: 0, opacity: 0 }}
-                                      animate={{ height: 'auto', opacity: 1 }}
-                                      exit={{ height: 0, opacity: 0 }}
-                                      transition={{ duration: 0.3, ease: 'easeInOut' }}
-                                      className=""
-                                    >
-                                      <div className="px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-1 duration-300">
-                                        {/* History Log */}
-                                        <div className="space-y-4 pt-4 border-t border-slate-50">
-                                          <div className="flex items-center justify-between">
-                                            <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                              <Clock size={14} />
-                                              Histórico de Atualizações
-                                            </h6>
-                                            <span className="text-[10px] font-black text-slate-300">
-                                              {(item.executionLogs || []).length} registros
+                                      <div className="min-w-0">
+                                        <h5 className="font-bold text-slate-800 text-lg truncate group-hover:text-indigo-600 transition-colors">
+                                          {item.what || "Ação sem descrição"}
+                                        </h5>
+                                        <div className="flex items-center gap-3 mt-1">
+                                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                            <Users
+                                              size={12}
+                                              className="text-slate-400"
+                                            />
+                                            <span className="text-slate-600 font-black">
+                                              {item.who}
                                             </span>
-                                          </div>
-                                          
-                                          <div className="space-y-3">
-                                            {(item.executionLogs || []).length === 0 ? (
-                                              <div className="py-8 bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-slate-400 gap-2">
-                                                <AlertCircle size={24} className="opacity-20" />
-                                                <p className="text-[10px] font-bold uppercase tracking-widest">Sem movimentações registradas</p>
-                                              </div>
-                                            ) : (
-                                              [...(item.executionLogs || [])].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()).map((log) => (
-                                                <div key={log.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4 hover:border-slate-200 transition-colors">
-                                                  <div className={cn(
-                                                    "w-2 h-2 rounded-full mt-2 shrink-0 shadow-sm",
-                                                    log.status === 'Concluído' ? "bg-emerald-500" :
-                                                    log.status === 'Em andamento' ? "bg-amber-500" : "bg-slate-300"
-                                                  )} />
-                                                  <div className="flex-1">
-                                                    <div className="flex items-center justify-between mb-1">
-                                                      <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">{log.status}</span>
-                                                      <span className="text-[10px] text-slate-400 font-medium">{format(new Date(log.timestamp), 'dd/MM/yyyy HH:mm')}</span>
-                                                    </div>
-                                                    <p className="text-xs text-slate-600 font-medium leading-relaxed">{log.observation}</p>
-                                                    <div className="mt-3 flex items-center gap-2">
-                                                      <span className="text-[10px] bg-slate-100 px-2.5 py-1 rounded-lg text-slate-500 font-bold flex items-center gap-1">
-                                                        <Users size={10} />
-                                                        {log.responsible}
-                                                      </span>
-                                                      {log.sector && (
-                                                        <span className="text-[10px] bg-indigo-50 px-2.5 py-1 rounded-lg text-indigo-600 font-bold">
-                                                          {log.sector}
-                                                        </span>
-                                                      )}
-                                                    </div>
-                                                  </div>
-                                                </div>
-                                              ))
-                                            )}
-                                          </div>
-
-                                          {/* Add Log Form */}
-                                          <div className="mt-8">
-                                            {item.status === 'Cancelado' ? (
-                                              <div className="bg-rose-50 p-8 rounded-[2.5rem] border border-rose-100 flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
-                                                <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center shadow-sm">
-                                                  <AlertCircle size={32} />
-                                                </div>
-                                                <div className="flex-1">
-                                                  <h6 className="text-sm font-black text-rose-900 uppercase tracking-widest mb-1">Ação Cancelada</h6>
-                                                  <p className="text-xs text-rose-600 font-medium leading-relaxed">Este plano de ação foi cancelado e não permite mais atualizações.</p>
-                                                </div>
-                                              </div>
-                                            ) : item.status !== 'Concluído' ? (
-                                              <div className="bg-slate-900 p-6 rounded-[2rem] text-white space-y-6 shadow-xl shadow-slate-200">
-                                                <div className="flex items-center gap-3">
-                                                  <div className="w-8 h-8 rounded-lg bg-indigo-500 flex items-center justify-center">
-                                                    <Plus size={18} />
-                                                  </div>
-                                                  <h6 className="text-[10px] font-black uppercase tracking-widest">Nova Atualização</h6>
-                                                </div>
-
-                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 px-1">
-                                                  <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Novo Status</label>
-                                                    <select 
-                                                      id={`status-${item.id}`}
-                                                      className="w-full bg-slate-800 border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
-                                                    >
-                                                      <option value="Pendente" className="bg-slate-900">Pendente</option>
-                                                      <option value="Em andamento" className="bg-slate-900">Em andamento</option>
-                                                      <option value="Concluído" className="bg-slate-900">Concluído</option>
-                                                    </select>
-                                                  </div>
-                                                  <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Setor</label>
-                                                    <input 
-                                                      id={`sector-${item.id}`}
-                                                      type="text"
-                                                      placeholder="Setor do responsável"
-                                                      className="w-full bg-slate-800 border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
-                                                    />
-                                                  </div>
-                                                  <div className="space-y-2">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Observação</label>
-                                                    <input 
-                                                      id={`obs-${item.id}`}
-                                                      type="text"
-                                                      placeholder="O que foi feito nesta etapa?"
-                                                      className="w-full bg-slate-800 border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
-                                                    />
-                                                  </div>
-                                                </div>
-                                                <div className="flex justify-end pr-1">
-                                                  <button 
-                                                    onClick={() => {
-                                                      const statusSelect = document.getElementById(`status-${item.id}`) as HTMLSelectElement;
-                                                      const sectorInput = document.getElementById(`sector-${item.id}`) as HTMLInputElement;
-                                                      const obsInput = document.getElementById(`obs-${item.id}`) as HTMLInputElement;
-                                                      
-                                                      if (!obsInput.value) return;
-
-                                                      if (statusSelect.value === 'Concluído') {
-                                                        const updates: any = { 
-                                                          executionLogs: [...(item.executionLogs || []), {
-                                                            id: uuidv4(),
-                                                            timestamp: new Date().toISOString(),
-                                                            status: 'Concluído' as any,
-                                                            responsible: item.who,
-                                                            sector: sectorInput.value,
-                                                            observation: obsInput.value,
-                                                            type: 'completion'
-                                                          }],
-                                                          status: 'Concluído' as any,
-                                                          endDate: new Date().toISOString()
-                                                        };
-
-                                                        if (!item.startDate) {
-                                                          updates.startDate = new Date().toISOString();
-                                                        }
-                                                        
-                                                        setConfirmingLog({ id: item.id, updates, obsInputId: `obs-${item.id}` });
-                                                        return;
-                                                      }
-
-                                                      const newLog = {
-                                                        id: uuidv4(),
-                                                        timestamp: new Date().toISOString(),
-                                                        status: statusSelect.value as any,
-                                                        responsible: item.who,
-                                                        sector: sectorInput.value,
-                                                        observation: obsInput.value,
-                                                        type: statusSelect.value === 'Concluído' ? 'completion' : 'update'
-                                                      };
-
-                                                      const newLogs = [...(item.executionLogs || []), newLog];
-                                                      const updates: any = { 
-                                                        executionLogs: newLogs,
-                                                        status: statusSelect.value as any
-                                                      };
-
-                                                      if (statusSelect.value === 'Em andamento' && !item.startDate) {
-                                                        updates.startDate = new Date().toISOString();
-                                                      }
-
-                                                      updateActionPlan(item.id, updates);
-                                                      obsInput.value = '';
-                                                    }}
-                                                    className="bg-indigo-600 text-white px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-500/20"
-                                                  >
-                                                    Registrar Atualização
-                                                  </button>
-                                                </div>
-                                              </div>
-                                            ) : (
-                                              <div className="bg-emerald-50 p-8 rounded-[2.5rem] border border-emerald-100 flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
-                                                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center shadow-sm">
-                                                  <CheckCircle2 size={32} />
-                                                </div>
-                                                <div className="flex-1">
-                                                  <h6 className="text-sm font-black text-emerald-900 uppercase tracking-widest mb-1">Ação Concluída com Sucesso!</h6>
-                                                  <p className="text-xs text-emerald-600 font-medium">Todos os registros para este plano de ação foram finalizados. Verifique agora os resultados na etapa <strong>CHECK</strong>.</p>
-                                                </div>
-                                                <button 
-                                                  onClick={() => handlePhaseChange('CHECK')}
-                                                  className="bg-emerald-600 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2 shrink-0"
-                                                >
-                                                  Verificar Resultados <ChevronRight size={14} />
-                                                </button>
-                                              </div>
-                                            )}
-                                          </div>
+                                          </p>
+                                          {item.when && (
+                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                              <Clock
+                                                size={12}
+                                                className="text-slate-400"
+                                              />
+                                              <span>
+                                                {format(
+                                                  new Date(item.when),
+                                                  "dd/MM/yyyy",
+                                                )}
+                                              </span>
+                                            </p>
+                                          )}
                                         </div>
                                       </div>
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
-                              </div>
-                            );
-                          })
+                                    </div>
+                                    <div className="flex items-center gap-6">
+                                      <div className="hidden sm:block">
+                                        <span
+                                          className={cn(
+                                            "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
+                                            item.status === "Concluído"
+                                              ? "bg-emerald-100 text-emerald-700"
+                                              : item.status === "Em andamento"
+                                                ? "bg-amber-100 text-amber-700"
+                                                : "bg-slate-100 text-slate-600",
+                                          )}
+                                        >
+                                          {item.status}
+                                        </span>
+                                      </div>
+                                      <div
+                                        className={cn(
+                                          "w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 transition-transform duration-300 group-hover:border-indigo-200 group-hover:text-indigo-500",
+                                          isExpanded &&
+                                            "rotate-180 bg-indigo-50 border-indigo-200 text-indigo-600",
+                                        )}
+                                      >
+                                        <ChevronDown size={18} />
+                                      </div>
+                                    </div>
+                                  </button>
+
+                                  {/* Accordion Content */}
+                                  <AnimatePresence>
+                                    {isExpanded && (
+                                      <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: "auto", opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        transition={{
+                                          duration: 0.3,
+                                          ease: "easeInOut",
+                                        }}
+                                        className=""
+                                      >
+                                        <div className="px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-1 duration-300">
+                                          {/* History Log */}
+                                          <div className="space-y-4 pt-4 border-t border-slate-50">
+                                            <div className="flex items-center justify-between">
+                                              <h6 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                                <Clock size={14} />
+                                                Histórico de Atualizações
+                                              </h6>
+                                              <span className="text-[10px] font-black text-slate-300">
+                                                {
+                                                  (item.executionLogs || [])
+                                                    .length
+                                                }{" "}
+                                                registros
+                                              </span>
+                                            </div>
+
+                                            <div className="space-y-3">
+                                              {(item.executionLogs || [])
+                                                .length === 0 ? (
+                                                <div className="py-8 bg-slate-50/50 rounded-2xl border-2 border-dashed border-slate-100 flex flex-col items-center justify-center text-slate-400 gap-2">
+                                                  <AlertCircle
+                                                    size={24}
+                                                    className="opacity-20"
+                                                  />
+                                                  <p className="text-[10px] font-bold uppercase tracking-widest">
+                                                    Sem movimentações
+                                                    registradas
+                                                  </p>
+                                                </div>
+                                              ) : (
+                                                [...(item.executionLogs || [])]
+                                                  .sort(
+                                                    (a, b) =>
+                                                      new Date(
+                                                        a.timestamp,
+                                                      ).getTime() -
+                                                      new Date(
+                                                        b.timestamp,
+                                                      ).getTime(),
+                                                  )
+                                                  .map((log) => (
+                                                    <div
+                                                      key={log.id}
+                                                      className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4 hover:border-slate-200 transition-colors"
+                                                    >
+                                                      <div
+                                                        className={cn(
+                                                          "w-2 h-2 rounded-full mt-2 shrink-0 shadow-sm",
+                                                          log.status ===
+                                                            "Concluído"
+                                                            ? "bg-emerald-500"
+                                                            : log.status ===
+                                                                "Em andamento"
+                                                              ? "bg-amber-500"
+                                                              : "bg-slate-300",
+                                                        )}
+                                                      />
+                                                      <div className="flex-1">
+                                                        <div className="flex items-center justify-between mb-1">
+                                                          <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">
+                                                            {log.status}
+                                                          </span>
+                                                          <span className="text-[10px] text-slate-400 font-medium">
+                                                            {format(
+                                                              new Date(
+                                                                log.timestamp,
+                                                              ),
+                                                              "dd/MM/yyyy HH:mm",
+                                                            )}
+                                                          </span>
+                                                        </div>
+                                                        <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                                                          {log.observation}
+                                                        </p>
+                                                        <div className="mt-3 flex items-center gap-2">
+                                                          <span className="text-[10px] bg-slate-100 px-2.5 py-1 rounded-lg text-slate-500 font-bold flex items-center gap-1">
+                                                            <Users size={10} />
+                                                            {log.responsible}
+                                                          </span>
+                                                          {log.sector && (
+                                                            <span className="text-[10px] bg-indigo-50 px-2.5 py-1 rounded-lg text-indigo-600 font-bold">
+                                                              {log.sector}
+                                                            </span>
+                                                          )}
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  ))
+                                              )}
+                                            </div>
+
+                                            {/* Add Log Form */}
+                                            <div className="mt-8">
+                                              {item.status === "Cancelado" ? (
+                                                <div className="bg-rose-50 p-8 rounded-[2.5rem] border border-rose-100 flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
+                                                  <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center shadow-sm">
+                                                    <AlertCircle size={32} />
+                                                  </div>
+                                                  <div className="flex-1">
+                                                    <h6 className="text-sm font-black text-rose-900 uppercase tracking-widest mb-1">
+                                                      Ação Cancelada
+                                                    </h6>
+                                                    <p className="text-xs text-rose-600 font-medium leading-relaxed">
+                                                      Este plano de ação foi
+                                                      cancelado e não permite
+                                                      mais atualizações.
+                                                    </p>
+                                                  </div>
+                                                </div>
+                                              ) : item.status !==
+                                                "Concluído" ? (
+                                                <div className="bg-slate-900 p-6 rounded-[2rem] text-white space-y-6 shadow-xl shadow-slate-200">
+                                                  <div className="flex items-center gap-3">
+                                                    <div className="w-8 h-8 rounded-lg bg-indigo-500 flex items-center justify-center">
+                                                      <Plus size={18} />
+                                                    </div>
+                                                    <h6 className="text-[10px] font-black uppercase tracking-widest">
+                                                      Nova Atualização
+                                                    </h6>
+                                                  </div>
+
+                                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 px-1">
+                                                    <div className="space-y-2">
+                                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                        Novo Status
+                                                      </label>
+                                                      <select
+                                                        id={`status-${item.id}`}
+                                                        className="w-full bg-slate-800 border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                                                      >
+                                                        <option
+                                                          value="Pendente"
+                                                          className="bg-slate-900"
+                                                        >
+                                                          Pendente
+                                                        </option>
+                                                        <option
+                                                          value="Em andamento"
+                                                          className="bg-slate-900"
+                                                        >
+                                                          Em andamento
+                                                        </option>
+                                                        <option
+                                                          value="Concluído"
+                                                          className="bg-slate-900"
+                                                        >
+                                                          Concluído
+                                                        </option>
+                                                      </select>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                        Setor
+                                                      </label>
+                                                      <input
+                                                        id={`sector-${item.id}`}
+                                                        type="text"
+                                                        placeholder="Setor do responsável"
+                                                        className="w-full bg-slate-800 border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
+                                                      />
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                        Observação
+                                                      </label>
+                                                      <input
+                                                        id={`obs-${item.id}`}
+                                                        type="text"
+                                                        placeholder="O que foi feito nesta etapa?"
+                                                        className="w-full bg-slate-800 border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
+                                                      />
+                                                    </div>
+                                                  </div>
+                                                  <div className="flex justify-end pr-1">
+                                                    <button
+                                                      onClick={() => {
+                                                        const statusSelect =
+                                                          document.getElementById(
+                                                            `status-${item.id}`,
+                                                          ) as HTMLSelectElement;
+                                                        const sectorInput =
+                                                          document.getElementById(
+                                                            `sector-${item.id}`,
+                                                          ) as HTMLInputElement;
+                                                        const obsInput =
+                                                          document.getElementById(
+                                                            `obs-${item.id}`,
+                                                          ) as HTMLInputElement;
+
+                                                        if (!obsInput.value)
+                                                          return;
+
+                                                        if (
+                                                          statusSelect.value ===
+                                                          "Concluído"
+                                                        ) {
+                                                          const updates: any = {
+                                                            executionLogs: [
+                                                              ...(item.executionLogs ||
+                                                                []),
+                                                              {
+                                                                id: uuidv4(),
+                                                                timestamp:
+                                                                  new Date().toISOString(),
+                                                                status:
+                                                                  "Concluído" as any,
+                                                                responsible:
+                                                                  item.who,
+                                                                sector:
+                                                                  sectorInput.value,
+                                                                observation:
+                                                                  obsInput.value,
+                                                                type: "completion",
+                                                              },
+                                                            ],
+                                                            status:
+                                                              "Concluído" as any,
+                                                            endDate:
+                                                              new Date().toISOString(),
+                                                          };
+
+                                                          if (!item.startDate) {
+                                                            updates.startDate =
+                                                              new Date().toISOString();
+                                                          }
+
+                                                          setConfirmingLog({
+                                                            id: item.id,
+                                                            updates,
+                                                            obsInputId: `obs-${item.id}`,
+                                                          });
+                                                          return;
+                                                        }
+
+                                                        const newLog = {
+                                                          id: uuidv4(),
+                                                          timestamp:
+                                                            new Date().toISOString(),
+                                                          status:
+                                                            statusSelect.value as any,
+                                                          responsible: item.who,
+                                                          sector:
+                                                            sectorInput.value,
+                                                          observation:
+                                                            obsInput.value,
+                                                          type:
+                                                            statusSelect.value ===
+                                                            "Concluído"
+                                                              ? "completion"
+                                                              : "update",
+                                                        };
+
+                                                        const newLogs = [
+                                                          ...(item.executionLogs ||
+                                                            []),
+                                                          newLog,
+                                                        ];
+                                                        const updates: any = {
+                                                          executionLogs:
+                                                            newLogs,
+                                                          status:
+                                                            statusSelect.value as any,
+                                                        };
+
+                                                        if (
+                                                          statusSelect.value ===
+                                                            "Em andamento" &&
+                                                          !item.startDate
+                                                        ) {
+                                                          updates.startDate =
+                                                            new Date().toISOString();
+                                                        }
+
+                                                        updateActionPlan(
+                                                          item.id,
+                                                          updates,
+                                                        );
+                                                        obsInput.value = "";
+                                                      }}
+                                                      className="bg-indigo-600 text-white px-8 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 active:scale-95 transition-all shadow-lg shadow-indigo-500/20"
+                                                    >
+                                                      Registrar Atualização
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                              ) : (
+                                                <div className="bg-emerald-50 p-8 rounded-[2.5rem] border border-emerald-100 flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
+                                                  <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center shadow-sm">
+                                                    <CheckCircle2 size={32} />
+                                                  </div>
+                                                  <div className="flex-1">
+                                                    <h6 className="text-sm font-black text-emerald-900 uppercase tracking-widest mb-1">
+                                                      Ação Concluída com
+                                                      Sucesso!
+                                                    </h6>
+                                                    <p className="text-xs text-emerald-600 font-medium">
+                                                      Todos os registros para
+                                                      este plano de ação foram
+                                                      finalizados. Verifique
+                                                      agora os resultados na
+                                                      etapa{" "}
+                                                      <strong>CHECK</strong>.
+                                                    </p>
+                                                  </div>
+                                                  <button
+                                                    onClick={() =>
+                                                      handlePhaseChange("CHECK")
+                                                    }
+                                                    className="bg-emerald-600 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center gap-2 shrink-0"
+                                                  >
+                                                    Verificar Resultados{" "}
+                                                    <ChevronRight size={14} />
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                              );
+                            })
                         )}
                       </div>
                     </div>
                   </motion.div>
                 )}
 
-                {activePhase === 'CHECK' && (
-                  <motion.div 
-                    key="check" 
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }} 
+                {activePhase === "CHECK" && (
+                  <motion.div
+                    key="check"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     className="max-w-5xl mx-auto space-y-8"
                   >
                     <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
                       <div className="p-8 border-b border-slate-100 bg-slate-50/50">
-                        <h4 className="text-xl font-black text-slate-800 tracking-tight">Verificação de Resultados</h4>
-                        <p className="text-slate-500 text-sm mt-1">Acompanhamento e validação de cada ação.</p>
+                        <h4 className="text-xl font-black text-slate-800 tracking-tight">
+                          Verificação de Resultados
+                        </h4>
+                        <p className="text-slate-500 text-sm mt-1">
+                          Acompanhamento e validação de cada ação.
+                        </p>
                       </div>
                       <div className="divide-y divide-slate-100">
-                        {activeCycle.plan.actionPlan.filter(item => item.status !== 'Cancelado' && item.ativo !== false).length === 0 ? (
+                        {activeCycle.plan.actionPlan.filter(
+                          (item) =>
+                            item.status !== "Cancelado" && item.ativo !== false,
+                        ).length === 0 ? (
                           <div className="p-20 text-center text-slate-400 italic">
                             Nenhuma ação para verificação (CHECK).
                           </div>
                         ) : (
                           activeCycle.plan.actionPlan
-                            .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+                            .filter(
+                              (item) =>
+                                item.status !== "Cancelado" &&
+                                item.ativo !== false,
+                            )
                             .map((item, filteredIdx) => {
-                            const isExpanded = expandedActionId === item.id;
-                            const isDoDone = item.status === 'Concluído';
-                            
-                            return (
-                              <div key={item.id} className={cn(
-                                "border-b border-slate-100 last:border-0 transition-all",
-                                !isDoDone ? "bg-slate-50/50 opacity-75" : (isExpanded ? "bg-white" : "hover:bg-slate-50/50")
-                              )}>
-                                {/* Accordion Header */}
-                                <button 
-                                  onClick={() => item.status === 'Concluído' && setExpandedActionId(isExpanded ? null : item.id)}
+                              const isExpanded = expandedActionId === item.id;
+                              const isDoDone = item.status === "Concluído";
+
+                              return (
+                                <div
+                                  key={item.id}
                                   className={cn(
-                                    "w-full p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left group",
-                                    item.status !== 'Concluído' && "cursor-not-allowed"
+                                    "border-b border-slate-100 last:border-0 transition-all",
+                                    !isDoDone
+                                      ? "bg-slate-50/50 opacity-75"
+                                      : isExpanded
+                                        ? "bg-white"
+                                        : "hover:bg-slate-50/50",
                                   )}
                                 >
-                                  <div className="flex items-center gap-4 flex-1">
-                                    <div className="relative">
-                                      <span className={cn(
-                                        "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
-                                        isExpanded ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100",
-                                        item.status !== 'Concluído' && "bg-slate-200 text-slate-400"
-                                      )}>
-                                        {filteredIdx + 1}
-                                      </span>
-                                      {item.status !== 'Concluído' && (
-                                        <div className="absolute -top-1 -right-1 bg-amber-500 text-white p-0.5 rounded-full shadow-sm" title="Aguardando conclusão da etapa DO">
-                                          <Lock size={10} />
+                                  {/* Accordion Header */}
+                                  <button
+                                    onClick={() =>
+                                      item.status === "Concluído" &&
+                                      setExpandedActionId(
+                                        isExpanded ? null : item.id,
+                                      )
+                                    }
+                                    className={cn(
+                                      "w-full p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left group",
+                                      item.status !== "Concluído" &&
+                                        "cursor-not-allowed",
+                                    )}
+                                  >
+                                    <div className="flex items-center gap-4 flex-1">
+                                      <div className="relative">
+                                        <span
+                                          className={cn(
+                                            "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
+                                            isExpanded
+                                              ? "bg-indigo-600 text-white"
+                                              : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100",
+                                            item.status !== "Concluído" &&
+                                              "bg-slate-200 text-slate-400",
+                                          )}
+                                        >
+                                          {filteredIdx + 1}
+                                        </span>
+                                        {item.status !== "Concluído" && (
+                                          <div
+                                            className="absolute -top-1 -right-1 bg-amber-500 text-white p-0.5 rounded-full shadow-sm"
+                                            title="Aguardando conclusão da etapa DO"
+                                          >
+                                            <Lock size={10} />
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <h5
+                                            className={cn(
+                                              "font-bold text-lg truncate transition-colors",
+                                              item.status === "Concluído"
+                                                ? "text-slate-800 group-hover:text-indigo-600"
+                                                : "text-slate-400",
+                                            )}
+                                          >
+                                            {item.what || "Ação sem descrição"}
+                                          </h5>
+                                          {item.status !== "Concluído" && (
+                                            <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg uppercase tracking-widest whitespace-nowrap">
+                                              Aguardando DO
+                                            </span>
+                                          )}
                                         </div>
-                                      )}
+                                        <div className="flex items-center gap-3 mt-1">
+                                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                            <TrendingUp
+                                              size={12}
+                                              className="text-slate-400"
+                                            />
+                                            Modo:{" "}
+                                            <span
+                                              className={
+                                                isDoDone
+                                                  ? "text-slate-600 font-black"
+                                                  : "text-slate-400"
+                                              }
+                                            >
+                                              {item.monitoringMode || "Dias"}
+                                            </span>
+                                          </p>
+                                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                            <Target
+                                              size={12}
+                                              className="text-slate-400"
+                                            />
+                                            Período:{" "}
+                                            <span
+                                              className={
+                                                isDoDone
+                                                  ? "text-slate-600 font-black"
+                                                  : "text-slate-400"
+                                              }
+                                            >
+                                              {item.monitoringPeriod || 0}
+                                            </span>
+                                          </p>
+                                        </div>
+                                      </div>
                                     </div>
-                                    <div className="min-w-0">
-                                      <div className="flex items-center gap-2">
-                                        <h5 className={cn(
-                                          "font-bold text-lg truncate transition-colors",
-                                          item.status === 'Concluído' ? "text-slate-800 group-hover:text-indigo-600" : "text-slate-400"
-                                        )}>
-                                          {item.what || 'Ação sem descrição'}
-                                        </h5>
-                                        {item.status !== 'Concluído' && (
-                                          <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg uppercase tracking-widest whitespace-nowrap">
-                                            Aguardando DO
+
+                                    <div className="flex items-center gap-6">
+                                      <div className="hidden sm:block">
+                                        {isDoDone ? (
+                                          <span
+                                            className={cn(
+                                              "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
+                                              item.worked === "Sim"
+                                                ? "bg-emerald-100 text-emerald-700"
+                                                : item.worked === "Não"
+                                                  ? "bg-rose-100 text-rose-700"
+                                                  : "bg-amber-100 text-amber-700",
+                                            )}
+                                          >
+                                            Funcionou?{" "}
+                                            {item.worked || "Pendente"}
+                                          </span>
+                                        ) : (
+                                          <span className="text-[10px] font-black px-3 py-1 rounded-full bg-slate-100 text-slate-400 uppercase tracking-wider">
+                                            Bloqueado
                                           </span>
                                         )}
                                       </div>
-                                      <div className="flex items-center gap-3 mt-1">
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                          <TrendingUp size={12} className="text-slate-400" />
-                                          Modo: <span className={isDoDone ? "text-slate-600 font-black" : "text-slate-400"}>{item.monitoringMode || 'Dias'}</span>
-                                        </p>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                          <Target size={12} className="text-slate-400" />
-                                          Período: <span className={isDoDone ? "text-slate-600 font-black" : "text-slate-400"}>{item.monitoringPeriod || 0}</span>
-                                        </p>
+                                      <div
+                                        className={cn(
+                                          "w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 transition-transform duration-300 group-hover:border-indigo-200 group-hover:text-indigo-500",
+                                          isExpanded &&
+                                            "rotate-180 bg-indigo-50 border-indigo-200 text-indigo-600",
+                                        )}
+                                      >
+                                        <ChevronDown size={18} />
                                       </div>
                                     </div>
-                                  </div>
-                                  
-                                  <div className="flex items-center gap-6">
-                                    <div className="hidden sm:block">
-                                      {isDoDone ? (
-                                        <span className={cn(
-                                          "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
-                                          item.worked === 'Sim' ? "bg-emerald-100 text-emerald-700" :
-                                          item.worked === 'Não' ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
-                                        )}>
-                                          Funcionou? {item.worked || 'Pendente'}
-                                        </span>
-                                      ) : (
-                                        <span className="text-[10px] font-black px-3 py-1 rounded-full bg-slate-100 text-slate-400 uppercase tracking-wider">
-                                          Bloqueado
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className={cn(
-                                      "w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 transition-transform duration-300 group-hover:border-indigo-200 group-hover:text-indigo-500",
-                                      isExpanded && "rotate-180 bg-indigo-50 border-indigo-200 text-indigo-600"
-                                    )}>
-                                      <ChevronDown size={18} />
-                                    </div>
-                                  </div>
-                                </button>
+                                  </button>
 
-                                {/* Accordion Content */}
-                                <AnimatePresence>
-                                  {isExpanded && (
-                                    <motion.div
-                                      initial={{ height: 0, opacity: 0 }}
-                                      animate={{ height: 'auto', opacity: 1 }}
-                                      exit={{ height: 0, opacity: 0 }}
-                                      transition={{ duration: 0.3, ease: 'easeInOut' }}
-                                      className=""
-                                    >
-                                      <div className="px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-1 duration-300 pt-4 border-t border-slate-50">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 px-1">
-                                          {/* Linha 1 */}
-                                          <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Modo de Acompanhamento</label>
-                                            <select 
-                                              value={item.monitoringMode || 'Dias'}
-                                              onChange={(e) => updateActionPlan(item.id, { monitoringMode: e.target.value as any })}
-                                              className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                                            >
-                                              <option value="Dias">Dias</option>
-                                              <option value="Semanas">Semanas</option>
-                                              <option value="Meses">Meses</option>
-                                            </select>
-                                          </div>
-                                          <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Período</label>
-                                            <input 
-                                              type="number"
-                                              value={item.monitoringPeriod || 0}
-                                              onFocus={(e) => e.target.select()}
-                                              onChange={(e) => updateActionPlan(item.id, { monitoringPeriod: parseInt(e.target.value) || 0 })}
-                                              className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                                            />
-                                          </div>
-
-                                          {/* Linha 2 */}
-                                          <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Como está sendo feito o acompanhamento?</label>
-                                            <input 
-                                              type="text"
-                                              value={item.monitoringTool || ''}
-                                              onChange={(e) => updateActionPlan(item.id, { monitoringTool: e.target.value })}
-                                              placeholder="Ex: Power BI, Excel, E-mail, WhatsApp..."
-                                              className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                                            />
-                                          </div>
-                                          <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Link evidência do acompanhamento</label>
-                                            <div className="space-y-2">
-                                              <input 
-                                                type="text"
-                                                value={item.evidence || ''}
-                                                onChange={(e) => updateActionPlan(item.id, { evidence: e.target.value })}
-                                                placeholder="Link das evidências..."
+                                  {/* Accordion Content */}
+                                  <AnimatePresence>
+                                    {isExpanded && (
+                                      <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: "auto", opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        transition={{
+                                          duration: 0.3,
+                                          ease: "easeInOut",
+                                        }}
+                                        className=""
+                                      >
+                                        <div className="px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-1 duration-300 pt-4 border-t border-slate-50">
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 px-1">
+                                            {/* Linha 1 */}
+                                            <div className="space-y-1">
+                                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                                                Modo de Acompanhamento
+                                              </label>
+                                              <select
+                                                value={
+                                                  item.monitoringMode || "Dias"
+                                                }
+                                                onChange={(e) =>
+                                                  updateActionPlan(item.id, {
+                                                    monitoringMode: e.target
+                                                      .value as any,
+                                                  })
+                                                }
+                                                className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                              >
+                                                <option value="Dias">
+                                                  Dias
+                                                </option>
+                                                <option value="Semanas">
+                                                  Semanas
+                                                </option>
+                                                <option value="Meses">
+                                                  Meses
+                                                </option>
+                                              </select>
+                                            </div>
+                                            <div className="space-y-1">
+                                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                                                Período
+                                              </label>
+                                              <input
+                                                type="number"
+                                                value={
+                                                  item.monitoringPeriod || 0
+                                                }
+                                                onFocus={(e) =>
+                                                  e.target.select()
+                                                }
+                                                onChange={(e) =>
+                                                  updateActionPlan(item.id, {
+                                                    monitoringPeriod:
+                                                      parseInt(
+                                                        e.target.value,
+                                                      ) || 0,
+                                                  })
+                                                }
                                                 className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                               />
-                                              {item.evidence && isValidUrl(item.evidence) && (
-                                                <a 
-                                                  href={formatUrl(item.evidence)} 
-                                                  target="_blank" 
-                                                  rel="noopener noreferrer"
-                                                  className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors ml-1"
-                                                >
-                                                  <ExternalLink size={14} />
-                                                  Abrir link
-                                                </a>
-                                              )}
                                             </div>
-                                          </div>
 
-                                          {/* Linha 3 */}
-                                          <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Funcionou?</label>
-                                            <select 
-                                              value={item.worked || 'Sim'}
-                                              onChange={(e) => updateActionPlan(item.id, { worked: e.target.value as any })}
-                                              className={cn(
-                                                "w-full px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all",
-                                                item.worked === 'Sim' ? "bg-emerald-100 text-emerald-700" :
-                                                item.worked === 'Não' ? "bg-rose-100 text-rose-700" : "bg-amber-100 text-amber-700"
-                                              )}
-                                            >
-                                              <option value="Sim">Sim</option>
-                                              <option value="Não">Não</option>
-                                              <option value="Parcial">Parcial</option>
-                                            </select>
-                                          </div>
-                                          <div className="md:col-span-2 space-y-1">
-                                            <GainsEditor 
-                                              title="Ganho real obtido"
-                                              variant="check"
-                                              gains={item.realGains || { tangible: [], intangible: [] }}
-                                              onChange={(gains) => updateActionPlan(item.id, { realGains: gains })}
-                                              globalConfig={globalConfig}
-                                              inheritedGains={activeCycle.plan.impact.expectedGains}
-                                              tangibleTypes={globalConfig?.structuredTangibleGains?.filter(g => g.active).map(g => g.name) || globalConfig?.tangibleGainTypes}
-                                              intangibleTypes={globalConfig?.structuredIntangibleGains?.filter(g => g.active).map(g => g.name) || globalConfig?.intangibleGainTypes}
-                                            />
-                                          </div>
-
-                                          {/* Campo Condicional: Motivo */}
-                                          {(item.worked === 'Não' || item.worked === 'Parcial') && (
-                                            <div className="md:col-span-2 space-y-1 block animate-in slide-in-from-top-2 duration-300">
-                                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block flex items-center gap-2">
-                                                Motivo <span className="text-rose-500 font-bold">(Obrigatório)</span>
+                                            {/* Linha 2 */}
+                                            <div className="space-y-1">
+                                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                                                Como está sendo feito o
+                                                acompanhamento?
                                               </label>
-                                              <textarea 
-                                                value={item.failureReason || ''}
-                                                onChange={(e) => updateActionPlan(item.id, { failureReason: e.target.value })}
-                                                placeholder={item.worked === 'Não' ? "Descreva detalhadamente por que a ação não funcionou..." : "Descreva por que a ação funcionou apenas parcialmente..."}
-                                                className={cn(
-                                                  "w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all min-h-[100px] resize-none",
-                                                  showValidationErrors && !item.failureReason && "ring-2 ring-rose-500 bg-rose-50"
-                                                )}
+                                              <input
+                                                type="text"
+                                                value={
+                                                  item.monitoringTool || ""
+                                                }
+                                                onChange={(e) =>
+                                                  updateActionPlan(item.id, {
+                                                    monitoringTool:
+                                                      e.target.value,
+                                                  })
+                                                }
+                                                placeholder="Ex: Power BI, Excel, E-mail, WhatsApp..."
+                                                className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
                                               />
                                             </div>
-                                          )}
-                                        </div>
-
-                                        {item.worked === 'Sim' && (
-                                          <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 flex items-center gap-4 animate-in zoom-in-95 duration-300">
-                                            <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center shrink-0">
-                                              <CheckCircle2 size={24} />
-                                            </div>
-                                            <div>
-                                              <p className="text-xs font-black text-emerald-800 uppercase tracking-widest">Resultado Positivo!</p>
-                                              <p className="text-[10px] text-emerald-600 font-medium leading-tight">A ação foi eficaz. Siga para a etapa <strong>ACT</strong> para padronizar este novo processo.</p>
-                                            </div>
-                                          </div>
-                                        )}
-
-                                        {/* Botão Avançar para ACT Individual */}
-                                        <div className="flex justify-end pt-4 border-t border-slate-100">
-                                          {(() => {
-                                            const isItemValid = !!item.monitoringTool?.trim() && 
-                                                              !!item.evidence?.trim() && 
-                                                              !!item.worked && 
-                                                              (item.worked === 'Sim' || !!item.failureReason?.trim());
-                                            return (
-                                              <button
-                                                onClick={(e) => {
-                                                  e.stopPropagation();
-                                                  if (!isItemValid) {
-                                                    setSaveFeedback("Preencha todos os campos obrigatórios (Verificação, Evidência e Resultado) antes de avançar.");
-                                                    setShowValidationErrors(true);
-                                                    return;
+                                            <div className="space-y-1">
+                                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                                                Link evidência do acompanhamento
+                                              </label>
+                                              <div className="space-y-2">
+                                                <input
+                                                  type="text"
+                                                  value={item.evidence || ""}
+                                                  onChange={(e) =>
+                                                    updateActionPlan(item.id, {
+                                                      evidence: e.target.value,
+                                                    })
                                                   }
-                                                  
-                                                  const newActionPlan = [...activeCycle.plan.actionPlan];
-                                                  const itemIdx = newActionPlan.findIndex(i => i.id === item.id);
-                                                  if (itemIdx !== -1) {
-                                                    newActionPlan[itemIdx] = { ...newActionPlan[itemIdx], currentPhase: 'ACT' };
-                                                    updateCycle({ 
-                                                      plan: { ...activeCycle.plan, actionPlan: newActionPlan },
-                                                      etapaAtual: 'ACT'
-                                                    });
-                                                    setActivePhase('ACT');
-                                                  }
-                                                }}
+                                                  placeholder="Link das evidências..."
+                                                  className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                                />
+                                                {item.evidence &&
+                                                  isValidUrl(item.evidence) && (
+                                                    <a
+                                                      href={formatUrl(
+                                                        item.evidence,
+                                                      )}
+                                                      target="_blank"
+                                                      rel="noopener noreferrer"
+                                                      className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors ml-1"
+                                                    >
+                                                      <ExternalLink size={14} />
+                                                      Abrir link
+                                                    </a>
+                                                  )}
+                                              </div>
+                                            </div>
+
+                                            {/* Linha 3 */}
+                                            <div className="space-y-1">
+                                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                                                Funcionou?
+                                              </label>
+                                              <select
+                                                value={item.worked || "Sim"}
+                                                onChange={(e) =>
+                                                  updateActionPlan(item.id, {
+                                                    worked: e.target
+                                                      .value as any,
+                                                  })
+                                                }
                                                 className={cn(
-                                                  "flex items-center gap-2 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg",
-                                                  isItemValid 
-                                                    ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100" 
-                                                    : "bg-slate-200 text-slate-500 hover:bg-slate-300"
+                                                  "w-full px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all",
+                                                  item.worked === "Sim"
+                                                    ? "bg-emerald-100 text-emerald-700"
+                                                    : item.worked === "Não"
+                                                      ? "bg-rose-100 text-rose-700"
+                                                      : "bg-amber-100 text-amber-700",
                                                 )}
                                               >
-                                                Avançar para ACT
-                                                <ArrowRight size={14} />
-                                              </button>
-                                            );
-                                          })()}
+                                                <option value="Sim">Sim</option>
+                                                <option value="Não">Não</option>
+                                                <option value="Parcial">
+                                                  Parcial
+                                                </option>
+                                              </select>
+                                            </div>
+                                            <div className="md:col-span-2 space-y-1">
+                                              <GainsEditor
+                                                title="Ganho real obtido"
+                                                variant="check"
+                                                gains={
+                                                  item.realGains || {
+                                                    tangible: [],
+                                                    intangible: [],
+                                                  }
+                                                }
+                                                onChange={(gains) =>
+                                                  updateActionPlan(item.id, {
+                                                    realGains: gains,
+                                                  })
+                                                }
+                                                globalConfig={globalConfig}
+                                                inheritedGains={
+                                                  activeCycle.plan.impact
+                                                    .expectedGains
+                                                }
+                                                tangibleTypes={
+                                                  globalConfig?.structuredTangibleGains
+                                                    ?.filter((g) => g.active)
+                                                    .map((g) => g.name) ||
+                                                  globalConfig?.tangibleGainTypes
+                                                }
+                                                intangibleTypes={
+                                                  globalConfig?.structuredIntangibleGains
+                                                    ?.filter((g) => g.active)
+                                                    .map((g) => g.name) ||
+                                                  globalConfig?.intangibleGainTypes
+                                                }
+                                              />
+                                            </div>
+
+                                            {/* Campo Condicional: Motivo */}
+                                            {(item.worked === "Não" ||
+                                              item.worked === "Parcial") && (
+                                              <div className="md:col-span-2 space-y-1 block animate-in slide-in-from-top-2 duration-300">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block flex items-center gap-2">
+                                                  Motivo{" "}
+                                                  <span className="text-rose-500 font-bold">
+                                                    (Obrigatório)
+                                                  </span>
+                                                </label>
+                                                <textarea
+                                                  value={
+                                                    item.failureReason || ""
+                                                  }
+                                                  onChange={(e) =>
+                                                    updateActionPlan(item.id, {
+                                                      failureReason:
+                                                        e.target.value,
+                                                    })
+                                                  }
+                                                  placeholder={
+                                                    item.worked === "Não"
+                                                      ? "Descreva detalhadamente por que a ação não funcionou..."
+                                                      : "Descreva por que a ação funcionou apenas parcialmente..."
+                                                  }
+                                                  className={cn(
+                                                    "w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all min-h-[100px] resize-none",
+                                                    showValidationErrors &&
+                                                      !item.failureReason &&
+                                                      "ring-2 ring-rose-500 bg-rose-50",
+                                                  )}
+                                                />
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {item.worked === "Sim" && (
+                                            <div className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 flex items-center gap-4 animate-in zoom-in-95 duration-300">
+                                              <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center shrink-0">
+                                                <CheckCircle2 size={24} />
+                                              </div>
+                                              <div>
+                                                <p className="text-xs font-black text-emerald-800 uppercase tracking-widest">
+                                                  Resultado Positivo!
+                                                </p>
+                                                <p className="text-[10px] text-emerald-600 font-medium leading-tight">
+                                                  A ação foi eficaz. Siga para a
+                                                  etapa <strong>ACT</strong>{" "}
+                                                  para padronizar este novo
+                                                  processo.
+                                                </p>
+                                              </div>
+                                            </div>
+                                          )}
+
+                                          {/* Botão Avançar para ACT Individual */}
+                                          <div className="flex justify-end pt-4 border-t border-slate-100">
+                                            {(() => {
+                                              const isItemValid =
+                                                !!item.monitoringTool?.trim() &&
+                                                !!item.evidence?.trim() &&
+                                                !!item.worked &&
+                                                (item.worked === "Sim" ||
+                                                  !!item.failureReason?.trim());
+                                              return (
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (!isItemValid) {
+                                                      setSaveFeedback(
+                                                        "Preencha todos os campos obrigatórios (Verificação, Evidência e Resultado) antes de avançar.",
+                                                      );
+                                                      setShowValidationErrors(
+                                                        true,
+                                                      );
+                                                      return;
+                                                    }
+
+                                                    const newActionPlan = [
+                                                      ...activeCycle.plan
+                                                        .actionPlan,
+                                                    ];
+                                                    const itemIdx =
+                                                      newActionPlan.findIndex(
+                                                        (i) => i.id === item.id,
+                                                      );
+                                                    if (itemIdx !== -1) {
+                                                      newActionPlan[itemIdx] = {
+                                                        ...newActionPlan[
+                                                          itemIdx
+                                                        ],
+                                                        currentPhase: "ACT",
+                                                      };
+                                                      updateCycle({
+                                                        plan: {
+                                                          ...activeCycle.plan,
+                                                          actionPlan:
+                                                            newActionPlan,
+                                                        },
+                                                        etapaAtual: "ACT",
+                                                      });
+                                                      setActivePhase("ACT");
+                                                    }
+                                                  }}
+                                                  className={cn(
+                                                    "flex items-center gap-2 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg",
+                                                    isItemValid
+                                                      ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100"
+                                                      : "bg-slate-200 text-slate-500 hover:bg-slate-300",
+                                                  )}
+                                                >
+                                                  Avançar para ACT
+                                                  <ArrowRight size={14} />
+                                                </button>
+                                              );
+                                            })()}
+                                          </div>
                                         </div>
-                                      </div>
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
-                              </div>
-                            );
-                          })
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                              );
+                            })
                         )}
                       </div>
                     </div>
                   </motion.div>
                 )}
 
-                {activePhase === 'ACT' && (
-                  <motion.div 
-                    key="act" 
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }} 
+                {activePhase === "ACT" && (
+                  <motion.div
+                    key="act"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     className="max-w-5xl mx-auto space-y-8"
                   >
                     <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
                       <div className="p-8 border-b border-slate-100 bg-slate-50/50">
-                        <h4 className="text-xl font-black text-slate-800 tracking-tight">Ação de Melhoria Contínua</h4>
-                        <p className="text-slate-500 text-sm mt-1">Padronização ou novos ajustes para cada ação.</p>
+                        <h4 className="text-xl font-black text-slate-800 tracking-tight">
+                          Ação de Melhoria Contínua
+                        </h4>
+                        <p className="text-slate-500 text-sm mt-1">
+                          Padronização ou novos ajustes para cada ação.
+                        </p>
                       </div>
                       <div className="divide-y divide-slate-100">
-                        {activeCycle.plan.actionPlan.filter(item => item.status !== 'Cancelado' && item.ativo !== false).length === 0 ? (
+                        {activeCycle.plan.actionPlan.filter(
+                          (item) =>
+                            item.status !== "Cancelado" && item.ativo !== false,
+                        ).length === 0 ? (
                           <div className="p-20 text-center text-slate-400 italic">
                             Nenhuma ação para agir (ACT).
                           </div>
                         ) : (
                           activeCycle.plan.actionPlan
-                            .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+                            .filter(
+                              (item) =>
+                                item.status !== "Cancelado" &&
+                                item.ativo !== false,
+                            )
                             .map((item, filteredIdx) => {
-                            const isExpanded = expandedActionId === item.id;
-                            const isCheckDone = !!item.monitoringTool?.trim() && !!item.evidence?.trim() && !!item.worked && (item.worked === 'Sim' || !!item.failureReason?.trim());
-                            
-                            // Debug log for tracking blocking logic
-                            console.log(`ACT Action ${item.id}: isCheckDone=${isCheckDone}`, item);
-                            
-                            return (
-                              <div key={item.id} className={cn(
-                                "border-b border-slate-100 last:border-0 transition-all",
-                                !isCheckDone ? "bg-slate-50/50 opacity-75" : (isExpanded ? "bg-white" : "hover:bg-slate-50/50")
-                              )}>
-                                {/* Accordion Header */}
-                                <button 
-                                  onClick={() => isCheckDone && setExpandedActionId(isExpanded ? null : item.id)}
+                              const isExpanded = expandedActionId === item.id;
+                              const isCheckDone =
+                                !!item.monitoringTool?.trim() &&
+                                !!item.evidence?.trim() &&
+                                !!item.worked &&
+                                (item.worked === "Sim" ||
+                                  !!item.failureReason?.trim());
+
+                              // Debug log for tracking blocking logic
+                              console.log(
+                                `ACT Action ${item.id}: isCheckDone=${isCheckDone}`,
+                                item,
+                              );
+
+                              return (
+                                <div
+                                  key={item.id}
                                   className={cn(
-                                    "w-full p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left group",
-                                    !isCheckDone && "cursor-not-allowed"
+                                    "border-b border-slate-100 last:border-0 transition-all",
+                                    !isCheckDone
+                                      ? "bg-slate-50/50 opacity-75"
+                                      : isExpanded
+                                        ? "bg-white"
+                                        : "hover:bg-slate-50/50",
                                   )}
                                 >
-                                  <div className="flex items-center gap-4 flex-1">
-                                    <div className="relative">
-                                      <span className={cn(
-                                        "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
-                                        isExpanded ? "bg-indigo-600 text-white" : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100",
-                                        !isCheckDone && "bg-slate-200 text-slate-400"
-                                      )}>
-                                        {filteredIdx + 1}
-                                      </span>
-                                      {!isCheckDone && (
-                                        <div className="absolute -top-1 -right-1 bg-amber-500 text-white p-0.5 rounded-full shadow-sm" title="Aguardando conclusão da etapa CHECK">
-                                          <Lock size={10} />
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="min-w-0">
-                                      <div className="flex items-center gap-2">
-                                        <h5 className={cn(
-                                          "font-bold text-lg truncate transition-colors",
-                                          isCheckDone ? "text-theme-foreground group-hover:text-indigo-400" : "text-slate-400"
-                                        )}>
-                                          {item.what || 'Ação sem descrição'}
-                                        </h5>
+                                  {/* Accordion Header */}
+                                  <button
+                                    onClick={() =>
+                                      isCheckDone &&
+                                      setExpandedActionId(
+                                        isExpanded ? null : item.id,
+                                      )
+                                    }
+                                    className={cn(
+                                      "w-full p-8 flex flex-col md:flex-row md:items-center justify-between gap-4 text-left group",
+                                      !isCheckDone && "cursor-not-allowed",
+                                    )}
+                                  >
+                                    <div className="flex items-center gap-4 flex-1">
+                                      <div className="relative">
+                                        <span
+                                          className={cn(
+                                            "w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs transition-all shrink-0 shadow-sm",
+                                            isExpanded
+                                              ? "bg-indigo-600 text-white"
+                                              : "bg-indigo-50 text-indigo-600 group-hover:bg-indigo-100",
+                                            !isCheckDone &&
+                                              "bg-slate-200 text-slate-400",
+                                          )}
+                                        >
+                                          {filteredIdx + 1}
+                                        </span>
                                         {!isCheckDone && (
-                                          <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg uppercase tracking-widest whitespace-nowrap">
-                                            Aguardando CHECK
+                                          <div
+                                            className="absolute -top-1 -right-1 bg-amber-500 text-white p-0.5 rounded-full shadow-sm"
+                                            title="Aguardando conclusão da etapa CHECK"
+                                          >
+                                            <Lock size={10} />
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <h5
+                                            className={cn(
+                                              "font-bold text-lg truncate transition-colors",
+                                              isCheckDone
+                                                ? "text-theme-foreground group-hover:text-indigo-400"
+                                                : "text-slate-400",
+                                            )}
+                                          >
+                                            {item.what || "Ação sem descrição"}
+                                          </h5>
+                                          {!isCheckDone && (
+                                            <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2 py-0.5 rounded-lg uppercase tracking-widest whitespace-nowrap">
+                                              Aguardando CHECK
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-3 mt-1">
+                                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                            <CheckCircle2
+                                              size={12}
+                                              className="text-slate-400"
+                                            />
+                                            Status Final:{" "}
+                                            <span
+                                              className={
+                                                isCheckDone
+                                                  ? "text-slate-600 font-black"
+                                                  : "text-slate-400"
+                                              }
+                                            >
+                                              {item.finalProblemStatus ||
+                                                "Pendente"}
+                                            </span>
+                                          </p>
+                                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                            <Target
+                                              size={12}
+                                              className="text-slate-400"
+                                            />
+                                            Ação Final:{" "}
+                                            <span
+                                              className={
+                                                isCheckDone
+                                                  ? "text-slate-600 font-black"
+                                                  : "text-slate-400"
+                                              }
+                                            >
+                                              {item.finalAction || "Pendente"}
+                                            </span>
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-6">
+                                      <div className="hidden sm:block">
+                                        {isCheckDone ? (
+                                          <span
+                                            className={cn(
+                                              "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
+                                              !!item.finalProblemStatus
+                                                ? "bg-emerald-100 text-emerald-700"
+                                                : "bg-amber-100 text-amber-700",
+                                            )}
+                                          >
+                                            ACT:{" "}
+                                            {item.finalProblemStatus
+                                              ? "Finalizado"
+                                              : "Em andamento"}
+                                          </span>
+                                        ) : (
+                                          <span className="text-[10px] font-black px-3 py-1 rounded-full bg-slate-100 text-slate-400 uppercase tracking-wider">
+                                            Bloqueado
                                           </span>
                                         )}
                                       </div>
-                                      <div className="flex items-center gap-3 mt-1">
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                          <CheckCircle2 size={12} className="text-slate-400" />
-                                          Status Final: <span className={isCheckDone ? "text-slate-600 font-black" : "text-slate-400"}>{item.finalProblemStatus || 'Pendente'}</span>
-                                        </p>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                          <Target size={12} className="text-slate-400" />
-                                          Ação Final: <span className={isCheckDone ? "text-slate-600 font-black" : "text-slate-400"}>{item.finalAction || 'Pendente'}</span>
-                                        </p>
+                                      <div
+                                        className={cn(
+                                          "w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 transition-transform duration-300 group-hover:border-indigo-200 group-hover:text-indigo-500",
+                                          isExpanded &&
+                                            "rotate-180 bg-indigo-50 border-indigo-200 text-indigo-600",
+                                        )}
+                                      >
+                                        <ChevronDown size={18} />
                                       </div>
                                     </div>
-                                  </div>
-                                  
-                                  <div className="flex items-center gap-6">
-                                    <div className="hidden sm:block">
-                                      {isCheckDone ? (
-                                        <span className={cn(
-                                          "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
-                                          !!item.finalProblemStatus ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-                                        )}>
-                                          ACT: {item.finalProblemStatus ? 'Finalizado' : 'Em andamento'}
-                                        </span>
-                                      ) : (
-                                        <span className="text-[10px] font-black px-3 py-1 rounded-full bg-slate-100 text-slate-400 uppercase tracking-wider">
-                                          Bloqueado
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className={cn(
-                                      "w-8 h-8 rounded-full border border-slate-200 flex items-center justify-center text-slate-400 transition-transform duration-300 group-hover:border-indigo-200 group-hover:text-indigo-500",
-                                      isExpanded && "rotate-180 bg-indigo-50 border-indigo-200 text-indigo-600"
-                                    )}>
-                                      <ChevronDown size={18} />
-                                    </div>
-                                  </div>
-                                </button>
+                                  </button>
 
-                                {/* Accordion Content */}
-                                <AnimatePresence>
-                                  {isExpanded && (
-                                    <motion.div
-                                      initial={{ height: 0, opacity: 0 }}
-                                      animate={{ height: 'auto', opacity: 1 }}
-                                      exit={{ height: 0, opacity: 0 }}
-                                      transition={{ duration: 0.3, ease: 'easeInOut' }}
-                                      className=""
-                                    >
-                                      <div className="px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-1 duration-300 pt-4 border-t border-slate-50">
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 px-1">
-                                          <div className="space-y-4">
-                                            <div className="space-y-1">
-                                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Status Final do Problema</label>
-                                              <select 
-                                                value={item.finalProblemStatus || 'Resolvido'}
-                                                onChange={(e) => updateActionPlan(item.id, { finalProblemStatus: e.target.value as any })}
-                                                disabled={!isCheckDone}
-                                                className={cn(
-                                                  "w-full bg-theme-background px-4 py-3 rounded-xl text-xs font-bold outline-none border border-theme-border focus:ring-2 focus:ring-indigo-500 transition-all text-theme-foreground",
-                                                  !isCheckDone && "opacity-50 cursor-not-allowed"
-                                                )}
-                                              >
-                                                <option value="Resolvido">Resolvido</option>
-                                                <option value="Não resolvido">Não resolvido</option>
-                                              </select>
+                                  {/* Accordion Content */}
+                                  <AnimatePresence>
+                                    {isExpanded && (
+                                      <motion.div
+                                        initial={{ height: 0, opacity: 0 }}
+                                        animate={{ height: "auto", opacity: 1 }}
+                                        exit={{ height: 0, opacity: 0 }}
+                                        transition={{
+                                          duration: 0.3,
+                                          ease: "easeInOut",
+                                        }}
+                                        className=""
+                                      >
+                                        <div className="px-8 pb-8 space-y-8 animate-in fade-in slide-in-from-top-1 duration-300 pt-4 border-t border-slate-50">
+                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 px-1">
+                                            <div className="space-y-4">
+                                              <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                                                  Status Final do Problema
+                                                </label>
+                                                <select
+                                                  value={
+                                                    item.finalProblemStatus ||
+                                                    "Resolvido"
+                                                  }
+                                                  onChange={(e) =>
+                                                    updateActionPlan(item.id, {
+                                                      finalProblemStatus: e
+                                                        .target.value as any,
+                                                    })
+                                                  }
+                                                  disabled={!isCheckDone}
+                                                  className={cn(
+                                                    "w-full bg-theme-background px-4 py-3 rounded-xl text-xs font-bold outline-none border border-theme-border focus:ring-2 focus:ring-indigo-500 transition-all text-theme-foreground",
+                                                    !isCheckDone &&
+                                                      "opacity-50 cursor-not-allowed",
+                                                  )}
+                                                >
+                                                  <option value="Resolvido">
+                                                    Resolvido
+                                                  </option>
+                                                  <option value="Não resolvido">
+                                                    Não resolvido
+                                                  </option>
+                                                </select>
+                                              </div>
+                                              <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                                                  Ação Final
+                                                </label>
+                                                <select
+                                                  value={
+                                                    item.finalAction ||
+                                                    "Padronizar processo"
+                                                  }
+                                                  onChange={(e) =>
+                                                    updateActionPlan(item.id, {
+                                                      finalAction: e.target
+                                                        .value as any,
+                                                    })
+                                                  }
+                                                  disabled={!isCheckDone}
+                                                  className={cn(
+                                                    "w-full bg-theme-background px-4 py-3 rounded-xl text-xs font-bold outline-none border border-theme-border focus:ring-2 focus:ring-indigo-500 transition-all text-theme-foreground",
+                                                    !isCheckDone &&
+                                                      "opacity-50 cursor-not-allowed",
+                                                  )}
+                                                >
+                                                  <option value="Padronizar processo">
+                                                    Padronizar processo
+                                                  </option>
+                                                  <option value="Fazer nova análise">
+                                                    Fazer nova análise
+                                                  </option>
+                                                </select>
+                                              </div>
                                             </div>
-                                            <div className="space-y-1">
-                                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Ação Final</label>
-                                              <select 
-                                                value={item.finalAction || 'Padronizar processo'}
-                                                onChange={(e) => updateActionPlan(item.id, { finalAction: e.target.value as any })}
-                                                disabled={!isCheckDone}
-                                                className={cn(
-                                                  "w-full bg-theme-background px-4 py-3 rounded-xl text-xs font-bold outline-none border border-theme-border focus:ring-2 focus:ring-indigo-500 transition-all text-theme-foreground",
-                                                  !isCheckDone && "opacity-50 cursor-not-allowed"
-                                                )}
-                                              >
-                                                <option value="Padronizar processo">Padronizar processo</option>
-                                                <option value="Fazer nova análise">Fazer nova análise</option>
-                                              </select>
-                                            </div>
-                                          </div>
 
-                                          <div className="space-y-4">
-                                            {item.finalAction === 'Padronizar processo' && (
-                                              <div className="space-y-3">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Modelo de Padronização Sugerido</label>
-                                                <div className="flex flex-wrap gap-2">
-                                                  {['POP', 'ITO', 'Painel de controle'].map(model => (
-                                                      <button 
+                                            <div className="space-y-4">
+                                              {item.finalAction ===
+                                                "Padronizar processo" && (
+                                                <div className="space-y-3">
+                                                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                                                    Modelo de Padronização
+                                                    Sugerido
+                                                  </label>
+                                                  <div className="flex flex-wrap gap-2">
+                                                    {[
+                                                      "POP",
+                                                      "ITO",
+                                                      "Painel de controle",
+                                                    ].map((model) => (
+                                                      <button
                                                         key={model}
                                                         onClick={() => {
-                                                          if (!isCheckDone) return;
-                                                          const current = item.standardizationModels || [];
-                                                          const next = current.includes(model as any)
-                                                            ? current.filter(m => m !== model)
-                                                            : [...current, model as any];
-                                                          updateActionPlan(item.id, { standardizationModels: next });
+                                                          if (!isCheckDone)
+                                                            return;
+                                                          const current =
+                                                            item.standardizationModels ||
+                                                            [];
+                                                          const next =
+                                                            current.includes(
+                                                              model as any,
+                                                            )
+                                                              ? current.filter(
+                                                                  (m) =>
+                                                                    m !== model,
+                                                                )
+                                                              : [
+                                                                  ...current,
+                                                                  model as any,
+                                                                ];
+                                                          updateActionPlan(
+                                                            item.id,
+                                                            {
+                                                              standardizationModels:
+                                                                next,
+                                                            },
+                                                          );
                                                         }}
                                                         disabled={!isCheckDone}
                                                         className={cn(
                                                           "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
-                                                          item.standardizationModels?.includes(model as any)
+                                                          item.standardizationModels?.includes(
+                                                            model as any,
+                                                          )
                                                             ? "bg-indigo-600 border-indigo-600 text-white shadow-lg"
                                                             : "bg-white border-slate-200 text-slate-400 hover:border-indigo-300",
-                                                          !isCheckDone && "opacity-50 cursor-not-allowed"
+                                                          !isCheckDone &&
+                                                            "opacity-50 cursor-not-allowed",
                                                         )}
                                                       >
-                                                      {model}
-                                                    </button>
-                                                  ))}
+                                                        {model}
+                                                      </button>
+                                                    ))}
+                                                  </div>
                                                 </div>
-                                              </div>
-                                            )}
+                                              )}
 
-                                            {item.finalProblemStatus === 'Não resolvido' && item.finalAction === 'Fazer nova análise' && (
-                                              <div className="pt-2">
-                                                <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex items-center gap-3 mb-4">
-                                                  <AlertCircle size={20} className="text-amber-500 shrink-0" />
-                                                  <p className="text-[10px] text-amber-700 font-medium leading-tight">O problema persiste. Recomendamos iniciar um novo ciclo PDCA para aprofundar a análise.</p>
-                                                </div>
-                                                <button 
-                                                  onClick={() => {
-                                                    if (!isCheckDone) return;
-                                                    createNewCycle(activeCycle.taskId, activeCycle.plan.problemDescription);
-                                                  }}
-                                                  disabled={!isCheckDone}
-                                                  className={cn(
-                                                    "w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-95",
-                                                    !isCheckDone && "opacity-50 cursor-not-allowed"
-                                                  )}
-                                                >
-                                                  <RefreshCw size={18} />
-                                                  Refazer Ciclo PDCA
-                                                </button>
-                                              </div>
-                                            )}
+                                              {item.finalProblemStatus ===
+                                                "Não resolvido" &&
+                                                item.finalAction ===
+                                                  "Fazer nova análise" && (
+                                                  <div className="pt-2">
+                                                    <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 flex items-center gap-3 mb-4">
+                                                      <AlertCircle
+                                                        size={20}
+                                                        className="text-amber-500 shrink-0"
+                                                      />
+                                                      <p className="text-[10px] text-amber-700 font-medium leading-tight">
+                                                        O problema persiste.
+                                                        Recomendamos iniciar um
+                                                        novo ciclo PDCA para
+                                                        aprofundar a análise.
+                                                      </p>
+                                                    </div>
+                                                    <button
+                                                      onClick={() => {
+                                                        if (!isCheckDone)
+                                                          return;
+                                                        createNewCycle(
+                                                          activeCycle.taskId,
+                                                          activeCycle.plan
+                                                            .problemDescription,
+                                                        );
+                                                      }}
+                                                      disabled={!isCheckDone}
+                                                      className={cn(
+                                                        "w-full flex items-center justify-center gap-2 bg-indigo-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 active:scale-95",
+                                                        !isCheckDone &&
+                                                          "opacity-50 cursor-not-allowed",
+                                                      )}
+                                                    >
+                                                      <RefreshCw size={18} />
+                                                      Refazer Ciclo PDCA
+                                                    </button>
+                                                  </div>
+                                                )}
+                                            </div>
                                           </div>
                                         </div>
-                                      </div>
-                                    </motion.div>
-                                  )}
-                                </AnimatePresence>
-                              </div>
-                            );
-                          })
+                                      </motion.div>
+                                    )}
+                                  </AnimatePresence>
+                                </div>
+                              );
+                            })
                         )}
                       </div>
 
                       {/* Finalize Cycle Button */}
-                      {activeCycle.status === 'Ativo' && (
+                      {activeCycle.status === "Ativo" && (
                         <div className="pt-12 border-t border-slate-200">
-                          <div className={cn(
-                            "p-8 rounded-[2.5rem] bg-white border-2 border-dashed transition-all flex flex-col items-center text-center gap-6",
-                            isActPhaseValid ? "border-emerald-200 bg-emerald-50/30" : "border-slate-100 opacity-60"
-                          )}>
-                            <div className={cn(
-                              "w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg",
-                              isActPhaseValid ? "bg-emerald-500 text-white" : "bg-slate-100 text-slate-300"
-                            )}>
+                          <div
+                            className={cn(
+                              "p-8 rounded-[2.5rem] bg-white border-2 border-dashed transition-all flex flex-col items-center text-center gap-6",
+                              isActPhaseValid
+                                ? "border-emerald-200 bg-emerald-50/30"
+                                : "border-slate-100 opacity-60",
+                            )}
+                          >
+                            <div
+                              className={cn(
+                                "w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg",
+                                isActPhaseValid
+                                  ? "bg-emerald-500 text-white"
+                                  : "bg-slate-100 text-slate-300",
+                              )}
+                            >
                               <CheckCircle2 size={32} />
                             </div>
                             <div className="max-w-md">
-                              <h4 className="text-xl font-black text-slate-800 tracking-tight">Finalizar Ciclo PDCA</h4>
+                              <h4 className="text-xl font-black text-slate-800 tracking-tight">
+                                Finalizar Ciclo PDCA
+                              </h4>
                               <p className="text-slate-500 text-sm mt-2">
-                                {isActPhaseValid 
+                                {isActPhaseValid
                                   ? "Todas as informações foram preenchidas. Você já pode concluir este ciclo e visualizar o relatório final."
                                   : "Preencha todas as informações da fase de ACT (Padronização ou Reanálise) para concluir o ciclo."}
                               </p>
                             </div>
-                            <button 
+                            <button
                               onClick={() => {
-                                updateCycle({ status: 'Concluído' });
-                                setSaveFeedback("Ciclo PDCA concluído com sucesso! 🚀");
-                                setActivePhase('REPORT');
+                                updateCycle({ status: "Concluído" });
+                                setSaveFeedback(
+                                  "Ciclo PDCA concluído com sucesso! 🚀",
+                                );
+                                setActivePhase("REPORT");
                               }}
                               disabled={!isActPhaseValid}
                               className={cn(
                                 "px-12 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-xl",
-                                isActPhaseValid 
-                                  ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-100 active:scale-95" 
-                                  : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                                isActPhaseValid
+                                  ? "bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-100 active:scale-95"
+                                  : "bg-slate-200 text-slate-400 cursor-not-allowed",
                               )}
                             >
                               Concluir Ciclo e Gerar Relatório
@@ -3281,92 +5364,207 @@ export default function PDCAEditor({
                   </motion.div>
                 )}
 
-                {activePhase === 'REPORT' && (
-                  <motion.div 
-                    key="report" 
-                    initial={{ opacity: 0 }} 
-                    animate={{ opacity: 1 }} 
+                {activePhase === "REPORT" && (
+                  <motion.div
+                    key="report"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     className="max-w-5xl mx-auto space-y-8"
                   >
                     <div className="flex justify-between items-center no-print">
                       <div>
-                        <h4 className="text-2xl font-black text-slate-800 tracking-tight">Relatório PDCA</h4>
-                        <p className="text-slate-500 text-sm mt-1">Resumo executivo do ciclo de melhoria.</p>
+                        <h4 className="text-2xl font-black text-slate-800 tracking-tight">
+                          Relatório PDCA
+                        </h4>
+                        <p className="text-slate-500 text-sm mt-1">
+                          Resumo executivo do ciclo de melhoria.
+                        </p>
                       </div>
-                                  <div className="flex items-center gap-4">
-                                    <button 
-                                      onClick={exportToCSV}
-                                      className="flex items-center gap-2 bg-slate-100 text-slate-600 px-6 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all"
-                                    >
-                                      <Download size={20} />
-                                      Exportar CSV
-                                    </button>
-                                    <button 
-                                      onClick={exportToPDF}
-                                      disabled={isExportingPDF}
-                                      className={cn(
-                                        "flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all shadow-lg",
-                                        isExportingPDF 
-                                          ? "bg-slate-400 text-white cursor-not-allowed" 
-                                          : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100"
-                                      )}
-                                    >
-                                      {isExportingPDF ? (
-                                        <>
-                                          <RefreshCw size={20} className="animate-spin" />
-                                          Gerando...
-                                        </>
-                                      ) : (
-                                        <>
-                                          <FileText size={20} />
-                                          Exportar PDF
-                                        </>
-                                      )}
-                                    </button>
-                                  </div>
+                      <div className="flex items-center gap-4">
+                        <button
+                          onClick={exportToCSV}
+                          className="flex items-center gap-2 bg-slate-100 text-slate-600 px-6 py-3 rounded-xl font-bold hover:bg-slate-200 transition-all"
+                        >
+                          <Download size={20} />
+                          Exportar CSV
+                        </button>
+                        <button
+                          onClick={exportToPDF}
+                          disabled={isExportingPDF}
+                          className={cn(
+                            "flex items-center gap-2 px-6 py-3 rounded-xl font-bold transition-all shadow-lg",
+                            isExportingPDF
+                              ? "bg-slate-400 text-white cursor-not-allowed"
+                              : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100",
+                          )}
+                        >
+                          {isExportingPDF ? (
+                            <>
+                              <RefreshCw size={20} className="animate-spin" />
+                              Gerando...
+                            </>
+                          ) : (
+                            <>
+                              <FileText size={20} />
+                              Exportar PDF
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
 
-                    <div id="pdca-report-content" className="space-y-12 pb-12 print-container bg-white p-8 rounded-[2.5rem]">
+                    <div
+                      id="pdca-report-content"
+                      className="space-y-12 pb-12 print-container bg-white p-8 rounded-[2.5rem]"
+                    >
                       {relatedCycles.map((cycle, cycleIdx) => (
-                        <div key={cycle.id} className="space-y-8 border-b-4 border-slate-100 pb-12 last:border-0 last:pb-0 min-h-[260mm]">
-                          <PDFHeader projectName={project.name} cycleTitle={cycle.title} />
+                        <div
+                          key={cycle.id}
+                          className="space-y-8 border-b-4 border-slate-100 pb-12 last:border-0 last:pb-0 min-h-[260mm]"
+                        >
+                          <PDFHeader
+                            projectName={project.name}
+                            cycleTitle={cycle.title}
+                          />
                           <div className="flex items-center gap-4 bg-slate-900 p-6 rounded-[2rem] text-white shadow-xl">
                             <div className="w-14 h-14 bg-indigo-600 rounded-2xl flex items-center justify-center font-black text-2xl shadow-lg shadow-indigo-900/20">
                               {cycleIdx + 1}
                             </div>
                             <div>
-                              <h5 className="text-xl font-black tracking-tight uppercase">Ciclo {cycleIdx + 1}</h5>
+                              <h5 className="text-xl font-black tracking-tight uppercase">
+                                Ciclo {cycleIdx + 1}
+                              </h5>
                               <p className="text-indigo-300 text-xs font-bold uppercase tracking-widest">
-                                {cycleIdx === 0 ? 'Primeira Tentativa' : 'Reanálise de Melhoria'} • Iniciado em {format(new Date(cycle.createdAt), 'dd/MM/yyyy')}
+                                {cycleIdx === 0
+                                  ? "Primeira Tentativa"
+                                  : "Reanálise de Melhoria"}{" "}
+                                • Iniciado em{" "}
+                                {format(
+                                  new Date(cycle.createdAt),
+                                  "dd/MM/yyyy",
+                                )}
                               </p>
                             </div>
                           </div>
 
                           {/* PLAN */}
                           <ReportSection title="PLAN (Planejar)" color="indigo">
-                            <ReportField label="Descrição do Problema" value={cycle.plan?.problemDescription} />
-                            <ReportField label="Causa Raiz Identificada" value={cycle.plan?.rootCauseAnalysis?.identifiedRootCause || 'Não informada'} />
+                            <ReportField
+                              label="Descrição do Problema"
+                              value={cycle.plan?.problemDescription}
+                            />
+                            <ReportField
+                              label="Causa Raiz Identificada"
+                              value={
+                                cycle.plan?.rootCauseAnalysis
+                                  ?.identifiedRootCause || "Não informada"
+                              }
+                            />
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              <ReportField label="Impacto: Descrição" value={cycle.plan?.impact?.description} />
-                              <ReportField label="Impacto: Valor Atual" value={`R$ ${cycle.plan?.impact?.value || 0}`} />
-                              <ReportField label="Impacto: Meta (%)" value={`${cycle.plan?.impact?.goal || 0}%`} />
+                              <ReportField
+                                label="Impacto: Descrição"
+                                value={cycle.plan?.impact?.description}
+                              />
+                              <ReportField
+                                label="Impacto: Valor Atual"
+                                value={`R$ ${cycle.plan?.impact?.value || 0}`}
+                              />
+                              <ReportField
+                                label="Impacto: Meta (%)"
+                                value={`${cycle.plan?.impact?.goal || 0}%`}
+                              />
                             </div>
-                            <ReportField label="Método Utilizado" value={cycle.plan?.rootCauseAnalysis?.type?.toUpperCase() || 'N/A'} />
-                            
+                            <ReportField
+                              label="Método Utilizado"
+                              value={(() => {
+                                const rcaType = cycle.plan?.rootCauseAnalysis?.type;
+                                if (!rcaType) return "Não informado";
+                                const normalized = rcaType.toLowerCase().trim();
+                                if (normalized === "5whys" || normalized === "5_whys" || normalized === "5 porquês") {
+                                  return "5 Porquês";
+                                }
+                                if (
+                                  normalized === "list" ||
+                                  normalized === "lista" ||
+                                  normalized === "lista_causas" ||
+                                  normalized === "lista de causas"
+                                ) {
+                                  return "Lista de causas";
+                                }
+                                if (normalized === "ishikawa") {
+                                  return "Ishikawa";
+                                }
+                                return "Não informado";
+                              })()}
+                            />
+
                             <div className="mt-6 pt-6 border-t border-slate-100 overflow-x-auto no-scrollbar">
-                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Plano de Ação (5W2H)</p>
+                              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">
+                                Plano de Ação (5W2H)
+                              </p>
                               <div className="space-y-4 min-w-[600px]">
-                                {(cycle.plan?.actionPlan || []).filter(item => item.status !== 'Cancelado' && item.ativo !== false).map((item) => (
-                                  <div key={item.id} className="grid grid-cols-6 gap-4 text-[10px] p-3 bg-slate-50 rounded-xl">
-                                    <div><p className="font-black text-slate-400 uppercase">O que</p><p className="font-bold text-slate-700">{item.what}</p></div>
-                                    <div><p className="font-black text-slate-400 uppercase">Por que</p><p className="font-bold text-slate-700">{item.why}</p></div>
-                                    <div><p className="font-black text-slate-400 uppercase">Onde</p><p className="font-bold text-slate-700">{item.where}</p></div>
-                                    <div><p className="font-black text-slate-400 uppercase">Quando</p><p className="font-bold text-slate-700">{item.when}</p></div>
-                                    <div><p className="font-black text-slate-400 uppercase">Quem</p><p className="font-bold text-slate-700">{item.who}</p></div>
-                                    <div><p className="font-black text-slate-400 uppercase">Como</p><p className="font-bold text-slate-700">{item.how}</p></div>
-                                  </div>
-                                ))}
+                                {(cycle.plan?.actionPlan || [])
+                                  .filter(
+                                    (item) =>
+                                      item.status !== "Cancelado" &&
+                                      item.ativo !== false,
+                                  )
+                                  .map((item) => (
+                                    <div
+                                      key={item.id}
+                                      className="grid grid-cols-6 gap-4 text-[10px] p-3 bg-slate-50 rounded-xl"
+                                    >
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          O que
+                                        </p>
+                                        <p className="font-bold text-slate-700">
+                                          {item.what}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          Por que
+                                        </p>
+                                        <p className="font-bold text-slate-700">
+                                          {item.why}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          Onde
+                                        </p>
+                                        <p className="font-bold text-slate-700">
+                                          {item.where}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          Quando
+                                        </p>
+                                        <p className="font-bold text-slate-700">
+                                          {item.when}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          Quem
+                                        </p>
+                                        <p className="font-bold text-slate-700">
+                                          {item.who}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          Como
+                                        </p>
+                                        <p className="font-bold text-slate-700">
+                                          {item.how}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  ))}
                               </div>
                             </div>
                           </ReportSection>
@@ -3375,73 +5573,189 @@ export default function PDCAEditor({
                           <ReportSection title="DO (Executar)" color="amber">
                             <div className="space-y-4">
                               {(cycle.plan?.actionPlan || [])
-                                .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+                                .filter(
+                                  (item) =>
+                                    item.status !== "Cancelado" &&
+                                    item.ativo !== false,
+                                )
                                 .map((item, idx) => (
-                                <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-                                  <div className="flex justify-between items-start">
-                                    <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
-                                    <StatusBadge status={item.status as any} />
+                                  <div
+                                    key={item.id}
+                                    className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3"
+                                  >
+                                    <div className="flex justify-between items-start">
+                                      <p className="font-bold text-slate-800">
+                                        {idx + 1}. {item.what}
+                                      </p>
+                                      <StatusBadge
+                                        status={item.status as any}
+                                      />
+                                    </div>
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[10px]">
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          Responsável
+                                        </p>
+                                        <p className="font-bold text-slate-600">
+                                          {item.who}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          Setor
+                                        </p>
+                                        <p className="font-bold text-slate-600">
+                                          {item.sector || "N/A"}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          Início
+                                        </p>
+                                        <p className="font-bold text-slate-600">
+                                          {item.startDate
+                                            ? format(
+                                                new Date(item.startDate),
+                                                "dd/MM/yyyy",
+                                              )
+                                            : "N/A"}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          Conclusão
+                                        </p>
+                                        <p className="font-bold text-slate-600">
+                                          {item.endDate
+                                            ? format(
+                                                new Date(item.endDate),
+                                                "dd/MM/yyyy",
+                                              )
+                                            : "N/A"}
+                                        </p>
+                                      </div>
+                                    </div>
+                                    {item.executionLogs && item.executionLogs.length > 0 && (
+                                      <div className="pt-2 border-t border-slate-200">
+                                        <p className="font-extrabold text-slate-400 uppercase text-[8px] mb-2 tracking-wider">
+                                          Histórico de Atualizações
+                                        </p>
+                                        <div className="space-y-2">
+                                          {[...item.executionLogs]
+                                            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                                            .map((log) => (
+                                              <div
+                                                key={log.id}
+                                                className="p-2.5 bg-white border border-slate-100 rounded-xl space-y-1 shadow-sm leading-relaxed"
+                                              >
+                                                <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500">
+                                                  <span>
+                                                    [{log.timestamp ? format(new Date(log.timestamp), "dd/MM/yyyy HH:mm") : "---"}]
+                                                  </span>
+                                                  {log.responsible && (
+                                                    <span>- {log.responsible}</span>
+                                                  )}
+                                                </div>
+                                                {log.status && (
+                                                  <div className="text-[10px] text-slate-600 font-semibold">
+                                                    Status: {log.status}
+                                                  </div>
+                                                )}
+                                                {log.observation && log.observation.trim() !== "" && (
+                                                  <div className="text-[10px] text-slate-600 pl-1.5 border-l-2 border-slate-200 whitespace-pre-wrap italic">
+                                                    Observação: {log.observation}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ))}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
-                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[10px]">
-                                    <div>
-                                      <p className="font-black text-slate-400 uppercase">Responsável</p>
-                                      <p className="font-bold text-slate-600">{item.who}</p>
-                                    </div>
-                                    <div>
-                                      <p className="font-black text-slate-400 uppercase">Setor</p>
-                                      <p className="font-bold text-slate-600">{item.sector || 'N/A'}</p>
-                                    </div>
-                                    <div>
-                                      <p className="font-black text-slate-400 uppercase">Início</p>
-                                      <p className="font-bold text-slate-600">{item.startDate ? format(new Date(item.startDate), 'dd/MM/yyyy') : 'N/A'}</p>
-                                    </div>
-                                    <div>
-                                      <p className="font-black text-slate-400 uppercase">Conclusão</p>
-                                      <p className="font-bold text-slate-600">{item.endDate ? format(new Date(item.endDate), 'dd/MM/yyyy') : 'N/A'}</p>
-                                    </div>
-                                  </div>
-                                  {item.executionLogs.length > 0 && (
-                                    <div className="pt-2 border-t border-slate-200">
-                                      <p className="font-black text-slate-400 uppercase text-[8px] mb-1">Última Atualização</p>
-                                      <p className="text-[10px] text-slate-500 italic">"{item.executionLogs[item.executionLogs.length - 1].observation}"</p>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
+                                ))}
                             </div>
                           </ReportSection>
 
                           {/* CHECK */}
-                          <ReportSection title="CHECK (Verificar)" color="emerald">
+                          <ReportSection
+                            title="CHECK (Verificar)"
+                            color="emerald"
+                          >
                             <div className="space-y-4">
                               {(cycle.plan?.actionPlan || [])
-                                .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+                                .filter(
+                                  (item) =>
+                                    item.status !== "Cancelado" &&
+                                    item.ativo !== false,
+                                )
                                 .map((item, idx) => (
-                                <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-                                  <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
-                                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-[10px]">
-                                    <div>
-                                      <p className="font-black text-slate-400 uppercase">Acompanhamento</p>
-                                      <p className="font-bold text-slate-600">{item.monitoringPeriod} {item.monitoringMode} via {item.monitoringTool}</p>
-                                    </div>
-                                    <div>
-                                      <p className="font-black text-slate-400 uppercase">Funcionou?</p>
-                                      <p className={cn("font-bold", item.worked === 'Sim' ? "text-emerald-600" : "text-rose-600")}>{item.worked}</p>
-                                    </div>
-                                    {(item.worked === 'Não' || item.worked === 'Parcial') && (
-                                      <div className="col-span-2">
-                                        <p className="font-black text-slate-400 uppercase">Motivo</p>
-                                        <p className="font-bold text-slate-600">{item.failureReason || 'N/A'}</p>
+                                  <div
+                                    key={item.id}
+                                    className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3"
+                                  >
+                                    <p className="font-bold text-slate-800">
+                                      {idx + 1}. {item.what}
+                                    </p>
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-[10px]">
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          Acompanhamento
+                                        </p>
+                                        <p className="font-bold text-slate-600">
+                                          {item.monitoringPeriod}{" "}
+                                          {item.monitoringMode} via{" "}
+                                          {item.monitoringTool}
+                                        </p>
                                       </div>
-                                    )}
-                                    <div>
-                                      <p className="font-black text-slate-400 uppercase">Impacto de Ganho</p>
-                                      <p className="font-bold text-emerald-600">R$ {(item.realGains?.tangible || []).reduce((acc, t) => acc + (t.value || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          Funcionou?
+                                        </p>
+                                        <p
+                                          className={cn(
+                                            "font-bold",
+                                            item.worked === "Sim"
+                                              ? "text-emerald-600"
+                                              : "text-rose-600",
+                                          )}
+                                        >
+                                          {item.worked}
+                                        </p>
+                                      </div>
+                                      {(item.worked === "Não" ||
+                                        item.worked === "Parcial") && (
+                                        <div className="col-span-2">
+                                          <p className="font-black text-slate-400 uppercase">
+                                            Motivo
+                                          </p>
+                                          <p className="font-bold text-slate-600">
+                                            {item.failureReason || "N/A"}
+                                          </p>
+                                        </div>
+                                      )}
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          Impacto de Ganho
+                                        </p>
+                                        <p className="font-bold text-emerald-600">
+                                          R${" "}
+                                          {(item.realGains?.tangible || [])
+                                            .reduce(
+                                              (acc, t) => acc + (t.value || 0),
+                                              0,
+                                            )
+                                            .toLocaleString("pt-BR", {
+                                              minimumFractionDigits: 2,
+                                            })}
+                                        </p>
+                                      </div>
                                     </div>
+                                    <ReportField
+                                      label="Link evidência do acompanhamento"
+                                      value={item.evidence || "N/A"}
+                                    />
                                   </div>
-                                  <ReportField label="Link evidência do acompanhamento" value={item.evidence || 'N/A'} />
-                                </div>
-                              ))}
+                                ))}
                             </div>
                           </ReportSection>
 
@@ -3449,28 +5763,60 @@ export default function PDCAEditor({
                           <ReportSection title="ACT (Agir)" color="rose">
                             <div className="space-y-4">
                               {(cycle.plan?.actionPlan || [])
-                                .filter(item => item.status !== 'Cancelado' && item.ativo !== false)
+                                .filter(
+                                  (item) =>
+                                    item.status !== "Cancelado" &&
+                                    item.ativo !== false,
+                                )
                                 .map((item, idx) => (
-                                <div key={item.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-                                  <p className="font-bold text-slate-800">{idx + 1}. {item.what}</p>
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[10px]">
-                                    <div>
-                                      <p className="font-black text-slate-400 uppercase">Status Final</p>
-                                      <p className={cn("font-bold", item.finalProblemStatus === 'Resolvido' ? "text-emerald-600" : "text-rose-600")}>{item.finalProblemStatus}</p>
-                                    </div>
-                                    <div>
-                                      <p className="font-black text-slate-400 uppercase">Ação Final</p>
-                                      <p className="font-bold text-slate-600">{item.finalAction}</p>
-                                    </div>
-                                    {item.finalAction === 'Padronizar processo' && (
+                                  <div
+                                    key={item.id}
+                                    className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3"
+                                  >
+                                    <p className="font-bold text-slate-800">
+                                      {idx + 1}. {item.what}
+                                    </p>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[10px]">
                                       <div>
-                                        <p className="font-black text-slate-400 uppercase">Padronização</p>
-                                        <p className="font-bold text-indigo-600">{(item.standardizationModels || []).join(', ')}</p>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          Status Final
+                                        </p>
+                                        <p
+                                          className={cn(
+                                            "font-bold",
+                                            item.finalProblemStatus ===
+                                              "Resolvido"
+                                              ? "text-emerald-600"
+                                              : "text-rose-600",
+                                          )}
+                                        >
+                                          {item.finalProblemStatus}
+                                        </p>
                                       </div>
-                                    )}
+                                      <div>
+                                        <p className="font-black text-slate-400 uppercase">
+                                          Ação Final
+                                        </p>
+                                        <p className="font-bold text-slate-600">
+                                          {item.finalAction}
+                                        </p>
+                                      </div>
+                                      {item.finalAction ===
+                                        "Padronizar processo" && (
+                                        <div>
+                                          <p className="font-black text-slate-400 uppercase">
+                                            Padronização
+                                          </p>
+                                          <p className="font-bold text-indigo-600">
+                                            {(
+                                              item.standardizationModels || []
+                                            ).join(", ")}
+                                          </p>
+                                        </div>
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              ))}
+                                ))}
                             </div>
                           </ReportSection>
                         </div>
@@ -3492,13 +5838,13 @@ export default function PDCAEditor({
 
       <AnimatePresence>
         {confirmingLog && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6"
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.9, opacity: 0, y: 20 }}
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.9, opacity: 0, y: 20 }}
@@ -3508,25 +5854,33 @@ export default function PDCAEditor({
                 <AlertCircle size={40} />
               </div>
               <div className="text-center space-y-3">
-                <h3 className="text-2xl font-black text-slate-800 tracking-tight">Finalizar Plano de Ação?</h3>
+                <h3 className="text-2xl font-black text-slate-800 tracking-tight">
+                  Finalizar Plano de Ação?
+                </h3>
                 <p className="text-slate-500 font-medium leading-relaxed">
-                  Tem certeza que deseja marcar este plano de ação como concluído? 
-                  <span className="block mt-2 font-bold text-rose-500 italic">Após essa ação, não será mais possível editar este registro no histórico.</span>
+                  Tem certeza que deseja marcar este plano de ação como
+                  concluído?
+                  <span className="block mt-2 font-bold text-rose-500 italic">
+                    Após essa ação, não será mais possível editar este registro
+                    no histórico.
+                  </span>
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-4 pt-4">
-                <button 
+                <button
                   onClick={() => setConfirmingLog(null)}
                   className="py-4 rounded-2xl font-black text-xs uppercase tracking-widest text-slate-400 bg-slate-50 hover:bg-slate-100 transition-all active:scale-95"
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   onClick={() => {
                     if (confirmingLog) {
                       updateActionPlan(confirmingLog.id, confirmingLog.updates);
-                      const obsInput = document.getElementById(confirmingLog.obsInputId) as HTMLInputElement;
-                      if (obsInput) obsInput.value = '';
+                      const obsInput = document.getElementById(
+                        confirmingLog.obsInputId,
+                      ) as HTMLInputElement;
+                      if (obsInput) obsInput.value = "";
                       setConfirmingLog(null);
                     }
                   }}
@@ -3539,26 +5893,39 @@ export default function PDCAEditor({
           </motion.div>
         )}
       </AnimatePresence>
-
     </div>
   );
 
-  async function updateActionPlan(id: string, data: Partial<ActionPlanItem>, isTyping = false) {
+  async function updateActionPlan(
+    id: string,
+    data: Partial<ActionPlanItem>,
+    isTyping = false,
+  ) {
     if (!activeCycle) return;
 
-    const item = activeCycle.plan.actionPlan.find(i => i.id === id);
-    if (item && item.status === 'Cancelado') {
+    const item = activeCycle.plan.actionPlan.find((i) => i.id === id);
+    if (item && item.status === "Cancelado") {
       setSaveFeedback("Plano cancelado não pode ser modificado");
       return;
     }
 
     // Security check: Only update ACT fields if CHECK is concluded
-    const actFields = ['finalProblemStatus', 'finalAction', 'standardizationModels'];
-    const isUpdatingActField = Object.keys(data).some(key => actFields.includes(key));
-    
+    const actFields = [
+      "finalProblemStatus",
+      "finalAction",
+      "standardizationModels",
+    ];
+    const isUpdatingActField = Object.keys(data).some((key) =>
+      actFields.includes(key),
+    );
+
     if (isUpdatingActField) {
       if (item) {
-        const isCheckDone = !!item.monitoringTool?.trim() && !!item.evidence?.trim() && !!item.worked && (item.worked === 'Sim' || !!item.failureReason?.trim());
+        const isCheckDone =
+          !!item.monitoringTool?.trim() &&
+          !!item.evidence?.trim() &&
+          !!item.worked &&
+          (item.worked === "Sim" || !!item.failureReason?.trim());
         if (!isCheckDone) {
           setSaveFeedback("Plano ainda não liberado para ACT");
           return;
@@ -3567,21 +5934,28 @@ export default function PDCAEditor({
     }
 
     const newPlan = [...activeCycle.plan.actionPlan];
-    const idx = newPlan.findIndex(i => i.id === id);
+    const idx = newPlan.findIndex((i) => i.id === id);
     if (idx === -1) return;
-    
+
     const oldItem = newPlan[idx];
     let newItem = { ...oldItem, ...data };
 
     // Auto-transition from DO to CHECK when status is Concluído
-    if (data.status === 'Concluído' && (!oldItem.currentPhase || oldItem.currentPhase === 'DO')) {
-      newItem.currentPhase = 'CHECK';
+    if (
+      data.status === "Concluído" &&
+      (!oldItem.currentPhase || oldItem.currentPhase === "DO")
+    ) {
+      newItem.currentPhase = "CHECK";
     }
 
     // Auto-transition from CHECK to ACT when all check fields are filled
-    const isCheckDone = !!newItem.monitoringTool?.trim() && !!newItem.evidence?.trim() && !!newItem.worked && (newItem.worked === 'Sim' || !!newItem.failureReason?.trim());
-    if (isCheckDone && newItem.currentPhase === 'CHECK') {
-      newItem.currentPhase = 'ACT';
+    const isCheckDone =
+      !!newItem.monitoringTool?.trim() &&
+      !!newItem.evidence?.trim() &&
+      !!newItem.worked &&
+      (newItem.worked === "Sim" || !!newItem.failureReason?.trim());
+    if (isCheckDone && newItem.currentPhase === "CHECK") {
+      newItem.currentPhase = "ACT";
     }
 
     newPlan[idx] = newItem;
@@ -3590,109 +5964,132 @@ export default function PDCAEditor({
 
   function addActionPlanItem() {
     if (!activeCycle) return;
-    const newItem: ActionPlanItem = { 
-      id: uuidv4(), 
-      what: '', 
-      why: '',
-      where: '',
-      when: '', 
-      who: '',
-      sector: '',
-      how: '',
-      howMuch: '',
-      status: 'Pendente',
-      currentPhase: 'DO',
+    const newItem: ActionPlanItem = {
+      id: uuidv4(),
+      what: "",
+      why: "",
+      where: "",
+      when: "",
+      who: "",
+      sector: "",
+      how: "",
+      howMuch: "",
+      status: "Pendente",
+      currentPhase: "DO",
       executionLogs: [],
-      monitoringMode: 'Dias',
+      monitoringMode: "Dias",
       monitoringPeriod: 1,
-      worked: 'Sim',
-      finalProblemStatus: 'Resolvido',
-      finalAction: 'Padronizar processo',
-      standardizationModels: []
+      worked: "Sim",
+      finalProblemStatus: "Resolvido",
+      finalAction: "Padronizar processo",
+      standardizationModels: [],
     };
     updatePlan({ actionPlan: [...activeCycle.plan.actionPlan, newItem] });
   }
 
   function removeActionPlanItem(id: string) {
     if (!activeCycle) return;
-    
+
     // Implementing Soft Delete as per Task 7 Option A
-    const newPlan = activeCycle.plan.actionPlan.map(i => 
-      i.id === id ? { ...i, status: 'Cancelado' as any, ativo: false } : i
+    const newPlan = activeCycle.plan.actionPlan.map((i) =>
+      i.id === id ? { ...i, status: "Cancelado" as any, ativo: false } : i,
     );
     updatePlan({ actionPlan: newPlan });
   }
 
   function getProgress(status: PDCAStatus, cycle?: PDCACycle) {
-    if (status === 'Concluído') return 100;
+    if (status === "Concluído") return 100;
     if (!cycle) return 0;
-    
+
     // Average calculation of progress per plan item
     const planItems = cycle.plan.actionPlan || [];
     if (planItems.length === 0) {
       const { rootCauseAnalysis } = cycle.plan;
-      const isPlanComplete = rootCauseAnalysis.type === 'ishikawa' 
-        ? (rootCauseAnalysis.priorityCauses || []).length > 0
-        : !!rootCauseAnalysis.identifiedRootCause?.trim();
+      const isPlanComplete =
+        rootCauseAnalysis.type === "ishikawa"
+          ? (rootCauseAnalysis.priorityCauses || []).length > 0
+          : !!rootCauseAnalysis.identifiedRootCause?.trim();
       return isPlanComplete ? 25 : 0;
     }
 
-    const itemsProgress = planItems.map(item => {
+    const itemsProgress = planItems.map((item) => {
       let p = 25; // PLAN is done
 
-      const isDoDone = item.status === 'Concluído';
-      
+      const isDoDone = item.status === "Concluído";
+
       if (isDoDone) {
         p += 25;
-        const isCheckDone = !!item.monitoringTool?.trim() && !!item.evidence?.trim() && !!item.worked && (item.worked === 'Sim' || !!item.failureReason?.trim());
+        const isCheckDone =
+          !!item.monitoringTool?.trim() &&
+          !!item.evidence?.trim() &&
+          !!item.worked &&
+          (item.worked === "Sim" || !!item.failureReason?.trim());
         if (isCheckDone) {
           p += 25;
-          const isActDone = !!item.finalProblemStatus && !!item.finalAction && (item.finalAction !== 'Padronizar processo' || (item.standardizationModels || []).length > 0);
+          const isActDone =
+            !!item.finalProblemStatus &&
+            !!item.finalAction &&
+            (item.finalAction !== "Padronizar processo" ||
+              (item.standardizationModels || []).length > 0);
           if (isActDone) p += 25;
         }
-      } else if (item.status === 'Em andamento') {
+      } else if (item.status === "Em andamento") {
         p += 10;
       }
 
       return p;
     });
 
-    const averageProgress = itemsProgress.reduce((acc, p) => acc + p, 0) / itemsProgress.length;
+    const averageProgress =
+      itemsProgress.reduce((acc, p) => acc + p, 0) / itemsProgress.length;
     return Math.round(averageProgress);
   }
 }
 
-function ReportSection({ title, color, children }: { title: string, color: string, children: React.ReactNode }) {
+function ReportSection({
+  title,
+  color,
+  children,
+}: {
+  title: string;
+  color: string;
+  children: React.ReactNode;
+}) {
   const colorClasses: Record<string, string> = {
     indigo: "bg-indigo-50 border-indigo-100 text-indigo-800",
     amber: "bg-amber-50 border-amber-100 text-amber-800",
     emerald: "bg-emerald-50 border-emerald-100 text-emerald-800",
     rose: "bg-rose-50 border-rose-100 text-rose-800",
-    slate: "bg-theme-background border-theme-border text-theme-foreground"
+    slate: "bg-theme-background border-theme-border text-theme-foreground",
   };
 
   return (
     <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className={cn("px-6 py-4 border-b font-black text-xs uppercase tracking-widest", colorClasses[color])}>
+      <div
+        className={cn(
+          "px-6 py-4 border-b font-black text-xs uppercase tracking-widest",
+          colorClasses[color],
+        )}
+      >
         {title}
       </div>
-      <div className="p-6 space-y-6">
-        {children}
-      </div>
+      <div className="p-6 space-y-6">{children}</div>
     </div>
   );
 }
 
-function ReportField({ label, value }: { label: string, value: any }) {
-  const isLink = value && typeof value === 'string' && isValidUrl(value);
-  
+function ReportField({ label, value }: { label: string; value: any }) {
+  const isLink = value && typeof value === "string" && isValidUrl(value);
+
   return (
     <div className="space-y-1">
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</p>
+      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+        {label}
+      </p>
       {isLink ? (
-        <a 
-          href={formatUrl(value)} 
-          target="_blank" 
+        <a
+          href={formatUrl(value)}
+          target="_blank"
           rel="noopener noreferrer"
           className="text-sm font-bold text-indigo-600 hover:text-indigo-700 underline flex items-center gap-1.5 transition-colors"
         >
@@ -3700,27 +6097,46 @@ function ReportField({ label, value }: { label: string, value: any }) {
           <ExternalLink size={12} />
         </a>
       ) : (
-        <p className="text-sm font-bold text-slate-700">{value || 'N/A'}</p>
+        <p className="text-sm font-bold text-slate-700">{value || "N/A"}</p>
       )}
     </div>
   );
 }
 
-function StatCard({ title, value, icon, color }: { title: string, value: number, icon: React.ReactNode, color: string }) {
+function StatCard({
+  title,
+  value,
+  icon,
+  color,
+}: {
+  title: string;
+  value: number;
+  icon: React.ReactNode;
+  color: string;
+}) {
   const colors: any = {
     indigo: "bg-indigo-50 text-indigo-600",
     amber: "bg-amber-50 text-amber-600",
-    emerald: "bg-emerald-50 text-emerald-600"
+    emerald: "bg-emerald-50 text-emerald-600",
   };
 
   return (
     <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4 md:gap-6">
-      <div className={cn("w-12 h-12 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center shrink-0", colors[color])}>
+      <div
+        className={cn(
+          "w-12 h-12 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center shrink-0",
+          colors[color],
+        )}
+      >
         {React.cloneElement(icon as React.ReactElement, { size: 24 })}
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest truncate">{title}</p>
-        <p className="text-2xl md:text-3xl font-black text-slate-900 mt-0.5 md:mt-1">{value}</p>
+        <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest truncate">
+          {title}
+        </p>
+        <p className="text-2xl md:text-3xl font-black text-slate-900 mt-0.5 md:mt-1">
+          {value}
+        </p>
       </div>
     </div>
   );
@@ -3728,42 +6144,65 @@ function StatCard({ title, value, icon, color }: { title: string, value: number,
 
 function StatusBadge({ status }: { status: string }) {
   const styles: any = {
-    'Ativo': "bg-indigo-100 text-indigo-700",
-    'Concluído': "bg-emerald-100 text-emerald-700 border border-emerald-200",
-    'Em andamento': "bg-amber-100 text-amber-700",
-    'Pendente': "bg-slate-100 text-slate-600"
+    Ativo: "bg-indigo-100 text-indigo-700",
+    Concluído: "bg-emerald-100 text-emerald-700 border border-emerald-200",
+    "Em andamento": "bg-amber-100 text-amber-700",
+    Pendente: "bg-slate-100 text-slate-600",
   };
 
   return (
-    <span className={cn("text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider", styles[status] || "bg-slate-100 text-slate-600")}>
+    <span
+      className={cn(
+        "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
+        styles[status] || "bg-slate-100 text-slate-600",
+      )}
+    >
       {status}
     </span>
   );
 }
 
-function PhaseTab({ active, onClick, label, color, disabled, icon, lockTooltip }: { active: boolean, onClick: () => void, label: string, color: string, disabled?: boolean, icon?: React.ReactNode, lockTooltip?: string }) {
+function PhaseTab({
+  active,
+  onClick,
+  label,
+  color,
+  disabled,
+  icon,
+  lockTooltip,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  color: string;
+  disabled?: boolean;
+  icon?: React.ReactNode;
+  lockTooltip?: string;
+}) {
   const colors: any = {
     indigo: "border-indigo-600 text-indigo-600",
     amber: "border-amber-500 text-amber-500",
     emerald: "border-emerald-500 text-emerald-500",
     rose: "border-rose-500 text-rose-500",
-    slate: "border-slate-500 text-slate-500"
+    slate: "border-slate-500 text-slate-500",
   };
 
   return (
     <div className="relative group/tab">
-      <button 
+      <button
         onClick={!disabled ? onClick : undefined}
         className={cn(
           "py-4 px-2 border-b-4 transition-all font-black text-xs tracking-widest flex items-center gap-2 outline-none",
-          active ? colors[color] : "border-transparent text-slate-400 hover:text-slate-600",
-          disabled && "opacity-50 cursor-not-allowed grayscale"
+          active
+            ? colors[color]
+            : "border-transparent text-slate-400 hover:text-slate-600",
+          disabled && "opacity-50 cursor-not-allowed grayscale",
         )}
       >
         {icon}
         {label}
       </button>
-      
+
       {disabled && lockTooltip && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 text-white text-[10px] font-bold rounded-lg opacity-0 group-hover/tab:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-xl">
           <div className="relative">
@@ -3776,39 +6215,59 @@ function PhaseTab({ active, onClick, label, color, disabled, icon, lockTooltip }
   );
 }
 
-function SectionHeader({ number, title }: { number: string, title: string }) {
+function SectionHeader({ number, title }: { number: string; title: string }) {
   return (
     <div className="flex items-center gap-4">
       <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black shadow-lg">
         {number}
       </div>
-      <h4 className="text-xl font-black text-slate-800 tracking-tight">{title}</h4>
+      <h4 className="text-xl font-black text-slate-800 tracking-tight">
+        {title}
+      </h4>
     </div>
   );
 }
 
-function PlanStepButton({ active, completed, onClick, number, label }: { active: boolean, completed?: boolean, onClick: () => void, number: string, label: string }) {
+function PlanStepButton({
+  active,
+  completed,
+  onClick,
+  number,
+  label,
+}: {
+  active: boolean;
+  completed?: boolean;
+  onClick: () => void;
+  number: string;
+  label: string;
+}) {
   return (
-    <button 
+    <button
       onClick={onClick}
       className={cn(
         "flex-1 flex items-center gap-3 px-6 py-4 rounded-2xl transition-all font-bold text-xs uppercase tracking-widest relative whitespace-nowrap",
-        active 
-          ? "bg-indigo-600 text-white shadow-xl shadow-indigo-100 ring-2 ring-indigo-600 ring-offset-2" 
-          : completed 
+        active
+          ? "bg-indigo-600 text-white shadow-xl shadow-indigo-100 ring-2 ring-indigo-600 ring-offset-2"
+          : completed
             ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-100"
-            : "bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 border border-slate-100"
+            : "bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-slate-600 border border-slate-100",
       )}
     >
-      <div className={cn(
-        "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border shrink-0",
-        active ? "bg-white text-indigo-600 border-white" : completed ? "bg-white text-emerald-600 border-emerald-200" : "bg-white text-slate-300 border-slate-200"
-      )}>
+      <div
+        className={cn(
+          "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border shrink-0",
+          active
+            ? "bg-white text-indigo-600 border-white"
+            : completed
+              ? "bg-white text-emerald-600 border-emerald-200"
+              : "bg-white text-slate-300 border-slate-200",
+        )}
+      >
         {completed && !active ? <CheckCircle2 size={12} /> : number}
       </div>
       <span className="truncate">{label}</span>
       {active && (
-        <motion.div 
+        <motion.div
           layoutId="plan-step-pill"
           className="absolute inset-0 bg-indigo-600 rounded-2xl -z-10"
         />
@@ -3817,12 +6276,22 @@ function PlanStepButton({ active, completed, onClick, number, label }: { active:
   );
 }
 
-function ParetoInput({ label, value, onChange }: { label: string, value: string, onChange: (v: string) => void }) {
+function ParetoInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <div className="space-y-1">
-      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}</label>
-      <input 
-        type="text" 
+      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+        {label}
+      </label>
+      <input
+        type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-indigo-500"
@@ -3831,14 +6300,22 @@ function ParetoInput({ label, value, onChange }: { label: string, value: string,
   );
 }
 
-function PhaseSection({ title, value, onChange }: { title: string, value: string, onChange: (v: string) => void }) {
+function PhaseSection({
+  title,
+  value,
+  onChange,
+}: {
+  title: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <section className="space-y-4">
       <h4 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2">
         <div className="w-2 h-6 bg-indigo-500 rounded-full" />
         {title}
       </h4>
-      <textarea 
+      <textarea
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full p-6 bg-white border border-slate-200 rounded-3xl outline-none focus:ring-2 focus:ring-indigo-500 min-h-[150px] text-slate-700 font-medium shadow-sm"

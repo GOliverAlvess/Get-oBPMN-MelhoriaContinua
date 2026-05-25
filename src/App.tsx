@@ -548,6 +548,10 @@ export default function App() {
         forecastCompletion: new Date().toISOString().split('T')[0],
         presentationLink: '',
         ods: '',
+        odsSelecionadas: [],
+        esgSelecionado: [],
+        odsDescricao: '',
+        esgDescricao: '',
         esgEnvironmental: '',
         esgSocial: '',
         esgGovernance: '',
@@ -1817,6 +1821,26 @@ function TabButton({ active, onClick, icon, label }: { active: boolean, onClick:
 
 // --- SCOPE TAB ---
 
+const ODS_LIST = [
+  { id: 1, label: "ODS 1", name: "Erradicação da Pobreza", color: "#e5243b" },
+  { id: 2, label: "ODS 2", name: "Fome Zero e Agricultura Sustentável", color: "#dda63a" },
+  { id: 3, label: "ODS 3", name: "Saúde e Bem-Estar", color: "#4c9f38" },
+  { id: 4, label: "ODS 4", name: "Educação de Qualidade", color: "#c5192d" },
+  { id: 5, label: "ODS 5", name: "Igualdade de Gênero", color: "#ff3a21" },
+  { id: 6, label: "ODS 6", name: "Água Potável e Saneamento", color: "#26bde2" },
+  { id: 7, label: "ODS 7", name: "Energia Limpa e Acessível", color: "#fcc30b", textDark: true },
+  { id: 8, label: "ODS 8", name: "Trabalho Decente e Crescimento Econômico", color: "#a21942" },
+  { id: 9, label: "ODS 9", name: "Indústria, Inovação e Infraestrutura", color: "#fd6925" },
+  { id: 10, label: "ODS 10", name: "Redução das Desigualdades", color: "#dd1367" },
+  { id: 11, label: "ODS 11", name: "Cidades e Comunidades Sustentáveis", color: "#fd9d24" },
+  { id: 12, label: "ODS 12", name: "Consumo e Produção Responsáveis", color: "#c78b1a" },
+  { id: 13, label: "ODS 13", name: "Ação Contra a Mudança Global do Clima", color: "#3f7e44" },
+  { id: 14, label: "ODS 14", name: "Vida na Água", color: "#0a97d9" },
+  { id: 15, label: "ODS 15", name: "Vida Terrestre", color: "#56c02b" },
+  { id: 16, label: "ODS 16", name: "Paz, Justiça e Instituições Eficazes", color: "#00689d" },
+  { id: 17, label: "ODS 17", name: "Parcerias e Meios de Implementação", color: "#1f476a" },
+];
+
 function ScopeTab({ 
   project, 
   setProjects, 
@@ -1841,6 +1865,20 @@ function ScopeTab({
   const [subtaskToDelete, setSubtaskToDelete] = useState<string | null>(null);
   const [editingSubtask, setEditingSubtask] = useState<string | null>(null);
   const [tempSubtaskData, setTempSubtaskData] = useState<{title: string, priority: ProjectPriority, responsibleId: string} | null>(null);
+
+  const [odsSearch, setOdsSearch] = useState('');
+  const [odsDropdownOpen, setOdsDropdownOpen] = useState(false);
+  const odsDropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (odsDropdownRef.current && !odsDropdownRef.current.contains(event.target as Node)) {
+        setOdsDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const updateScope = (field: string, value: any) => {
     const updatedProject = { ...project, scope: { ...project.scope, [field]: value } };
@@ -2089,12 +2127,124 @@ function ScopeTab({
           </div>
           ODS (Objetivos de Desenvolvimento Sustentável)
         </h3>
+        
+        <div className="space-y-4">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Associações ODS Estruturadas (Múltipla Escolha)</label>
+          
+          <div className="flex flex-wrap gap-2 mb-4">
+            {(project.scope?.odsSelecionadas || []).map(id => {
+              const ods = ODS_LIST.find(o => o.id === id);
+              if (!ods) return null;
+              return (
+                <span 
+                  key={id} 
+                  style={{ backgroundColor: ods.color }}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm transition-all ${ods.textDark ? 'text-slate-900' : 'text-white'}`}
+                >
+                  <span>{ods.label}: {ods.name}</span>
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      const updated = (project.scope?.odsSelecionadas || []).filter(item => item !== id);
+                      updateScope('odsSelecionadas', updated);
+                    }}
+                    className="rounded-full hover:bg-black/15 p-0.5 shrink-0 transition-colors"
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              );
+            })}
+            {(!project.scope?.odsSelecionadas || project.scope.odsSelecionadas.length === 0) && (
+              <span className="text-sm font-medium text-slate-400 italic">Nenhuma ODS selecionada ainda. Utilize a busca abaixo para associar.</span>
+            )}
+          </div>
+
+          <div className="relative font-medium" ref={odsDropdownRef}>
+            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 tracking-wide">
+              <Search size={18} className="text-slate-400 mr-2 shrink-0" />
+              <input 
+                type="text"
+                placeholder="Buscar ODS oficiais (Ex: Saúde, Trabalho, Igualdade...)"
+                value={odsSearch}
+                onChange={(e) => {
+                  setOdsSearch(e.target.value);
+                  setOdsDropdownOpen(true);
+                }}
+                onFocus={() => setOdsDropdownOpen(true)}
+                className="w-full bg-transparent border-none text-sm outline-none text-slate-700"
+              />
+              {odsSearch && (
+                <button 
+                  type="button"
+                  onClick={() => setOdsSearch('')}
+                  className="text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            {odsDropdownOpen && (
+              <div className="absolute z-50 left-0 right-0 mt-2 max-h-64 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl divide-y divide-slate-100">
+                {ODS_LIST.filter(ods => 
+                  ods.label.toLowerCase().includes(odsSearch.toLowerCase()) || 
+                  ods.name.toLowerCase().includes(odsSearch.toLowerCase())
+                ).map(ods => {
+                  const currentSelected = project.scope?.odsSelecionadas || [];
+                  const isSelected = currentSelected.includes(ods.id);
+                  return (
+                    <button
+                      key={ods.id}
+                      type="button"
+                      onClick={() => {
+                        let updated: number[];
+                        if (isSelected) {
+                          updated = currentSelected.filter(id => id !== ods.id);
+                        } else {
+                          updated = [...currentSelected, ods.id];
+                        }
+                        updateScope('odsSelecionadas', updated);
+                      }}
+                      className="w-full px-4 py-3 flex items-center justify-between text-left text-sm hover:bg-slate-50 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span 
+                          style={{ backgroundColor: ods.color }} 
+                          className={`w-14 text-center shrink-0 text-[10px] font-black py-1 rounded-md shadow-sm ${ods.textDark ? 'text-slate-900' : 'text-white'}`}
+                        >
+                          {ods.label}
+                        </span>
+                        <span className="font-semibold text-slate-700">{ods.name}</span>
+                      </div>
+                      {isSelected && (
+                        <Check size={16} className="text-indigo-600 font-bold shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+                {ODS_LIST.filter(ods => 
+                  ods.label.toLowerCase().includes(odsSearch.toLowerCase()) || 
+                  ods.name.toLowerCase().includes(odsSearch.toLowerCase())
+                ).length === 0 && (
+                  <div className="px-4 py-4 text-center text-sm text-slate-400">
+                    Nenhuma ODS encontrada com "{odsSearch}".
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
         <FormField 
-          label="ODS Vinculadas" 
-          value={project.scope.ods || ''} 
+          label="ODS (Descrição Livre)" 
+          value={project.scope.odsDescricao || project.scope.ods || ''} 
           type="textarea"
-          placeholder="Exemplo:&#10;ODS 8 - Trabalho Decente e Crescimento Econômico: ...&#10;ODS 9 - Indústria, Inovação e Infraestrutura: ...&#10;ODS 12 - Consumo e Produção Responsáveis: ..."
-          onChange={(v) => updateScope('ods', v)}
+          placeholder="Descreva detalhadamente como o projeto se correlaciona e atinge as ODS selecionadas..."
+          onChange={(v) => {
+            updateScope('odsDescricao', v);
+            updateScope('ods', v);
+          }}
         />
       </section>
 
@@ -2106,47 +2256,155 @@ function ScopeTab({
           </div>
           ESG (Environmental, Social and Governance)
         </h3>
-        <div className="grid grid-cols-1 gap-8">
-          <div className="flex flex-col sm:flex-row gap-4 items-start">
-            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 mt-0 sm:mt-6">
-              <Leaf size={24} />
-            </div>
-            <div className="flex-1 w-full">
-              <FormField 
-                label="E – Environmental" 
-                value={project.scope.esgEnvironmental || ''} 
-                type="textarea"
-                placeholder="Descreva os impactos ambientais do projeto..."
-                onChange={(v) => updateScope('esgEnvironmental', v)}
-              />
-            </div>
+
+        <div className="space-y-6">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Associações ESG Estruturadas (Selecione 1 ou mais)</label>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* E - Environmental */}
+            <button
+              type="button"
+              onClick={() => {
+                const currentSelected = project.scope?.esgSelecionado || [];
+                const updated = currentSelected.includes('E')
+                  ? currentSelected.filter(k => k !== 'E')
+                  : [...currentSelected, 'E'];
+                updateScope('esgSelecionado', updated);
+              }}
+              className={`p-4 rounded-2xl border text-left flex items-start gap-4 transition-all duration-200 ${
+                (project.scope?.esgSelecionado || []).includes('E')
+                  ? 'bg-emerald-50/75 border-emerald-500 ring-2 ring-emerald-500/20 shadow-sm'
+                  : 'bg-slate-50/50 border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                (project.scope?.esgSelecionado || []).includes('E') ? 'bg-emerald-500 text-white' : 'bg-emerald-50 text-emerald-600'
+              }`}>
+                <Leaf size={24} />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-extrabold text-lg text-slate-800">E</span>
+                  <span className="font-bold text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800">Environmental</span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1 font-medium select-none">Impacto e conservação ambiental.</p>
+              </div>
+            </button>
+
+            {/* S - Social */}
+            <button
+              type="button"
+              onClick={() => {
+                const currentSelected = project.scope?.esgSelecionado || [];
+                const updated = currentSelected.includes('S')
+                  ? currentSelected.filter(k => k !== 'S')
+                  : [...currentSelected, 'S'];
+                updateScope('esgSelecionado', updated);
+              }}
+              className={`p-4 rounded-2xl border text-left flex items-start gap-4 transition-all duration-200 ${
+                (project.scope?.esgSelecionado || []).includes('S')
+                  ? 'bg-rose-50/75 border-rose-500 ring-2 ring-rose-500/20 shadow-sm'
+                  : 'bg-slate-50/50 border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                (project.scope?.esgSelecionado || []).includes('S') ? 'bg-rose-500 text-white' : 'bg-rose-50 text-rose-600'
+              }`}>
+                <Heart size={24} />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-extrabold text-lg text-slate-800">S</span>
+                  <span className="font-bold text-xs px-2 py-0.5 rounded bg-rose-100 text-rose-800">Social</span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1 font-medium select-none">Relações humanas, bem-estar e cultura.</p>
+              </div>
+            </button>
+
+            {/* G - Governance */}
+            <button
+              type="button"
+              onClick={() => {
+                const currentSelected = project.scope?.esgSelecionado || [];
+                const updated = currentSelected.includes('G')
+                  ? currentSelected.filter(k => k !== 'G')
+                  : [...currentSelected, 'G'];
+                updateScope('esgSelecionado', updated);
+              }}
+              className={`p-4 rounded-2xl border text-left flex items-start gap-4 transition-all duration-200 ${
+                (project.scope?.esgSelecionado || []).includes('G')
+                  ? 'bg-indigo-50/75 border-indigo-500 ring-2 ring-indigo-500/20 shadow-sm'
+                  : 'bg-slate-50/50 border-slate-200 hover:border-slate-300'
+              }`}
+            >
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                (project.scope?.esgSelecionado || []).includes('G') ? 'bg-indigo-500 text-white' : 'bg-indigo-50 text-indigo-600'
+              }`}>
+                <ShieldCheck size={24} />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-extrabold text-lg text-slate-800">G</span>
+                  <span className="font-bold text-xs px-2 py-0.5 rounded bg-indigo-100 text-indigo-800">Governance</span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1 font-medium select-none">Conformidade, processos e governança.</p>
+              </div>
+            </button>
           </div>
-          <div className="flex flex-col sm:flex-row gap-4 items-start">
-            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 mt-0 sm:mt-6">
-              <Heart size={24} />
+        </div>
+
+        {/* Descrição Geral ESG */}
+        <FormField 
+          label="ESG (Descrição Geral)" 
+          value={project.scope.esgDescricao || ''} 
+          type="textarea"
+          placeholder="Forneça uma síntese descritiva de como o projeto impacta o ecossistema ESG corporativo..."
+          onChange={(v) => updateScope('esgDescricao', v)}
+        />
+
+        <div className="border-t border-slate-100 pt-6 mt-6 space-y-6">
+          <h4 className="text-sm font-extrabold text-slate-700 tracking-wider uppercase ml-1">Análises ESG Detalhadas por Área</h4>
+          <div className="grid grid-cols-1 gap-8">
+            <div className="flex flex-col sm:flex-row gap-4 items-start">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 mt-0 sm:mt-6">
+                <Leaf size={24} />
+              </div>
+              <div className="flex-1 w-full">
+                <FormField 
+                  label="E – Environmental" 
+                  value={project.scope.esgEnvironmental || ''} 
+                  type="textarea"
+                  placeholder="Descreva os impactos ambientais do projeto..."
+                  onChange={(v) => updateScope('esgEnvironmental', v)}
+                />
+              </div>
             </div>
-            <div className="flex-1 w-full">
-              <FormField 
-                label="S – Social" 
-                value={project.scope.esgSocial || ''} 
-                type="textarea"
-                placeholder="Ex: Qualidade de vida, bem-estar, impacto nos colaboradores..."
-                onChange={(v) => updateScope('esgSocial', v)}
-              />
+            <div className="flex flex-col sm:flex-row gap-4 items-start">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0 mt-0 sm:mt-6">
+                <Heart size={24} />
+              </div>
+              <div className="flex-1 w-full">
+                <FormField 
+                  label="S – Social" 
+                  value={project.scope.esgSocial || ''} 
+                  type="textarea"
+                  placeholder="Ex: Qualidade de vida, bem-estar, impacto nos colaboradores..."
+                  onChange={(v) => updateScope('esgSocial', v)}
+                />
+              </div>
             </div>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-4 items-start">
-            <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mt-0 sm:mt-6">
-              <ShieldCheck size={24} />
-            </div>
-            <div className="flex-1 w-full">
-              <FormField 
-                label="G – Governance" 
-                value={project.scope.esgGovernance || ''} 
-                type="textarea"
-                placeholder="Ex: Eficiência, conformidade, controles, governança..."
-                onChange={(v) => updateScope('esgGovernance', v)}
-              />
+            <div className="flex flex-col sm:flex-row gap-4 items-start">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0 mt-0 sm:mt-6">
+                <ShieldCheck size={24} />
+              </div>
+              <div className="flex-1 w-full">
+                <FormField 
+                  label="G – Governance" 
+                  value={project.scope.esgGovernance || ''} 
+                  type="textarea"
+                  placeholder="Ex: Eficiência, conformidade, controles, governança..."
+                  onChange={(v) => updateScope('esgGovernance', v)}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -3496,6 +3754,7 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
   const [profile, setProfile] = useState<UserProfile>('Usuário Analista');
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
+  const [showMasterAlertModal, setShowMasterAlertModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fallback check for admin email just in case the profile isn't loaded yet in state
@@ -3556,8 +3815,12 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
       return;
     }
 
-    if (user.profile === 'Usuário Master') {
-      window.alert('Usuários Master não podem ser excluídos');
+    if (
+      user.profile === 'Usuário Master' || 
+      user.profile?.toUpperCase() === 'MASTER' || 
+      (user as any).role === 'MASTER'
+    ) {
+      setShowMasterAlertModal(true);
       return;
     }
 
@@ -3566,6 +3829,16 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
 
   const confirmDelete = async () => {
     if (!userToDelete) return;
+    
+    if (
+      userToDelete.profile === 'Usuário Master' || 
+      userToDelete.profile?.toUpperCase() === 'MASTER' || 
+      (userToDelete as any).role === 'MASTER'
+    ) {
+      setShowMasterAlertModal(true);
+      setUserToDelete(null);
+      return;
+    }
     
     try {
       await deleteDoc(doc(db, 'users', userToDelete.id));
@@ -3764,6 +4037,42 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
                     className="flex-1 px-6 py-4 bg-rose-600 text-white rounded-2xl font-bold hover:bg-rose-700 transition-all shadow-lg shadow-rose-100"
                   >
                     Sim, Excluir
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {showMasterAlertModal && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowMasterAlertModal(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
+            >
+              <div className="p-8">
+                <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mb-6 mx-auto">
+                  <AlertCircle size={32} />
+                </div>
+                <h4 className="text-xl font-bold text-slate-900 text-center mb-2">Ação não permitida</h4>
+                <p className="text-slate-500 text-center mb-8">
+                  Não é possível excluir um usuário com perfil MASTER.
+                </p>
+                <div className="flex gap-4">
+                  <button 
+                    onClick={() => setShowMasterAlertModal(false)}
+                    className="flex-1 px-6 py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition-all shadow-lg text-center"
+                  >
+                    Entendi
                   </button>
                 </div>
               </div>

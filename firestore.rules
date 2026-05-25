@@ -197,7 +197,7 @@ service cloud.firestore {
       allow update: if isAuthenticated() &&
                     isValidUser(request.resource.data) &&
                     (isOwner(userId) || isAdmin());
-      allow delete: if isAdmin() && resource.data.profile != 'Usuário Master';
+      allow delete: if isAdmin() && resource.data.profile != 'Usuário Master' && resource.data.profile != 'MASTER' && resource.data.profile != 'Usuário Master';
     }
 
     match /projects/{projectId} {

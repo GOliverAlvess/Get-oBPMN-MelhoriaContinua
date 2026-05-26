@@ -15,27 +15,31 @@ import { Project, ProjectFile } from '../types';
 import { db, collection, query, where, onSnapshot, addDoc, doc, updateDoc, handleFirestoreError, OperationType } from '../firebase';
 import { cn } from '../lib/utils';
 
+// Propriedades recebidas pelo componente de lista de anexos do projeto (ProjectFilesSection)
 interface ProjectFilesSectionProps {
-  project: Project;
-  onUpdateProject: (updates: Partial<Project>) => void;
+  project: Project; // Modelo do projeto cujos anexos estão sendo gerenciados
+  onUpdateProject: (updates: Partial<Project>) => void; // Função de retorno disparada ao atualizar metadados primários do projeto
 }
 
+// Componente reativo encarregado por listar e carregar documentos e imagens salvos no Google Drive associados ao projeto
 export default function ProjectFilesSection({ project, onUpdateProject }: ProjectFilesSectionProps) {
-  const [files, setFiles] = useState<ProjectFile[]>([]);
-  const [isUploading, setIsUploading] = useState(false);
-  const [loadingFiles, setLoadingFiles] = useState(true);
-  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [files, setFiles] = useState<ProjectFile[]>([]); // Lista contendo os metadados dos arquivos anexos
+  const [isUploading, setIsUploading] = useState(false); // Estado gerenciador do progresso de upload
+  const [loadingFiles, setLoadingFiles] = useState(true); // Controla a exibição de spin/loader antes dos arquivos serem baixados do Firestore
+  const [uploadError, setUploadError] = useState<string | null>(null); // Armazena mensagens decorrentes de erros de envio
 
-  // Load files from Firestore
+  // Carrega e atualiza em tempo real a listagem de arquivos anexados ao projeto consultando a coleção projectFiles do Firestore
   useEffect(() => {
     if (!project.id) return;
 
     setLoadingFiles(true);
+    // Cria uma query estruturada para obter apenas documentos associados ao ID deste projeto
     const q = query(
       collection(db, 'projectFiles'),
       where('projectId', '==', project.id)
     );
 
+    // Escuta alterações na subcoleção do Firestore atualizando dinamicamente a interface do sistema
     const unsubscribe = onSnapshot(q, 
       (snapshot) => {
         const filesList = snapshot.docs.map(doc => ({
@@ -43,18 +47,20 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
           ...doc.data()
         })) as ProjectFile[];
         
+        // Ordena do arquivo mais recente para o mais antigo com base na propriedade uploadedAt
         setFiles(filesList.sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()));
         setLoadingFiles(false);
       },
       (error) => {
-        console.error("Error fetching files:", error);
+        console.error("Erro ao resgatar arquivos do Firestore:", error);
         setLoadingFiles(false);
       }
     );
 
-    return () => unsubscribe();
+    return () => unsubscribe(); // Limpa as inscrições do Snapshot ao desmontar o componente
   }, [project.id]);
 
+  // Trata o envio físico do arquivo via API do Drive, salvando os metadados no Firestore caso retorne sucesso
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (!selectedFile) return;
@@ -62,6 +68,7 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
     setIsUploading(true);
     setUploadError(null);
 
+    // Cria formulário em Multipart Data para envio do anexo
     const formData = new FormData();
     formData.append('file', selectedFile);
     formData.append('projectId', project.id);
@@ -71,6 +78,7 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
     }
 
     try {
+      // Consome a rota da API interna encarregada de interagir com as credenciais OAuth do Google Drive
       const response = await fetch('/api/drive/upload', {
         method: 'POST',
         body: formData,
@@ -78,12 +86,12 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to upload file');
+        throw new Error(errorData.error || 'Falha ao processar o upload do arquivo');
       }
 
       const data = await response.json();
 
-      // If a new folder was created, update project
+      // Caso uma nova pasta raiz tenha sido instanciada no Google Drive, vincula a propriedade driveFolderId ao modelo do projeto
       if (data.driveFolderId && data.driveFolderId !== project.driveFolderId) {
         const projectRef = doc(db, 'projects', project.id);
         await updateDoc(projectRef, {
@@ -92,7 +100,7 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
         onUpdateProject({ driveFolderId: data.driveFolderId });
       }
 
-      // Save file metadata to Firestore
+      // Prepara os metadados catalogáveis do anexo para gravação no banco de dados
       const fileMetadata = {
         projectId: project.id,
         fileName: data.fileName,
@@ -103,18 +111,20 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
         mimeType: data.mimeType
       };
 
+      // Grava histórico de anexo na tabela projectFiles
       await addDoc(collection(db, 'projectFiles'), fileMetadata);
       
-      // Reset input
+      // Limpa o valor de string no input original de arquivos do DOM para reaceitar envios recorrentes
       e.target.value = '';
     } catch (error: any) {
-      console.error("Upload error:", error);
+      console.error("Falha ao salvar anexo no Drive:", error);
       setUploadError(error.message);
     } finally {
       setIsUploading(false);
     }
   };
 
+  // Formata o tamanho em bytes do documento para uma string amigável ao usuário (KB, MB, GB, etc)
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return '0 B';
     const k = 1024;
@@ -125,6 +135,7 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
 
   return (
     <div className="bg-white border border-slate-100 rounded-3xl overflow-hidden shadow-sm">
+      {/* Cabeçalho da Seção contendo botão de envio */}
       <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600">
@@ -136,6 +147,7 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
           </div>
         </div>
 
+        {/* Componente Label atuando como elemento clicável atrelado ao input oculto de file upload */}
         <label className={cn(
           "flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-tight cursor-pointer hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100",
           isUploading && "opacity-50 cursor-not-allowed"
@@ -161,6 +173,7 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
       </div>
 
       <div className="p-6">
+        {/* Painel de erros de upload caso ocorram durante o envio multipart */}
         {uploadError && (
           <div className="mb-6 p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600">
             <AlertCircle size={18} className="shrink-0" />
@@ -168,6 +181,7 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
           </div>
         )}
 
+        {/* Switch renderizador de status: carregando, lista populada ou painel em branco */}
         {loadingFiles ? (
           <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-3">
             <Loader2 size={24} className="animate-spin text-indigo-500" />
@@ -197,6 +211,7 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
                   </div>
                 </div>
 
+                {/* Ações disponíveis para os arquivos */}
                 <div className="flex items-center gap-2 mt-4">
                   <a 
                     href={file.fileUrl} 

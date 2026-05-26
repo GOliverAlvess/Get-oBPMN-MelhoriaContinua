@@ -4,18 +4,20 @@ import { GainsStructure, TangibleGain, IntangibleGain, GlobalConfig } from '../t
 import { v4 as uuidv4 } from 'uuid';
 import { cn } from '../lib/utils';
 
+// Propriedades recebidas pelo componente editor de ganhos (GainsEditor)
 interface GainsEditorProps {
-  title?: string;
-  gains: GainsStructure;
-  onChange: (gains: GainsStructure) => void;
-  variant?: 'plan' | 'production' | 'check';
-  tangibleTypes?: string[];
-  intangibleTypes?: string[];
-  globalConfig?: GlobalConfig;
-  inheritedGains?: GainsStructure;
-  isReadOnly?: boolean;
+  title?: string; // Título opcional exibido no cabeçalho do editor
+  gains: GainsStructure; // Objeto com a estrutura de ganhos tangíveis e intangíveis
+  onChange: (gains: GainsStructure) => void; // Função de retorno disparada quando os ganhos são salvos/modificados
+  variant?: 'plan' | 'production' | 'check'; // Variante de exibição definindo o escopo visual e comportamental
+  tangibleTypes?: string[]; // Tipos de ganhos palpáveis/tangíveis disponíveis
+  intangibleTypes?: string[]; // Tipos de ganhos qualitativos/intangíveis disponíveis
+  globalConfig?: GlobalConfig; // Configuração global contendo setores e diretrizes corporativas padronizadas
+  inheritedGains?: GainsStructure; // Estrutura de ganhos passados herdados para herdar a configuração do plano
+  isReadOnly?: boolean; // Booleano sinalizando se o formulário está travado para escrita/edição
 }
 
+// Componente reativo encarregado de gerenciar a inclusão, alteração e deleção de ganhos financeiros e intangíveis
 export default function GainsEditor({ 
   title, 
   gains, 
@@ -27,20 +29,22 @@ export default function GainsEditor({
   inheritedGains,
   isReadOnly = false
 }: GainsEditorProps) {
+  // Controle para saber se refinamentos devem utilizar o escopo base herdado do planejamento original
   const isProductionOverride = variant === 'production' && inheritedGains;
 
-  // Use inherited gains if in production mode to define the structure
+  // Processa e define a listagem de ganhos palpáveis ativos com base no plano contratado
   const effectiveTangible = isProductionOverride 
     ? (inheritedGains?.tangible || []).map(inherited => {
         const existing = gains.tangible.find(t => t.type === inherited.type);
         return {
           ...inherited,
           value: existing?.value || 0,
-          id: inherited.id // Keep inherited ID or existing? Inherited ID is safer for consistency
+          id: inherited.id // Mantém o ID original ou herdado por consistência das chaves de indexação
         };
       })
     : (gains.tangible || []);
 
+  // Processa e define a listagem de benefícios conceituais e intangíveis ativos
   const effectiveIntangible = (isProductionOverride
     ? (inheritedGains?.intangible || []).map(inherited => {
         const existing = (gains.intangible || []).find(i => i.type === inherited.type);
@@ -52,8 +56,9 @@ export default function GainsEditor({
       })
     : (gains.intangible || [])) as IntangibleGain[];
 
+  // Insere um novo registro de ganho tangível vazio com identificador gerado aleatoriamente
   const addTangible = () => {
-    if (isProductionOverride) return;
+    if (isProductionOverride) return; // Barra adição caso a configuração exija estrutura estritamente herdada
     const newTangible: TangibleGain = {
       id: uuidv4(),
       type: '',
@@ -66,6 +71,7 @@ export default function GainsEditor({
     });
   };
 
+  // Atualiza dinamicamente as propriedades de um ganho palpável específico pelo ID
   const updateTangible = (id: string, updates: Partial<TangibleGain>) => {
     let newTangible: TangibleGain[];
     if (isProductionOverride) {
@@ -75,16 +81,16 @@ export default function GainsEditor({
         if (t.id === id) {
           const updated = { ...t, ...updates };
           
-          // If type changed, check for units in configuration
+          // Se o tipo do ganho foi modificado, busca unidades compatíveis da configuração global
           if (updates.type && globalConfig?.structuredTangibleGains) {
             const configGain = globalConfig.structuredTangibleGains.find(g => g.name === updates.type) as any;
             const availableUnits = configGain?.units || (configGain?.unit ? [configGain.unit] : []);
             
             if (availableUnits.length > 0) {
               if (availableUnits.length === 1) {
-                updated.unit = availableUnits[0];
+                updated.unit = availableUnits[0]; // Aplica automaticamente caso exista apenas uma unidade disponível
               } else {
-                // If multiple units, clear if current unit is not in the new type's allowed units
+                // Caso existam múltiplas unidades, limpa o campo se a atual não fizer parte das permitidas
                 if (!availableUnits.includes(t.unit)) {
                   updated.unit = '';
                 }
@@ -99,11 +105,13 @@ export default function GainsEditor({
     onChange({ ...gains, tangible: newTangible });
   };
 
+  // Exclui um ganho tangível da lista de monitoramento aplicando o filtro de exclusão por ID
   const removeTangible = (id: string) => {
     if (isProductionOverride) return;
     onChange({ ...gains, tangible: (gains.tangible || []).filter(t => t.id !== id) });
   };
 
+  // Insere um novo registro de ganho qualitativo e intangível vazio com ID único
   const addIntangible = () => {
     if (isProductionOverride) return;
     const newIntangible: IntangibleGain = {
@@ -118,6 +126,7 @@ export default function GainsEditor({
     });
   };
 
+  // Atualiza um elemento específico da lista de ganhos intangíveis com base no ID correspondente
   const updateIntangible = (id: string, updates: Partial<IntangibleGain>) => {
     let newIntangible: IntangibleGain[];
     if (isProductionOverride) {
@@ -128,6 +137,7 @@ export default function GainsEditor({
     onChange({ ...gains, intangible: newIntangible });
   };
 
+  // Exclui de forma limpa o benefício qualitativo aplicando filtro por ID correspondente
   const removeIntangible = (id: string) => {
     if (isProductionOverride) return;
     onChange({ ...gains, intangible: (gains.intangible || []).filter(i => i.id !== id) });

@@ -63,7 +63,15 @@ const translateMonitoringMode = (mode: string) => {
   return mode || '';
 };
 
-const getSubtaskSVG = async (xml: string): Promise<string | null> => {
+const formatValueBrl = (val: any): string => {
+  if (val === undefined || val === null || val === '') return 'R$ 0,00';
+  if (typeof val === 'string' && val.includes('R$')) return val;
+  const num = Number(val);
+  if (isNaN(num)) return `R$ ${val}`;
+  return `R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+const getSubtaskSVG = async (xml: string, customData: Record<string, any> = {}): Promise<string | null> => {
   if (!xml) return null;
   let container: HTMLDivElement | null = null;
   try {
@@ -81,6 +89,81 @@ const getSubtaskSVG = async (xml: string): Promise<string | null> => {
     const canvas = viewer.get('canvas') as any;
     if (canvas) {
       canvas.zoom('fit-viewport');
+    }
+
+    const elementRegistry = viewer.get('elementRegistry') as any;
+    if (elementRegistry && customData) {
+      // Previne duplicação removendo quaisquer badges/indicadores de problemas antigos que já existam no contêiner
+      const existingIndicators = container.querySelectorAll('.problem-indicator-svg');
+      existingIndicators.forEach(el => el.parentNode?.removeChild(el));
+
+      // Varre cada elemento customizado para aplicar as respectivas cores de fundo/borda e indicadores de gargalos
+      Object.entries(customData).forEach(([elementId, data]: [string, any]) => {
+        const element = elementRegistry.get(elementId);
+        if (!element) return;
+
+        const gElement = container?.querySelector(`[data-element-id="${elementId}"]`);
+        if (!gElement) return;
+
+        // Aplica cores personalizadas do usuário do editor para preservar o layout idêntico das formas no PDF
+        const visual = gElement.querySelector('.djs-visual');
+        if (visual) {
+          const shapes = visual.querySelectorAll('rect, circle, polygon');
+          shapes.forEach((shape: any) => {
+            if (data?.backgroundColor) {
+              shape.style.fill = data.backgroundColor;
+              shape.setAttribute('fill', data.backgroundColor);
+            }
+            if (data?.borderColor) {
+              shape.style.stroke = data.borderColor;
+              shape.setAttribute('stroke', data.borderColor);
+            }
+          });
+        }
+
+        // Se este nó de subprocesso estiver marcado como um gargalo/etapa problema, insere dinamicamente uma tag/badge vermelha de atenção
+        if (data?.isProblemStep) {
+          const width = element.width || 100;
+          
+          // Define coordenadas relativas baseadas na largura para posicionar a tag de atenção no canto direito
+          const badgeX = width;
+          const badgeY = 0;
+          
+          const ns = "http://www.w3.org/2000/svg";
+          const badgeGroup = document.createElementNS(ns, "g");
+          badgeGroup.setAttribute("class", "problem-indicator-svg");
+          
+          // Cria o círculo vermelho de alerta do badge
+          const circle = document.createElementNS(ns, "circle");
+          circle.setAttribute("cx", badgeX.toString());
+          circle.setAttribute("cy", badgeY.toString());
+          circle.setAttribute("r", "10");
+          circle.setAttribute("fill", "#FF6B6B");
+          circle.setAttribute("stroke", "#ffffff");
+          circle.setAttribute("stroke-width", "2");
+          badgeGroup.appendChild(circle);
+          
+          // Cria a linha vertical branca do ponto de exclamação
+          const rect = document.createElementNS(ns, "rect");
+          rect.setAttribute("x", (badgeX - 1).toString());
+          rect.setAttribute("y", (badgeY - 5).toString());
+          rect.setAttribute("width", "2");
+          rect.setAttribute("height", "6");
+          rect.setAttribute("fill", "#ffffff");
+          rect.setAttribute("rx", "1");
+          badgeGroup.appendChild(rect);
+          
+          // Cria o ponto branco na base do ponto de exclamação do badge
+          const dot = document.createElementNS(ns, "circle");
+          dot.setAttribute("cx", badgeX.toString());
+          dot.setAttribute("cy", (badgeY + 3).toString());
+          dot.setAttribute("r", "1.2");
+          dot.setAttribute("fill", "#ffffff");
+          badgeGroup.appendChild(dot);
+          
+          gElement.appendChild(badgeGroup);
+        }
+      });
     }
     
     const { svg } = await viewer.saveSVG();
@@ -348,7 +431,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
 
         for (const sub of steps) {
           if (sub.mapping?.xml) {
-            const svgStr = await getSubtaskSVG(sub.mapping.xml);
+            const svgStr = await getSubtaskSVG(sub.mapping.xml, sub.mapping.customData || {});
             if (svgStr) {
               subtaskSVGs[sub.id] = svgStr;
             }
@@ -543,6 +626,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                 ]
               },
               layout: 'noBorders',
+              pageBreak: 'before',
               margin: [0, 10, 0, 15]
             },
             {
@@ -615,18 +699,23 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                       [
                         {
                           stack: (() => {
-                            const bottlenecks = (project.subtasks || []).flatMap(sub => 
-                              (sub.mapping?.nodes || []).filter((n: any) => n.data?.isProblemStep).map((node: any) => {
-                                const matchingCycles = (sub.pdcaCycles || []).filter(c => c.taskId === node.id);
-                                const cycleNames = matchingCycles.map(c => c.nomePdca || c.title).join(', ');
-                                const cycleSuffix = cycleNames ? ` - Ciclo PDCA: ${cycleNames}` : '';
-                                return {
-                                  text: `• ${sub.title.toUpperCase()}: ${node.data?.description || 'Ponto crítico'}${cycleSuffix}`,
-                                  style: 'bodyHighlight',
-                                  color: '#e11d48'
-                                };
-                              })
-                            );
+                            const bottlenecks = (project.subtasks || []).flatMap(sub => {
+                              const customData = sub.mapping?.customData || {};
+                              return Object.entries(customData)
+                                .filter(([nodeId, nodeData]: [string, any]) => !!nodeData?.isProblemStep)
+                                .map(([nodeId, nodeData]: [string, any]) => {
+                                  const matchingCycles = (sub.pdcaCycles || []).filter(c => c.taskId === nodeId);
+                                  const cycleNames = matchingCycles.map(c => c.nomePdca || c.title).join(', ');
+                                  const cycleDisplay = cycleNames ? cycleNames : 'Não associado';
+                                  const nodeName = nodeData?.description || 'Ponto crítico';
+                                  
+                                  return {
+                                    text: `Gargalo: [${sub.title.toUpperCase()}${nodeName ? ` - ${nodeName.toUpperCase()}` : ''}] - Ciclo PDCA: [${cycleDisplay.toUpperCase()}]`,
+                                    style: 'bodyHighlight',
+                                    color: '#e11d48'
+                                  };
+                                });
+                            });
                             if (bottlenecks.length > 0) return bottlenecks;
                             return [{ text: 'Nenhum gargalo identificado no mapeamento atual.', style: 'bodyTextSmall', italic: true }];
                           })(),
@@ -644,151 +733,20 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                   }
                 }
               ],
+              unbreakable: true,
               margin: [0, 0, 0, 24]
             },
 
-            // 03. ANÁLISES DE CAUSA RAIZ
+            // 03. CICLOS DE MELHORIA (PDCA)
             {
               table: {
                 widths: ['*'],
                 body: [
-                  [{ text: '03. ANÁLISES DE CAUSA RAIZ', style: 'sectionHeader' }]
+                  [{ text: '03. CICLOS DE MELHORIA (PDCA)', style: 'sectionHeader' }]
                 ]
               },
               layout: 'noBorders',
-              margin: [0, 10, 0, 15]
-            },
-            ...(project.subtasks?.flatMap(s => s.pdcaCycles) || []).map((cycle, idx) => {
-              const rca = cycle.plan.rootCauseAnalysis;
-              const analysisContent = [];
-
-              analysisContent.push({ text: `CICLO: ${(cycle.nomePdca || cycle.title).toUpperCase()}`, style: 'subSectionHeading', margin: [0, 10, 0, 10] });
-
-              if (rca.type === '5whys') {
-                analysisContent.push({
-                  table: {
-                    widths: [100, '*'],
-                    body: [
-                      [
-                        { text: 'NÍVEL', style: 'tableHeader' },
-                        { text: 'RESPOSTA / CAUSA IDENTIFICADA', style: 'tableHeader' }
-                      ],
-                      ...rca.entries.map((entry, i) => [
-                        {
-                          text: `${i + 1}º Por quê`,
-                          style: 'tableCell',
-                          bold: true,
-                          alignment: 'center'
-                        },
-                        { text: entry?.text || '---', style: 'tableCell' }
-                      ])
-                    ]
-                  },
-                  layout: {
-                    hLineWidth: () => 1,
-                    vLineWidth: () => 1,
-                    hLineColor: () => '#D3D3D3',
-                    vLineColor: () => '#D3D3D3',
-                    paddingLeft: () => 10,
-                    paddingRight: () => 10,
-                    paddingTop: () => 8,
-                    paddingBottom: () => 8
-                  },
-                  margin: [0, 5, 0, 15]
-                });
-              } else if (rca.type === 'ishikawa' && rca.ishikawa) {
-                analysisContent.push({
-                  table: {
-                    widths: [120, '*'],
-                    body: [
-                      [
-                        { text: 'CATEGORIA', style: 'tableHeader' },
-                        { text: 'CAUSAS IDENTIFICADAS', style: 'tableHeader' }
-                      ],
-                      ...rca.ishikawa.map(cat => [
-                        { text: cat.name.toUpperCase(), style: 'tableCell', bold: true },
-                        { text: cat.entries.map(e => e.text).join(', ') || 'Nenhuma registrada', style: 'tableCell' }
-                      ])
-                    ]
-                  },
-                  layout: {
-                    hLineWidth: () => 1,
-                    vLineWidth: () => 1,
-                    hLineColor: () => '#D3D3D3',
-                    vLineColor: () => '#D3D3D3',
-                    paddingLeft: () => 10,
-                    paddingRight: () => 10,
-                    paddingTop: () => 8,
-                    paddingBottom: () => 8
-                  },
-                  margin: [0, 5, 0, 15]
-                });
-              } else {
-                analysisContent.push({
-                  table: {
-                    widths: [40, '*'],
-                    body: [
-                      [
-                        { text: 'Nº', style: 'tableHeader' },
-                        { text: 'CAUSA IDENTIFICADA', style: 'tableHeader' }
-                      ],
-                      ...rca.entries.map((entry, i) => [
-                        { text: `${i + 1}`, style: 'tableCell', bold: true, alignment: 'center' },
-                        { text: entry?.text || '---', style: 'tableCell' }
-                      ])
-                    ]
-                  },
-                  layout: {
-                    hLineWidth: () => 1,
-                    vLineWidth: () => 1,
-                    hLineColor: () => '#D3D3D3',
-                    vLineColor: () => '#D3D3D3',
-                    paddingLeft: () => 10,
-                    paddingRight: () => 10,
-                    paddingTop: () => 8,
-                    paddingBottom: () => 8
-                  },
-                  margin: [0, 5, 0, 15]
-                });
-              }
-
-              analysisContent.push({
-                table: {
-                  widths: ['*'],
-                  body: [
-                    [
-                      {
-                        stack: [
-                          { text: 'CAUSA RAIZ IDENTIFICADA', style: 'fieldLabel', margin: [0, 0, 0, 4] },
-                          { text: rca.identifiedRootCause || 'Não definida', style: 'bodyHighlight', bold: true, color: '#e11d48' }
-                        ],
-                        margin: [10, 8, 10, 8]
-                      }
-                    ]
-                  ]
-                },
-                layout: {
-                  fillColor: () => '#f9fafb',
-                  hLineWidth: () => 1,
-                  vLineWidth: () => 1,
-                  hLineColor: () => '#e2e8f0',
-                  vLineColor: () => '#e2e8f0'
-                },
-                margin: [0, 5, 0, 20]
-              });
-
-              return analysisContent;
-            }),
-
-            // 04. CICLOS DE MELHORIA (PDCA)
-            {
-              table: {
-                widths: ['*'],
-                body: [
-                  [{ text: '04. CICLOS DE MELHORIA (PDCA)', style: 'sectionHeader' }]
-                ]
-              },
-              layout: 'noBorders',
+              pageBreak: 'before',
               margin: [0, 10, 0, 15]
             },
             ...(() => {
@@ -833,7 +791,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                             style: "tableCellTiny"
                           },
                           {
-                            text: `[Ação: ${action.what}] ${log.observation}`,
+                            text: log.observation || "---",
                             style: "tableCellTiny"
                           }
                         ]
@@ -852,8 +810,9 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                 });
 
                 // --- PLAN (PLANEJAMENTO) ---
-                cycleContent.push({ text: 'PLAN (PLANEJAMENTO)', style: 'fieldLabel', color: '#003489', margin: [0, 10, 0, 4] });
-                cycleContent.push({
+                const planItems: any[] = [];
+                planItems.push({ text: 'PLAN (PLANEJAMENTO)', style: 'fieldLabel', color: '#003489', margin: [0, 10, 0, 4] });
+                planItems.push({
                   table: {
                     widths: ['35%', '65%'],
                     body: [
@@ -887,7 +846,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                       ],
                       [
                         { text: 'IMPACTO ATUAL & META', style: 'tableHeaderTiny', alignment: 'left' },
-                        { text: `Valor Atual: ${cycle.plan.impact?.value || 0}% | Meta: ${cycle.plan.impact?.goal || 0}% | Melhoria Esperada: ${cycle.plan.impact?.improvementPercentage || 0}%`, style: 'tableCellTiny', alignment: 'left', bold: true, color: '#003489' }
+                        { text: `Valor Atual: ${formatValueBrl(cycle.plan.impact?.value)} | Meta: ${cycle.plan.impact?.goal || 0}% | Melhoria Esperada: ${cycle.plan.impact?.improvementPercentage || 0}%`, style: 'tableCellTiny', alignment: 'left', bold: true, color: '#003489' }
                       ]
                     ]
                   },
@@ -906,12 +865,12 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
 
                 // Ganhos Esperados (PLAN)
                 if (cycle.plan.impact?.expectedGains && (cycle.plan.impact.expectedGains.tangible?.length > 0 || cycle.plan.impact.expectedGains.intangible?.length > 0)) {
-                  cycleContent.push({ text: 'GANHOS ESPERADOS (PLAN)', style: 'fieldLabel', margin: [0, 5, 0, 2] });
+                  planItems.push({ text: 'GANHOS ESPERADOS (PLAN)', style: 'fieldLabel', margin: [0, 5, 0, 2] });
                   if (cycle.plan.impact.expectedGains.tangible?.length > 0) {
-                    cycleContent.push(renderGainsTable(cycle.plan.impact.expectedGains));
+                    planItems.push(renderGainsTable(cycle.plan.impact.expectedGains));
                   }
                   if (cycle.plan.impact.expectedGains.intangible?.length > 0) {
-                    cycleContent.push({
+                    planItems.push({
                       ul: cycle.plan.impact.expectedGains.intangible.map((ig: any) => ({
                         text: `${ig.type}: ${ig.description} (Impacto: ${ig.impactLevel})`,
                         fontSize: 7
@@ -923,8 +882,8 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
 
                 // Plano de Ação (5W2H)
                 if (mappedActions.length > 0) {
-                  cycleContent.push({ text: 'PLANO DE AÇÃO (5W2H)', style: 'fieldLabel', margin: [0, 8, 0, 4] });
-                  cycleContent.push({
+                  planItems.push({ text: 'PLANO DE AÇÃO (5W2H)', style: 'fieldLabel', margin: [0, 8, 0, 4] });
+                  planItems.push({
                     table: {
                       headerRows: 1,
                       widths: ['15%', '15%', '14%', '14%', '14%', '14%', '14%'],
@@ -963,9 +922,16 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                   });
                 }
 
-                // --- DO (EXECUÇÃO) ---
-                cycleContent.push({ text: 'DO (EXECUÇÃO)', style: 'fieldLabel', color: '#d97706', margin: [0, 10, 0, 4] });
                 cycleContent.push({
+                  stack: planItems,
+                  unbreakable: true,
+                  margin: [0, 0, 0, 15]
+                });
+
+                // --- DO (EXECUÇÃO) ---
+                const doItems: any[] = [];
+                doItems.push({ text: 'DO (EXECUÇÃO)', style: 'fieldLabel', color: '#d97706', margin: [0, 10, 0, 4] });
+                doItems.push({
                   table: {
                     headerRows: 1,
                     widths: ['35%', '20%', '15%', '15%', '15%'],
@@ -1002,8 +968,8 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                 });
 
                 // DO Histórico
-                cycleContent.push({ text: 'HISTÓRICO COMPLETO DAS ATUALIZAÇÕES DA EXECUÇÃO', style: 'fieldLabel', margin: [0, 8, 0, 4] });
-                cycleContent.push({
+                doItems.push({ text: 'HISTÓRICO COMPLETO DAS ATUALIZAÇÕES DA EXECUÇÃO', style: 'fieldLabel', margin: [0, 8, 0, 4] });
+                doItems.push({
                   table: {
                     headerRows: 1,
                     widths: ['15%', '20%', '65%'],
@@ -1025,9 +991,16 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                   margin: [0, 4, 0, 15]
                 });
 
-                // --- CHECK (VERIFICAÇÃO) ---
-                cycleContent.push({ text: 'CHECK (VERIFICAÇÃO)', style: 'fieldLabel', color: '#059669', margin: [0, 10, 0, 4] });
                 cycleContent.push({
+                  stack: doItems,
+                  unbreakable: true,
+                  margin: [0, 0, 0, 15]
+                });
+
+                // --- CHECK (VERIFICAÇÃO) ---
+                const checkItems: any[] = [];
+                checkItems.push({ text: 'CHECK (VERIFICAÇÃO)', style: 'fieldLabel', color: '#059669', margin: [0, 10, 0, 4] });
+                checkItems.push({
                   columns: [
                     {
                       width: '40%',
@@ -1084,8 +1057,8 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                 });
 
                 // Acompanhamento Detalhado
-                cycleContent.push({ text: 'ACOMPANHAMENTO E VERIFICAÇÃO DETALHADA POR AÇÃO', style: 'fieldLabel', margin: [0, 8, 0, 4] });
-                cycleContent.push({
+                checkItems.push({ text: 'ACOMPANHAMENTO E VERIFICAÇÃO DETALHADA POR AÇÃO', style: 'fieldLabel', margin: [0, 8, 0, 4] });
+                checkItems.push({
                   table: {
                     headerRows: 1,
                     widths: ['25%', '25%', '25%', '13%', '12%'],
@@ -1124,14 +1097,14 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                   (item: any) => item.realGains && (item.realGains.tangible?.length > 0 || item.realGains.intangible?.length > 0)
                 );
                 if (actionsWithRealGains.length > 0) {
-                  cycleContent.push({ text: 'GANHOS REAIS E RESULTADOS CONCRETOS OBTIDOS', style: 'fieldLabel', margin: [0, 8, 0, 4] });
+                  checkItems.push({ text: 'GANHOS REAIS E RESULTADOS CONCRETOS OBTIDOS', style: 'fieldLabel', margin: [0, 8, 0, 4] });
                   actionsWithRealGains.forEach((item: any) => {
-                    cycleContent.push({ text: `Ação: ${item.what}`, fontSize: 8, bold: true, margin: [0, 4, 0, 2] });
+                    checkItems.push({ text: `Ação: ${item.what}`, fontSize: 8, bold: true, margin: [0, 4, 0, 2] });
                     if (item.realGains.tangible?.length > 0) {
-                      cycleContent.push(renderGainsTable(item.realGains));
+                      checkItems.push(renderGainsTable(item.realGains));
                     }
                     if (item.realGains.intangible?.length > 0) {
-                      cycleContent.push({
+                      checkItems.push({
                         ul: item.realGains.intangible.map((ig: any) => ({
                           text: `${ig.type}: ${ig.description} (Impacto: ${ig.impactLevel})`,
                           fontSize: 7
@@ -1142,9 +1115,16 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                   });
                 }
 
-                // --- ACT (PADRONIZAÇÃO) ---
-                cycleContent.push({ text: 'ACT (PADRONIZAÇÃO E ENCERRAMENTO)', style: 'fieldLabel', color: '#e11d48', margin: [0, 10, 0, 4] });
                 cycleContent.push({
+                  stack: checkItems,
+                  unbreakable: true,
+                  margin: [0, 0, 0, 15]
+                });
+
+                // --- ACT (PADRONIZAÇÃO) ---
+                const actItems: any[] = [];
+                actItems.push({ text: 'ACT (PADRONIZAÇÃO E ENCERRAMENTO)', style: 'fieldLabel', color: '#e11d48', margin: [0, 10, 0, 4] });
+                actItems.push({
                   table: {
                     headerRows: 1,
                     widths: ['35%', '20%', '20%', '25%'],
@@ -1172,6 +1152,12 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                   margin: [0, 4, 0, 20]
                 });
 
+                cycleContent.push({
+                  stack: actItems,
+                  unbreakable: true,
+                  margin: [0, 0, 0, 15]
+                });
+
                 // Linha divisória
                 cycleContent.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#cbd5e1' }], margin: [0, 15, 0, 15] });
 
@@ -1179,53 +1165,59 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
               });
             })(),
 
-            // 05. HISTÓRICO DE INTERAÇÕES E AÇÕES
+            // 04. HISTÓRICO DE INTERAÇÕES E AÇÕES
             {
-              table: {
-                widths: ['*'],
-                body: [
-                  [{ text: '05. HISTÓRICO DE INTERAÇÕES E AÇÕES', style: 'sectionHeader' }]
-                ]
-              },
-              layout: 'noBorders',
-              margin: [0, 10, 0, 15]
-            },
-            {
-              table: {
-                headerRows: 1,
-                widths: ['25%', '40%', '18%', '17%'],
-                body: [
-                  [
-                    { text: 'RESPONSÁVEL', style: 'tableHeader' },
-                    { text: 'DESCRIÇÃO DA AÇÃO', style: 'tableHeader' },
-                    { text: 'STATUS', style: 'tableHeader' },
-                    { text: 'CONCLUSÃO', style: 'tableHeader' }
-                  ],
-                  ...(actions.filter(a => a.projectId === selectedProjectId).length > 0 ? actions.filter(a => a.projectId === selectedProjectId).map(a => [
-                    { text: a.responsibleName || '---', style: 'tableCell' },
-                    { text: a.action || '---', style: 'tableCell' },
-                    { 
-                      text: (STATUS_MAP[a.status] || a.status).toUpperCase(), 
-                      style: 'tableCell', 
-                      bold: true, 
-                      color: a.status === 'Concluído' ? '#059669' : a.status === 'Em andamento' ? '#d97706' : '#64748b' 
-                    },
-                    { text: a.completionDate || '---', style: 'tableCell' }
-                  ]) : [
-                    [{ text: 'Nenhuma interação ou ação registrada.', colSpan: 4, style: 'tableCell', italic: true }, {}, {}, {}]
-                  ])
-                ]
-              },
-              layout: {
-                hLineWidth: () => 1,
-                vLineWidth: () => 1,
-                hLineColor: () => '#D3D3D3',
-                vLineColor: () => '#D3D3D3',
-                paddingLeft: () => 8,
-                paddingRight: () => 8,
-                paddingTop: () => 8,
-                paddingBottom: () => 8
-              },
+              stack: [
+                {
+                  table: {
+                    widths: ['*'],
+                    body: [
+                      [{ text: '04. HISTÓRICO DE INTERAÇÕES E AÇÕES', style: 'sectionHeader' }]
+                    ]
+                  },
+                  layout: 'noBorders',
+                  margin: [0, 10, 0, 15]
+                },
+                {
+                  table: {
+                    headerRows: 1,
+                    widths: ['25%', '40%', '18%', '17%'],
+                    body: [
+                      [
+                        { text: 'RESPONSÁVEL', style: 'tableHeader' },
+                        { text: 'DESCRIÇÃO DA AÇÃO', style: 'tableHeader' },
+                        { text: 'STATUS', style: 'tableHeader' },
+                        { text: 'CONCLUSÃO', style: 'tableHeader' }
+                      ],
+                      ...(actions.filter(a => a.projectId === selectedProjectId).length > 0 ? actions.filter(a => a.projectId === selectedProjectId).map(a => [
+                        { text: a.responsibleName || '---', style: 'tableCell' },
+                        { text: a.action || '---', style: 'tableCell' },
+                        { 
+                          text: (STATUS_MAP[a.status] || a.status).toUpperCase(), 
+                          style: 'tableCell', 
+                          bold: true, 
+                          color: a.status === 'Concluído' ? '#059669' : a.status === 'Em andamento' ? '#d97706' : '#64748b' 
+                        },
+                        { text: a.completionDate || '---', style: 'tableCell' }
+                      ]) : [
+                        [{ text: 'Nenhuma interação ou ação registrada.', colSpan: 4, style: 'tableCell', italic: true }, {}, {}, {}]
+                      ])
+                    ]
+                  },
+                  layout: {
+                    hLineWidth: () => 1,
+                    vLineWidth: () => 1,
+                    hLineColor: () => '#D3D3D3',
+                    vLineColor: () => '#D3D3D3',
+                    paddingLeft: () => 8,
+                    paddingRight: () => 8,
+                    paddingTop: () => 8,
+                    paddingBottom: () => 8
+                  }
+                }
+              ],
+              pageBreak: 'before',
+              unbreakable: true,
               margin: [0, 5, 0, 24]
             }
           ],

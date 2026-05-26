@@ -774,32 +774,6 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                 const completionRate =
                   totalActions > 0 ? Math.round((doneActions / totalActions) * 100) : 0;
 
-                const userLogsRows = mappedActions
-                  .flatMap((action: any) =>
-                    (action.executionLogs || [])
-                      .filter((log: any) => log.observation && log.observation.trim() !== "")
-                      .map((log: any) => ({
-                        timestamp: log.timestamp ? new Date(log.timestamp).getTime() : 0,
-                        row: [
-                          {
-                            text: log.timestamp ? format(new Date(log.timestamp), "dd/MM/yy HH:mm") : "---",
-                            style: "tableCellTiny",
-                            alignment: 'center'
-                          },
-                          {
-                            text: log.responsible || "---",
-                            style: "tableCellTiny"
-                          },
-                          {
-                            text: log.observation || "---",
-                            style: "tableCellTiny"
-                          }
-                        ]
-                      })),
-                  )
-                  .sort((a: any, b: any) => b.timestamp - a.timestamp)
-                  .map((item: any) => item.row);
-
                 const cycleContent: any[] = [];
 
                 // Header do Ciclo
@@ -844,9 +818,10 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                         { text: 'IMPACTO GERAL', style: 'tableHeaderTiny', alignment: 'left' },
                         { text: cycle.plan.impact?.description || 'N/A', style: 'tableCellTiny', alignment: 'left' }
                       ],
+                      // Subitem correspondente ao Impacto Atual, exibindo seu valor financeiro corrente e a melhoria esperada
                       [
-                        { text: 'IMPACTO ATUAL & META', style: 'tableHeaderTiny', alignment: 'left' },
-                        { text: `Valor Atual: ${formatValueBrl(cycle.plan.impact?.value)} | Meta: ${cycle.plan.impact?.goal || 0}% | Melhoria Esperada: ${cycle.plan.impact?.improvementPercentage || 0}%`, style: 'tableCellTiny', alignment: 'left', bold: true, color: '#003489' }
+                        { text: 'IMPACTO ATUAL', style: 'tableHeaderTiny', alignment: 'left' },
+                        { text: `Valor Atual: ${formatValueBrl(cycle.plan.impact?.value)} | Melhoria Esperada: ${cycle.plan.impact?.improvementPercentage || 0}%`, style: 'tableCellTiny', alignment: 'left', bold: true, color: '#003489' }
                       ]
                     ]
                   },
@@ -928,74 +903,96 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                   margin: [0, 0, 0, 15]
                 });
 
-                // --- DO (EXECUÇÃO) ---
-                const doItems: any[] = [];
-                doItems.push({ text: 'DO (EXECUÇÃO)', style: 'fieldLabel', color: '#d97706', margin: [0, 10, 0, 4] });
-                doItems.push({
-                  table: {
-                    headerRows: 1,
-                    widths: ['35%', '20%', '15%', '15%', '15%'],
-                    body: [
-                      [
-                        { text: 'AÇÃO', style: 'tableHeaderTiny' },
-                        { text: 'RESPONSÁVEL', style: 'tableHeaderTiny' },
-                        { text: 'INÍCIO', style: 'tableHeaderTiny' },
-                        { text: 'TÉRMINO', style: 'tableHeaderTiny' },
-                        { text: 'STATUS', style: 'tableHeaderTiny' }
-                      ],
-                      ...mappedActions.map((action: any) => [
-                        { text: action.what || '---', style: 'tableCellTiny' },
-                        { text: action.who || '---', style: 'tableCellTiny' },
-                        {
-                          text: action.startDate ? format(parseISO(action.startDate), "dd/MM/yyyy") : "---",
-                          style: "tableCellTiny"
-                        },
-                        {
-                          text: action.endDate ? format(parseISO(action.endDate), "dd/MM/yyyy") : "---",
-                          style: "tableCellTiny"
-                        },
-                        {
-                          text: action.displayStatus,
-                          style: "tableCellTiny",
-                          bold: true,
-                          color: action.status === 'Concluído' ? '#059669' : action.status === 'Em andamento' ? '#d97706' : '#64748b'
-                        }
-                      ])
-                    ]
-                  },
-                  layout: 'lightHorizontalLines',
-                  margin: [0, 4, 0, 10]
-                });
-
-                // DO Histórico
-                doItems.push({ text: 'HISTÓRICO COMPLETO DAS ATUALIZAÇÕES DA EXECUÇÃO', style: 'fieldLabel', margin: [0, 8, 0, 4] });
-                doItems.push({
-                  table: {
-                    headerRows: 1,
-                    widths: ['15%', '20%', '65%'],
-                    body: [
-                      [
-                        { text: 'DATA/HORA', style: 'tableHeaderTiny' },
-                        { text: 'RESPONSÁVEL', style: 'tableHeaderTiny' },
-                        { text: 'DESCRIÇÃO COM DETALHES DA ATUALIZAÇÃO', style: 'tableHeaderTiny' }
-                      ],
-                      ...(userLogsRows.length > 0 ? userLogsRows : [
-                        [
-                          { text: 'Nenhuma atualização com observação registrada.', colSpan: 3, style: 'tableCellTiny', italic: true, alignment: 'left' },
-                          {}, {}
-                        ]
-                      ])
-                    ]
-                  },
-                  layout: 'lightHorizontalLines',
-                  margin: [0, 4, 0, 15]
-                });
-
-                cycleContent.push({
-                  stack: doItems,
-                  unbreakable: true,
-                  margin: [0, 0, 0, 15]
-                });
+                 // --- DO (EXECUÇÃO) ---
+                 const doItems: any[] = [];
+                 doItems.push({ text: 'DO (EXECUÇÃO)', style: 'fieldLabel', color: '#d97706', margin: [0, 10, 0, 4] });
+ 
+                 // Mapeamento das ações agrupadas com seu respectivo histórico de logs de execução associados de forma sequencial
+                 const actionBlocks = mappedActions.map((action: any, aIdx: number) => {
+                   const sortedLogs = (action.executionLogs || [])
+                     .filter((log: any) => log.observation && log.observation.trim() !== "")
+                     .map((log: any) => ({
+                       ...log,
+                       timeMs: log.timestamp ? new Date(log.timestamp).getTime() : 0
+                     }))
+                     .sort((a: any, b: any) => b.timeMs - a.timeMs);
+ 
+                   // Geração das linhas correspondentes a cada atualização de histórico da referida ação
+                   const logItems = sortedLogs.map((log: any) => {
+                     const formattedTime = log.timestamp 
+                       ? format(new Date(log.timestamp), "dd/MM/yy HH:mm") 
+                       : "---";
+                     return {
+                       text: `${formattedTime} — ${log.observation}`,
+                       fontSize: 8,
+                       margin: [0, 2, 0, 2],
+                       color: '#475569'
+                     };
+                   });
+ 
+                   return {
+                     stack: [
+                       {
+                         text: `📌 AÇÃO: ${action.what || 'Sem descrição'}`,
+                         fontSize: 9,
+                         bold: true,
+                         color: '#003489',
+                         margin: [0, 8, 0, 4]
+                       },
+                       {
+                         text: `Responsável: ${action.who || 'Não informado'} | Início: ${action.startDate ? format(parseISO(action.startDate), "dd/MM/yyyy") : '---'} | Término: ${action.endDate ? format(parseISO(action.endDate), "dd/MM/yyyy") : '---'}\nStatus: ${action.displayStatus || '---'}`,
+                         fontSize: 8,
+                         lineHeight: 1.3,
+                         margin: [0, 0, 0, 6]
+                       },
+                       {
+                         text: 'Histórico da ação:',
+                         fontSize: 8,
+                         bold: true,
+                         color: '#64748b',
+                         margin: [0, 2, 0, 2]
+                       },
+                       logItems.length > 0 
+                         ? {
+                             stack: logItems,
+                             margin: [10, 0, 0, 8]
+                           }
+                         : {
+                             text: 'Nenhuma atualização de histórico registrada.',
+                             fontSize: 8,
+                             italic: true,
+                             color: '#94a3b8',
+                             margin: [10, 0, 0, 8]
+                           },
+                       {
+                         canvas: [{ type: 'line', x1: 0, y1: 4, x2: 515, y2: 4, lineWidth: 0.5, lineColor: '#cbd5e1' }],
+                         margin: [0, 4, 0, 8]
+                       }
+                     ],
+                     unbreakable: true // Garante consistência visual no fluxo de quebras de página do PDF
+                   };
+                 });
+ 
+                 if (actionBlocks.length > 0) {
+                   doItems.push({
+                     stack: actionBlocks,
+                     margin: [0, 4, 0, 10]
+                   });
+                 } else {
+                   doItems.push({
+                     text: 'Nenhuma ação registrada para este ciclo.',
+                     fontSize: 8,
+                     italic: true,
+                     color: '#64748b',
+                     margin: [0, 4, 0, 10]
+                   });
+                 }
+ 
+                 cycleContent.push({
+                   stack: doItems,
+                   unbreakable: true,
+                   margin: [0, 0, 0, 15]
+                 });
 
                 // --- CHECK (VERIFICAÇÃO) ---
                 const checkItems: any[] = [];

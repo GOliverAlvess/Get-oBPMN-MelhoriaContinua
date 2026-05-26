@@ -706,14 +706,15 @@ export default function PDCAEditor({
     setIsExportingPDF(true);
 
     try {
+      // Carrega a imagem do logo do sistema para incorporar de forma segura no documento PDF
       const logoBase64 = await getBase64ImageFromUrl(SYSTEM_LOGO_PATH);
 
-      // Cálculos para as novas seções
+      // Filtra as ações válidas do plano de ação do PDCA (removendo as canceladas ou inativas)
       const validActions = (activeCycle.plan.actionPlan || []).filter(
         (item) => item.status !== "Cancelado" && item.ativo !== false,
       );
 
-      // Map execution status
+      // Mapeia o status das ações para exibição e controle do fluxo
       const mappedActions = validActions.map((action) => {
         return {
           ...action,
@@ -722,6 +723,7 @@ export default function PDCAEditor({
         };
       });
 
+      // Cálculos auxiliares para monitoramento de KPIs de sucesso do plano na fase CHECK
       const totalActions = mappedActions.length;
       const doneActions = mappedActions.filter(
         (item) => item.effectiveStatus === "Concluído",
@@ -730,6 +732,7 @@ export default function PDCAEditor({
       const completionRate =
         totalActions > 0 ? Math.round((doneActions / totalActions) * 100) : 0;
 
+      // Coleta as datas da fase de execução (DO) para extrair o período ativo das tarefas
       const doDates = mappedActions
         .flatMap((a) => [a.startDate, a.endDate])
         .filter(Boolean)
@@ -743,38 +746,7 @@ export default function PDCAEditor({
           ? format(new Date(Math.max(...doDates)), "dd/MM/yyyy")
           : "---";
 
-      const userLogsRows = mappedActions
-        .flatMap((action) =>
-          (action.executionLogs || [])
-            .filter((log) => log.observation && log.observation.trim() !== "")
-            .map((log) => ({
-              timestamp: log.timestamp
-                ? new Date(log.timestamp).getTime()
-                : 0,
-              row: [
-                {
-                  text: log.timestamp
-                    ? format(
-                        new Date(log.timestamp),
-                        "dd/MM/yy HH:mm",
-                      )
-                    : "---",
-                  style: "tableCellTiny",
-                },
-                {
-                  text: log.responsible || "---",
-                  style: "tableCellTiny",
-                },
-                {
-                  text: log.observation,
-                  style: "tableCellTiny",
-                },
-              ],
-            })),
-        )
-        .sort((a, b) => b.timestamp - a.timestamp)
-        .map((item) => item.row);
-
+      // Renderização dinâmica da tabela de ganhos esperados tangíveis
       const renderGainsTable = (gains: GainsStructure | undefined) => {
         if (!gains || !gains.tangible || gains.tangible.length === 0) {
           return {
@@ -818,6 +790,228 @@ export default function PDCAEditor({
         };
       };
 
+      // Mapeamento dinâmico para o título explicativo da Causa Raiz de acordo com a aba PLAN
+      const rcaTitleMap: Record<string, string> = {
+        "5whys": "02. ANÁLISE DE CAUSA RAIZ (5 PORQUÊS)",
+        "list": "02. ANÁLISE DE CAUSA RAIZ (LISTA DE CAUSAS)",
+        "ishikawa": "02. ANÁLISE DE CAUSA RAIZ (ISHIKAWA)",
+      };
+      
+      const rcaType = activeCycle.plan.rootCauseAnalysis.type;
+      const rcaTitle = rcaTitleMap[rcaType] || "02. ANÁLISE DE CAUSA RAIZ";
+
+      // Função reativa interna que gera o conteúdo estrutural adequado para cada tipo de causa raiz
+      const renderRootCauseContent = () => {
+        if (rcaType === "5whys") {
+          return {
+            table: {
+              widths: [100, "*"],
+              body: [
+                [
+                  { text: "NÍVEL", style: "tableHeader" },
+                  {
+                    text: "RESPOSTA / CAUSA IDENTIFICADA",
+                    style: "tableHeader",
+                  },
+                ],
+                ...Array.from({ length: 5 }).map((_, i) => {
+                  const entry = activeCycle.plan.rootCauseAnalysis.entries[i];
+                  return [
+                    {
+                      text: `${i + 1}º Por quê`,
+                      style: "tableCell",
+                      bold: true,
+                      alignment: "center",
+                    },
+                    { text: entry?.text || "---", style: "tableCell" },
+                  ];
+                }),
+              ],
+            },
+            layout: {
+              hLineWidth: () => 1,
+              vLineWidth: () => 1,
+              hLineColor: () => "#D3D3D3",
+              vLineColor: () => "#D3D3D3",
+              paddingLeft: () => 10,
+              paddingRight: () => 10,
+              paddingTop: () => 8,
+              paddingBottom: () => 8,
+            },
+            margin: [0, 5, 0, 24],
+          };
+        } else if (rcaType === "list") {
+          const listEntries = activeCycle.plan.rootCauseAnalysis.entries || [];
+          return {
+            table: {
+              widths: ["*"],
+              body: [
+                [
+                  { text: "CAUSAS IDENTIFICADAS (LISTA DE CAUSAS)", style: "tableHeader" }
+                ],
+                ...(listEntries.length > 0 
+                  ? listEntries.map((e, idx) => [
+                      { text: `${idx + 1}. ${e.text || "---"}`, style: "tableCell" }
+                    ])
+                  : [
+                      [{ text: "Nenhuma causa registrada.", style: "tableCell", italic: true }]
+                    ])
+              ],
+            },
+            layout: {
+              hLineWidth: () => 1,
+              vLineWidth: () => 1,
+              hLineColor: () => "#D3D3D3",
+              vLineColor: () => "#D3D3D3",
+              paddingLeft: () => 10,
+              paddingRight: () => 10,
+              paddingTop: () => 8,
+              paddingBottom: () => 8,
+            },
+            margin: [0, 5, 0, 24],
+          };
+        } else if (rcaType === "ishikawa") {
+          const ishikawaCategories = activeCycle.plan.rootCauseAnalysis.ishikawa || ishikawaDefaultCategories;
+          return {
+            table: {
+              widths: [120, "*"],
+              body: [
+                [
+                  { text: "CATEGORIA 6M", style: "tableHeader" },
+                  { text: "CAUSAS INDIVIDUALIZADAS", style: "tableHeader" }
+                ],
+                ...ishikawaCategories.map((cat) => [
+                  { text: cat.name, style: "tableCell", bold: true },
+                  { 
+                    text: cat.entries && cat.entries.length > 0 
+                      ? cat.entries.map((e, idx) => `${idx + 1}. ${e.text}`).join("\n") 
+                      : "Nenhuma causa analisada nesta categoria.", 
+                    style: "tableCell" 
+                  }
+                ])
+              ],
+            },
+            layout: {
+              hLineWidth: () => 1,
+              vLineWidth: () => 1,
+              hLineColor: () => "#D3D3D3",
+              vLineColor: () => "#D3D3D3",
+              paddingLeft: () => 10,
+              paddingRight: () => 10,
+              paddingTop: () => 8,
+              paddingBottom: () => 8,
+            },
+            margin: [0, 5, 0, 24],
+          };
+        }
+        
+        return { text: "Método de causa raiz não estruturado ou sem preenchimento.", italic: true, style: "bodyTextSmall" };
+      };
+
+      // Agrupa os planos de ação ativamente com seu histórico correspondente de forma isolada e estruturada para a Fase DO
+      const planGroupsContents = mappedActions.map((action, idx) => {
+        const actionLogs = (action.executionLogs || [])
+          .filter((log) => log.observation && log.observation.trim() !== "")
+          .map((log) => [
+            {
+              text: log.timestamp ? format(new Date(log.timestamp), "dd/MM/yy HH:mm") : "---",
+              style: "tableCellTiny",
+            },
+            {
+              text: log.responsible || "---",
+              style: "tableCellTiny",
+            },
+            {
+              text: log.observation || "---",
+              style: "tableCellTiny",
+            }
+          ]);
+
+        return {
+          stack: [
+            {
+              text: `PLANO ${idx + 1}: ${action.what || "Sem descrição"}`,
+              fontSize: 9,
+              bold: true,
+              color: "#003489",
+              margin: [0, 10, 0, 4]
+            },
+            {
+              table: {
+                widths: ["15%", "15%", "14%", "14%", "14%", "14%", "14%"],
+                body: [
+                  [
+                    { text: "O QUÊ", style: "tableHeaderTiny" },
+                    { text: "POR QUÊ", style: "tableHeaderTiny" },
+                    { text: "ONDE", style: "tableHeaderTiny" },
+                    { text: "QUANDO", style: "tableHeaderTiny" },
+                    { text: "QUEM", style: "tableHeaderTiny" },
+                    { text: "COMO", style: "tableHeaderTiny" },
+                    { text: "QUANTO", style: "tableHeaderTiny" }
+                  ],
+                  [
+                    { text: action.what || "---", style: "tableCellTiny" },
+                    { text: action.why || "---", style: "tableCellTiny" },
+                    { text: action.where || "---", style: "tableCellTiny" },
+                    { text: action.when || "---", style: "tableCellTiny" },
+                    { text: action.who || "---", style: "tableCellTiny" },
+                    { text: action.how || "---", style: "tableCellTiny" },
+                    { text: action.howMuch || "---", style: "tableCellTiny" }
+                  ]
+                ]
+              },
+              margin: [0, 2, 0, 4]
+            },
+            {
+              table: {
+                widths: ["50%", "50%"],
+                body: [
+                  [
+                    { text: `INÍCIO: ${action.startDate ? format(new Date(action.startDate), "dd/MM/yyyy") : "---"}`, style: "tableCellTiny", alignment: "left", bold: true },
+                    { text: `STATUS ATUAL: ${action.displayStatus}`, style: "tableCellTiny", alignment: "right", bold: true, color: "#003489" }
+                  ]
+                ]
+              },
+              layout: "noBorders",
+              margin: [0, 0, 0, 6]
+            },
+            {
+              text: "HISTÓRICO DO PLANO (EXECUÇÃO):",
+              fontSize: 7,
+              bold: true,
+              color: "#64748b",
+              margin: [0, 4, 0, 2]
+            },
+            {
+              table: {
+                headerRows: 1,
+                widths: ["15%", "15%", "70%"],
+                body: [
+                  [
+                    { text: "DATA/HORA", style: "tableHeaderTiny" },
+                    { text: "USUÁRIO", style: "tableHeaderTiny" },
+                    { text: "EVOLUÇÃO DO PLANO", style: "tableHeaderTiny" }
+                  ],
+                  ...(actionLogs.length > 0 
+                    ? actionLogs 
+                    : [
+                        [
+                          { text: "Nenhum histórico registrado com observações para esta ação.", colSpan: 3, style: "tableCellTiny", italic: true },
+                          {},
+                          {}
+                        ]
+                      ])
+                ]
+              },
+              layout: "lightHorizontalLines",
+              margin: [0, 0, 0, 16]
+            }
+          ],
+          unbreakable: true // Garante que as tabelas de um plano fiquem agrupadas sem quebra indevida de página
+        };
+      });
+
+      // Definição da estrutura completa do documento PDF com sua paginação obrigatória de 5 páginas
       const docDefinition: any = {
         pageSize: "A4",
         pageMargins: [40, 40, 40, 60],
@@ -863,6 +1057,7 @@ export default function PDCAEditor({
           };
         },
         content: [
+          // ============================== PÁGINA 1 ==============================
           // TOPO: LOGO (Regra: width 220px, height auto, no clipping)
           {
             image: "logo",
@@ -870,7 +1065,7 @@ export default function PDCAEditor({
             alignment: "left",
             margin: [0, 0, 0, 24],
           },
-          // CABEÇALHO PRINCIPAL
+          // CABEÇALHO PRINCIPAL DO RELATÓRIO
           {
             text: "RELATÓRIO TÉCNICO DE MELHORIA",
             style: "mainTitle",
@@ -987,14 +1182,14 @@ export default function PDCAEditor({
             margin: [0, 0, 0, 24],
           },
 
-          // SEÇÃO 02: ANÁLISE DE CAUSA RAIZ (5 PORQUÊS)
+          // SEÇÃO 02: ANÁLISE DE CAUSA RAIZ (MÉTODO DINÂMICO)
           {
             table: {
               widths: ["*"],
               body: [
                 [
                   {
-                    text: "02. ANÁLISE DE CAUSA RAIZ (5 PORQUÊS)",
+                    text: rcaTitle,
                     style: "sectionHeader",
                   },
                 ],
@@ -1003,48 +1198,44 @@ export default function PDCAEditor({
             layout: "noBorders",
             margin: [0, 10, 0, 5],
           },
+          renderRootCauseContent(),
+          // Bloco que exibe dinamicamente a causa raiz identificada no PDCA, independente do método utilizado
           {
-            table: {
-              widths: [100, "*"],
-              body: [
-                [
-                  { text: "NÍVEL", style: "tableHeader" },
-                  {
-                    text: "RESPOSTA / CAUSA IDENTIFICADA",
-                    style: "tableHeader",
-                  },
-                ],
-                ...Array.from({ length: 5 }).map((_, i) => {
-                  const entry =
-                    activeCycle.plan.rootCauseAnalysis.type === "5whys"
-                      ? activeCycle.plan.rootCauseAnalysis.entries[i]
-                      : null;
-                  return [
-                    {
-                      text: `${i + 1}º Por quê`,
-                      style: "tableCell",
-                      bold: true,
-                      alignment: "center",
-                    },
-                    { text: entry?.text || "---", style: "tableCell" },
-                  ];
-                }),
-              ],
-            },
-            layout: {
-              hLineWidth: () => 1,
-              vLineWidth: () => 1,
-              hLineColor: () => "#D3D3D3",
-              vLineColor: () => "#D3D3D3",
-              paddingLeft: () => 10,
-              paddingRight: () => 10,
-              paddingTop: () => 8,
-              paddingBottom: () => 8,
-            },
-            margin: [0, 5, 0, 24],
+            stack: [
+              {
+                text: "CAUSA RAIZ IDENTIFICADA",
+                style: "fieldLabel",
+                margin: [0, 8, 0, 4],
+              },
+              {
+                table: {
+                  widths: ["*"],
+                  body: [
+                    [
+                      {
+                        text:
+                          activeCycle.plan.rootCauseAnalysis.identifiedRootCause ||
+                          "Não informada.",
+                        style: "bodyHighlight",
+                        margin: [10, 8, 10, 8],
+                      },
+                    ],
+                  ],
+                },
+                layout: {
+                  fillColor: () => "#f9fafb",
+                  hLineWidth: () => 1,
+                  vLineWidth: () => 1,
+                  hLineColor: () => "#D3D3D3",
+                  vLineColor: () => "#D3D3D3",
+                },
+              },
+            ],
+            margin: [0, 0, 0, 24],
           },
 
-          // SEÇÃO 03: PLANO DE AÇÃO (5W2H)
+          // ============================== PÁGINA 2 ==============================
+          // SEÇÃO 03: PLANO DE AÇÃO (5W2H) – COM MARCADOR DE PÁGINA ANTECEDENTE
           {
             table: {
               widths: ["*"],
@@ -1053,6 +1244,7 @@ export default function PDCAEditor({
               ],
             },
             layout: "noBorders",
+            pageBreak: "before",
             margin: [0, 10, 0, 5],
           },
           {
@@ -1099,12 +1291,12 @@ export default function PDCAEditor({
             unbreakable: true,
           },
 
-          // SEÇÃO 04: FASE DO – EXECUÇÃO
+          // SEÇÃO 04: IMPACTO ATUAL DO PROBLEMA
           {
             table: {
               widths: ["*"],
               body: [
-                [{ text: "04. FASE DO – EXECUÇÃO", style: "sectionHeader" }],
+                [{ text: "04. IMPACTO ATUAL DO PROBLEMA", style: "sectionHeader" }],
               ],
             },
             layout: "noBorders",
@@ -1113,7 +1305,85 @@ export default function PDCAEditor({
           {
             stack: [
               {
-                text: "RESUMO DA EXECUÇÃO",
+                columns: [
+                  {
+                    width: "40%",
+                    stack: [
+                      { text: "VALOR DO IMPACTO ATUAL", style: "fieldLabel", margin: [0, 0, 0, 4] },
+                      { 
+                        text: activeCycle.plan.impact.value 
+                          ? `R$ ${parseFloat(activeCycle.plan.impact.value.toString()).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` 
+                          : "Não informado", 
+                        style: "bodyHighlight", 
+                        bold: true, 
+                        color: "#DC2626" 
+                      }
+                    ]
+                  },
+                  {
+                    width: "30%",
+                    stack: [
+                      { text: "META DE REDUÇÃO (%)", style: "fieldLabel", margin: [0, 0, 0, 4] },
+                      { text: activeCycle.plan.impact.goal ? `${activeCycle.plan.impact.goal}%` : "0%", style: "bodyHighlight", bold: true, color: "#059669" }
+                    ]
+                  },
+                  {
+                    width: "30%",
+                    stack: [
+                      { text: "GANHOS ESPERADOS", style: "fieldLabel", margin: [0, 0, 0, 4] },
+                      { text: activeCycle.plan.impact.expectedGains?.tangible && activeCycle.plan.impact.expectedGains.tangible.length > 0 ? `${activeCycle.plan.impact.expectedGains.tangible.length} ganho(s) mapeado(s)` : "Não mapeado", style: "bodyHighlight" }
+                    ]
+                  }
+                ],
+                margin: [0, 0, 0, 12]
+              },
+              {
+                text: "DESCRIÇÃO DO IMPACTO / CONTEXTUALIZAÇÃO",
+                style: "fieldLabel",
+                margin: [0, 6, 0, 4]
+              },
+              {
+                table: {
+                  widths: ["*"],
+                  body: [
+                    [
+                      {
+                        text: activeCycle.plan.impact.description || "Descrição detalhada do impacto atual não informada.",
+                        style: "bodyTextSmall",
+                        margin: [8, 6, 8, 5]
+                      }
+                    ]
+                  ],
+                },
+                layout: {
+                  fillColor: () => "#f9fafb",
+                  hLineWidth: () => 1,
+                  vLineWidth: () => 1,
+                  hLineColor: () => "#D3D3D3",
+                  vLineColor: () => "#D3D3D3",
+                }
+              }
+            ],
+            margin: [0, 5, 0, 24]
+          },
+
+          // ============================== PÁGINA 3 ==============================
+          // SEÇÃO 05: FASE DO – EXECUÇÃO (COM QUEBRA DE PÁGINA E AGRUPADO POR PLANO SEM EVIDÊNCIAS)
+          {
+            table: {
+              widths: ["*"],
+              body: [
+                [{ text: "05. FASE DO – EXECUÇÃO", style: "sectionHeader" }],
+              ],
+            },
+            layout: "noBorders",
+            pageBreak: "before",
+            margin: [0, 10, 0, 5],
+          },
+          {
+            stack: [
+              {
+                text: "RESUMO DA EXECUÇÃO DO PLANO",
                 style: "fieldLabel",
                 margin: [0, 8, 0, 4],
               },
@@ -1153,121 +1423,31 @@ export default function PDCAEditor({
                 margin: [0, 0, 0, 12],
               },
               {
-                text: "LISTA DE AÇÕES EXECUTADAS",
+                text: "ORGANIZAÇÃO AGRUPADA DOS PLANOS DE AÇÃO E HISTÓRICO",
                 style: "fieldLabel",
-                margin: [0, 8, 0, 4],
+                margin: [0, 12, 0, 2],
               },
-              {
-                table: {
-                  headerRows: 1,
-                  widths: ["35%", "20%", "15%", "15%", "15%"],
-                  body: [
-                    [
-                      { text: "AÇÃO", style: "tableHeaderTiny" },
-                      { text: "RESPONSÁVEL", style: "tableHeaderTiny" },
-                      { text: "INÍCIO", style: "tableHeaderTiny" },
-                      { text: "TÉRMINO", style: "tableHeaderTiny" },
-                      { text: "STATUS", style: "tableHeaderTiny" },
-                    ],
-                    ...mappedActions.map((action) => [
-                      { text: action.what || "---", style: "tableCellTiny" },
-                      { text: action.who || "---", style: "tableCellTiny" },
-                      {
-                        text: action.startDate
-                          ? format(new Date(action.startDate), "dd/MM/yyyy")
-                          : "---",
-                        style: "tableCellTiny",
-                      },
-                      {
-                        text: action.endDate
-                          ? format(new Date(action.endDate), "dd/MM/yyyy")
-                          : "---",
-                        style: "tableCellTiny",
-                      },
-                      {
-                        text: action.displayStatus,
-                        style: "tableCellTiny",
-                        bold: true,
-                      },
-                    ]),
-                  ],
-                },
-                layout: "lightHorizontalLines",
-              },
-              {
-                text: "EVIDÊNCIAS / REGISTROS",
-                style: "fieldLabel",
-                margin: [0, 12, 0, 4],
-              },
-              {
-                ul: (activeCycle.plan.actionPlan || [])
-                  .filter(
-                    (item) =>
-                      item.status !== "Cancelado" &&
-                      item.ativo !== false &&
-                      item.evidence,
-                  )
-                  .map((item) => ({
-                    text: `${item.what}: ${item.evidence}`,
-                    fontSize: 8,
-                    margin: [0, 2],
-                  })),
-                margin: [10, 0, 0, 12],
-              },
-              {
-                text: "HISTÓRICO DE ATUALIZAÇÕES",
-                style: "fieldLabel",
-                margin: [0, 8, 0, 4],
-              },
-              {
-                table: {
-                  headerRows: 1,
-                  widths: ["15%", "15%", "70%"],
-                  body: [
-                    [
-                      { text: "DATA/HORA", style: "tableHeaderTiny" },
-                      { text: "USUÁRIO", style: "tableHeaderTiny" },
-                      {
-                        text: "DESCRIÇÃO DA ALTERAÇÃO",
-                        style: "tableHeaderTiny",
-                      },
-                    ],
-                    ...(userLogsRows.length > 0
-                      ? userLogsRows
-                      : [
-                          [
-                            {
-                              text: "Nenhum histórico de atualização com observações registrado.",
-                              colSpan: 3,
-                              style: "tableCellTiny",
-                              italic: true,
-                            },
-                            {},
-                            {},
-                          ],
-                        ]),
-                  ],
-                },
-                layout: "lightHorizontalLines",
-              },
+              ...planGroupsContents
             ],
             margin: [0, 0, 0, 20],
           },
 
-          // SEÇÃO 05: FASE CHECK – VERIFICAÇÃO
+          // ============================== PÁGINA 4 ==============================
+          // SEÇÃO 06: FASE CHECK – VERIFICAÇÃO – COM MARCADOR DE PÁGINA ANTECEDENTE
           {
             table: {
               widths: ["*"],
               body: [
                 [
                   {
-                    text: "05. FASE CHECK – VERIFICAÇÃO",
+                    text: "06. FASE CHECK – VERIFICAÇÃO",
                     style: "sectionHeader",
                   },
                 ],
               ],
             },
             layout: "noBorders",
+            pageBreak: "before",
             margin: [0, 10, 0, 5],
           },
           {
@@ -1450,20 +1630,22 @@ export default function PDCAEditor({
             margin: [0, 0, 0, 20],
           },
 
-          // SEÇÃO 06: PADRONIZAÇÃO E ENCERRAMENTO (ACT)
+          // ============================== PÁGINA 5 ==============================
+          // SEÇÃO 07: PADRONIZAÇÃO E ENCERRAMENTO (ACT) – COM MARCADOR DE PÁGINA ANTECEDENTE
           {
             table: {
               widths: ["*"],
               body: [
                 [
                   {
-                    text: "06. PADRONIZAÇÃO E ENCERRAMENTO (ACT)",
+                    text: "07. PADRONIZAÇÃO E ENCERRAMENTO (ACT)",
                     style: "sectionHeader",
                   },
                 ],
               ],
             },
             layout: "noBorders",
+            pageBreak: "before",
             margin: [0, 10, 0, 5],
           },
           {

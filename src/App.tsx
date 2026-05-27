@@ -2352,15 +2352,6 @@ function ScopeTab({
           </div>
         </div>
 
-        {/* Descrição Geral ESG */}
-        <FormField 
-          label="ESG (Descrição Geral)" 
-          value={project.scope.esgDescricao || ''} 
-          type="textarea"
-          placeholder="Forneça uma síntese descritiva de como o projeto impacta o ecossistema ESG corporativo..."
-          onChange={(v) => updateScope('esgDescricao', v)}
-        />
-
         <div className="border-t border-slate-100 pt-6 mt-6 space-y-6">
           <h4 className="text-sm font-extrabold text-slate-700 tracking-wider uppercase ml-1">Análises ESG Detalhadas por Área</h4>
           <div className="grid grid-cols-1 gap-8">

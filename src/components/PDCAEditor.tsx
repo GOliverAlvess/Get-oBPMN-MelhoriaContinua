@@ -2199,35 +2199,19 @@ export default function PDCAEditor({
             />
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
-                How Much (Custo)
-              </label>
-              <input
-                value={item.howMuch || ""}
-                placeholder="Ex: R$ 0,00"
-                onChange={(e) =>
-                  updateActionPlan(item.id, { howMuch: e.target.value }, true)
-                }
-                onBlur={() => updateActionPlan(item.id, {})}
-                className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
-                Setor
-              </label>
-              <input
-                value={item.sector || ""}
-                placeholder="Área..."
-                onChange={(e) =>
-                  updateActionPlan(item.id, { sector: e.target.value }, true)
-                }
-                onBlur={() => updateActionPlan(item.id, {})}
-                className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
-              />
-            </div>
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
+              How Much (Custo)
+            </label>
+            <input
+              value={item.howMuch || ""}
+              placeholder="Ex: R$ 0,00"
+              onChange={(e) =>
+                updateActionPlan(item.id, { howMuch: e.target.value }, true)
+              }
+              onBlur={() => updateActionPlan(item.id, {})}
+              className="w-full p-4 bg-white border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 shadow-sm"
+            />
           </div>
         </div>
       </div>
@@ -4058,8 +4042,8 @@ export default function PDCAEditor({
                                           />
                                         </div>
 
-                                        {/* Row 4: How much, Sector */}
-                                        <div className="md:col-span-3 space-y-1 min-w-0">
+                                        {/* Row 4: How much (Custo) */}
+                                        <div className="md:col-span-6 space-y-1 min-w-0">
                                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
                                             How much (Custo)
                                           </label>
@@ -4070,26 +4054,6 @@ export default function PDCAEditor({
                                               updateActionPlan(
                                                 item.id,
                                                 { howMuch: e.target.value },
-                                                true,
-                                              )
-                                            }
-                                            onBlur={() =>
-                                              updateActionPlan(item.id, {})
-                                            }
-                                            className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700 box-border"
-                                          />
-                                        </div>
-                                        <div className="md:col-span-3 space-y-1 min-w-0">
-                                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">
-                                            Setor
-                                          </label>
-                                          <input
-                                            value={item.sector || ""}
-                                            placeholder="Área responsável"
-                                            onChange={(e) =>
-                                              updateActionPlan(
-                                                item.id,
-                                                { sector: e.target.value },
                                                 true,
                                               )
                                             }
@@ -5773,21 +5737,13 @@ export default function PDCAEditor({
                                         status={item.status as any}
                                       />
                                     </div>
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-[10px]">
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-[10px]">
                                       <div>
                                         <p className="font-black text-slate-400 uppercase">
                                           Responsável
                                         </p>
                                         <p className="font-bold text-slate-600">
                                           {item.who}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <p className="font-black text-slate-400 uppercase">
-                                          Setor
-                                        </p>
-                                        <p className="font-bold text-slate-600">
-                                          {item.sector || "N/A"}
                                         </p>
                                       </div>
                                       <div>
@@ -6153,7 +6109,6 @@ export default function PDCAEditor({
       where: "",
       when: "",
       who: "",
-      sector: "",
       how: "",
       howMuch: "",
       status: "Pendente",
@@ -6400,10 +6355,12 @@ function PhaseTab({
 function SectionHeader({ number, title }: { number: string; title: string }) {
   return (
     <div className="flex items-center gap-4">
-      <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black shadow-lg">
-        {number}
+      <div className="session-step w-10 h-10 rounded-xl flex items-center justify-center font-black shadow-lg">
+        <span className="session-step-number text-white">
+          {number}
+        </span>
       </div>
-      <h4 className="text-xl font-black text-slate-800 tracking-tight">
+      <h4 className="text-xl font-black text-slate-800 dark:text-slate-100 tracking-tight">
         {title}
       </h4>
     </div>

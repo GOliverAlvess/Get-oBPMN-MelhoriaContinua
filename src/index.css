@@ -385,6 +385,25 @@
   .recharts-tooltip-item {
     color: #ffffff !important;
   }
+
+  /* Style overrides for session step indicators in dark mode */
+  .session-step {
+    background-color: #1f2937 !important;
+    border: 1px solid #374151 !important;
+  }
+  .session-step-number {
+    color: #ffffff !important;
+    font-weight: 600 !important;
+  }
+}
+
+.session-step {
+  background-color: #0f172a;
+  border: 1px solid transparent;
+}
+.session-step-number {
+  color: #ffffff;
+  font-weight: 900;
 }
 
 @layer base {

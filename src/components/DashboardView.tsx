@@ -42,6 +42,7 @@ import { cn } from '../lib/utils';
 import { calculateProjectProgress } from '../lib/projectUtils';
 import ActionsDashboardView from './ActionsDashboardView';
 import FilterDropdown from './FilterDropdown';
+import DetailedOverviewTab from './DetailedOverviewTab';
 
 interface DashboardViewProps {
   projects: Project[];
@@ -52,7 +53,7 @@ interface DashboardViewProps {
 }
 
 export default function DashboardView({ projects, users, actions, onProjectClick }: DashboardViewProps) {
-  const [activeTab, setActiveTab] = useState<'projects' | 'actions'>('projects');
+  const [activeTab, setActiveTab] = useState<'projects' | 'actions' | 'overview'>('projects');
   const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<ProjectStatus[]>([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
@@ -248,6 +249,15 @@ export default function DashboardView({ projects, users, actions, onProjectClick
               )}
             >
               Ações
+            </button>
+            <button 
+              onClick={() => setActiveTab('overview')}
+              className={cn(
+                "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
+                activeTab === 'overview' ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-50"
+              )}
+            >
+              Visão geral detalhada
             </button>
           </div>
           <div className="bg-theme-card px-4 py-2 rounded-xl border border-theme-border shadow-sm flex items-center gap-2 hidden md:flex">
@@ -588,7 +598,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
               </div>
             </div>
           </motion.div>
-        ) : (
+        ) : activeTab === 'actions' ? (
           <motion.div
             key="actions-tab"
             initial={{ opacity: 0, x: 20 }}
@@ -596,6 +606,15 @@ export default function DashboardView({ projects, users, actions, onProjectClick
             exit={{ opacity: 0, x: -20 }}
           >
             <ActionsDashboardView actions={actions} users={users} projects={projects} />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="overview-tab"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+          >
+            <DetailedOverviewTab projects={projects} users={users} onProjectClick={onProjectClick} />
           </motion.div>
         )}
       </AnimatePresence>

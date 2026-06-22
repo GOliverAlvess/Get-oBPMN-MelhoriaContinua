@@ -115,6 +115,7 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
   const chartsData = useMemo(() => {
     // 1. Distribuição por status_visao_geral
     const statusesList = [
+      'Backlog',
       'Planejamento', 
       'Em mapeamento', 
       'Análise do problema', 
@@ -129,6 +130,7 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
     }, {} as Record<string, number>);
 
     const statusColors: Record<string, string> = {
+      'Backlog': '#94a3b8', // Slate Gray
       'Planejamento': '#eab308', // Gold
       'Em mapeamento': '#6366f1', // Indigo
       'Análise do problema': '#3b82f6', // Light Blue
@@ -146,6 +148,7 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
 
     // 2. Distribuição por responsável
     const respCounts = filteredData.reduce((acc, curr) => {
+      if (curr.status_visao_geral === 'Backlog') return acc;
       acc[curr.responsavel_atual] = (acc[curr.responsavel_atual] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
@@ -609,6 +612,25 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
                     outerRadius={85}
                     paddingAngle={3}
                     dataKey="value"
+                    label={({ percent, cx, cy, midAngle, outerRadius }) => {
+                      if (!percent || percent < 0.01) return null;
+                      const RADIAN = Math.PI / 180;
+                      const radius = outerRadius + 14;
+                      const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                      const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                      return (
+                        <text
+                          x={x}
+                          y={y}
+                          fill="#94a3b8"
+                          textAnchor={x > cx ? 'start' : 'end'}
+                          dominantBaseline="central"
+                          className="text-[11px] font-bold fill-slate-500 dark:fill-slate-300"
+                        >
+                          {`${(percent * 100).toFixed(0)}%`}
+                        </text>
+                      );
+                    }}
                   >
                     {chartsData.statusChart.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />

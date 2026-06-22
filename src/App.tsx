@@ -534,12 +534,12 @@ export default function App() {
       description: data.description,
       createdAt: new Date().toISOString(),
       progress: 0,
-      status: 'Planejamento',
+      status: data.assignedTo === 'backlog' ? 'Backlog' : 'Planejamento',
       priority: data.priority,
       assignedTo: data.assignedTo,
       scope: {
         title: data.name,
-        responsible: assignedUser?.name || 'Admin',
+        responsible: data.assignedTo === 'backlog' ? 'Não atribuído' : (assignedUser?.name || 'Admin'),
         problemDescription: '',
         measurableObjective: '',
         involvedSectors: [],
@@ -1037,7 +1037,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
   const [searchTerm, setSearchTerm] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  const statuses: ProjectStatus[] = ['Planejamento', 'Em andamento', 'Em melhoria', 'Concluído'];
+  const statuses: ProjectStatus[] = ['Backlog', 'Planejamento', 'Em andamento', 'Em melhoria', 'Concluído'];
 
   const toggleStatus = (status: ProjectStatus) => {
     setVisibleStatuses(prev => 
@@ -1286,7 +1286,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
           const colId = typeof col === 'string' ? col : col.id;
           const colTitle = typeof col === 'string' ? col : col.name;
           const colProjects = filteredProjects.filter(p => 
-            groupBy === 'status' ? p.status === colId : p.assignedTo === colId
+            groupBy === 'status' ? p.status === colId : (p.assignedTo === colId && p.status !== 'Backlog')
           );
 
           return (
@@ -1296,6 +1296,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
                   {groupBy === 'status' ? (
                     <div className={cn(
                       "w-3 h-3 rounded-full",
+                      colId === 'Backlog' ? "bg-slate-400" :
                       colId === 'Planejamento' ? "bg-amber-400" :
                       colId === 'Em andamento' ? "bg-blue-400" :
                       colId === 'Em melhoria' ? "bg-indigo-400" : "bg-emerald-400"
@@ -1329,16 +1330,6 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
                     <p className="text-[10px] font-bold uppercase tracking-widest">Vazio</p>
                   </div>
                 )}
-
-                {(groupBy === 'status' && colId === 'Planejamento') && (
-                  <button 
-                    onClick={onCreateProject}
-                    className="w-full py-3 border-2 border-dashed border-slate-300 dark:border-slate-800 rounded-xl text-slate-400 dark:text-slate-600 hover:border-indigo-300 dark:hover:border-indigo-700 hover:text-indigo-400 dark:hover:text-indigo-400 transition-all flex items-center justify-center gap-2 group"
-                  >
-                    <Plus size={18} className="group-hover:scale-110 transition-transform" />
-                    <span className="text-sm font-medium">Adicionar Projeto</span>
-                  </button>
-                )}
               </div>
             </div>
           );
@@ -1365,7 +1356,8 @@ function ProjectCard({ project, users, onClick, onDelete }: { project: Project, 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const statusColors = {
+   const statusColors = {
+    'Backlog': 'bg-slate-100 dark:bg-slate-500/10 text-slate-700 dark:text-slate-400 border-slate-200 dark:border-slate-500/20',
     'Planejamento': 'bg-amber-100 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20',
     'Em andamento': 'bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200 dark:border-blue-500/20',
     'Em melhoria': 'bg-indigo-100 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-200 dark:border-indigo-500/20',
@@ -1889,11 +1881,21 @@ function ScopeTab({
   };
 
   const handleReassign = (userId: string) => {
+    if (userId === 'backlog') {
+      setProjects({
+        ...project,
+        assignedTo: 'backlog',
+        status: 'Backlog',
+        scope: { ...project.scope, responsible: 'Não atribuído' }
+      });
+      return;
+    }
     const selectedUser = users.find(u => u.id === userId);
     if (selectedUser) {
       setProjects({ 
         ...project, 
         assignedTo: userId,
+        status: project.status === 'Backlog' ? 'Planejamento' : project.status,
         scope: { ...project.scope, responsible: selectedUser.name }
       });
     }
@@ -1973,6 +1975,7 @@ function ScopeTab({
                 onChange={(e) => handleReassign(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3.5 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all font-medium text-sm"
               >
+                <option value="backlog">Backlog</option>
                 {users.map(u => (
                   <option key={u.id} value={u.id}>{u.name}</option>
                 ))}
@@ -2919,6 +2922,7 @@ function CreateProjectModal({ isOpen, onClose, onCreate, users }: {
                 onChange={(e) => setAssignedTo(e.target.value)}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
               >
+                <option value="backlog">Backlog</option>
                 {users.map(u => (
                   <option key={u.id} value={u.id}>{u.name}</option>
                 ))}

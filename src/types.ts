@@ -1,5 +1,5 @@
 // Tipo que define os status em que um projeto pode se encontrar ao longo do ciclo de vida
-export type ProjectStatus = 'Planejamento' | 'Em andamento' | 'Em melhoria' | 'Concluído';
+export type ProjectStatus = 'Backlog' | 'Planejamento' | 'Em andamento' | 'Em melhoria' | 'Concluído';
 
 // Tipo que define os níveis de prioridade atribuídos a projetos ou subtarefas
 export type ProjectPriority = 'Baixa' | 'Média' | 'Alta';

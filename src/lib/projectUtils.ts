@@ -1,6 +1,9 @@
 import { Project, ProjectStatus } from '../types';
 
 export const calculateProjectStatus = (project: Project): ProjectStatus => {
+  if (project.status === 'Backlog' || project.assignedTo === 'backlog') {
+    return 'Backlog';
+  }
   const subtasks = project.subtasks || [];
   if (subtasks.length === 0) {
     const isScopeFilled = 

@@ -7,6 +7,7 @@ export interface ComputedProjectItem {
   name: string;
   subtask_name: string;
   status_visao_geral:
+    | 'Backlog'
     | 'Planejamento'
     | 'Em mapeamento'
     | 'Análise do problema'
@@ -57,7 +58,9 @@ export function computeProjectItems(
 
       // 1. status_visao_geral
       let status_visao_geral: ComputedProjectItem['status_visao_geral'] = 'Planejamento';
-      if (project.status === 'Concluído') {
+      if (project.status === 'Backlog') {
+        status_visao_geral = 'Backlog';
+      } else if (project.status === 'Concluído') {
         status_visao_geral = 'Concluído';
       } else if (project.status === 'Planejamento') {
         status_visao_geral = 'Planejamento';
@@ -78,16 +81,22 @@ export function computeProjectItems(
       const cardAnalystSector = cardAnalyst && cardAnalyst.sector ? cardAnalyst.sector : 'Geral';
 
       const responsavel_atual = cardAnalystName;
-      const setor_atual = cardAnalystSector;
+      let setor_atual = cardAnalystSector;
+      if (status_visao_geral === 'Backlog') {
+        setor_atual = 'Processos';
+      }
 
       // 5. % progress
       let percentual_conclusao = 5;
-      if (status_visao_geral === 'Em mapeamento') percentual_conclusao = 15;
+      if (status_visao_geral === 'Backlog') percentual_conclusao = 0;
+      else if (status_visao_geral === 'Em mapeamento') percentual_conclusao = 15;
       else if (status_visao_geral === 'Concluído') percentual_conclusao = 100;
 
       // 6. nivel_alerta
       let nivel_alerta: ComputedProjectItem['nivel_alerta'] = 'Normal';
-      if (status_visao_geral === 'Concluído') {
+      if (status_visao_geral === 'Backlog') {
+        nivel_alerta = 'Normal';
+      } else if (status_visao_geral === 'Concluído') {
         nivel_alerta = 'Finalizado';
       } else if (tempo_etapa > 30) {
         nivel_alerta = 'Muito crítico';
@@ -124,7 +133,9 @@ export function computeProjectItems(
         const isReportGenerated = latestCycle && (latestCycle.etapaAtual === 'REPORT' || latestCycle.status === 'Concluído');
         const isCardConcluido = project.status === 'Concluído' || subtask.status === 'Concluído';
 
-        if (isCardConcluido || isReportGenerated) {
+        if (project.status === 'Backlog') {
+          status_visao_geral = 'Backlog';
+        } else if (isCardConcluido || isReportGenerated) {
           status_visao_geral = 'Concluído';
         } else if (project.status === 'Planejamento') {
           status_visao_geral = 'Planejamento';
@@ -206,7 +217,10 @@ export function computeProjectItems(
         let responsavel_atual = cardAnalystName;
         let setor_atual = cardAnalystSector;
 
-        if (status_visao_geral === 'Planejamento' || status_visao_geral === 'Em mapeamento') {
+        if (status_visao_geral === 'Backlog') {
+          responsavel_atual = 'Não designado';
+          setor_atual = 'Processos';
+        } else if (status_visao_geral === 'Planejamento' || status_visao_geral === 'Em mapeamento') {
           responsavel_atual = cardAnalystName;
           setor_atual = cardAnalystSector;
         } else if (status_visao_geral === 'Análise do problema') {
@@ -222,6 +236,7 @@ export function computeProjectItems(
 
         let percentual_conclusao = 5;
         switch (status_visao_geral) {
+          case 'Backlog': percentual_conclusao = 0; break;
           case 'Planejamento': percentual_conclusao = 5; break;
           case 'Em mapeamento': percentual_conclusao = 15; break;
           case 'Análise do problema': percentual_conclusao = 30; break;
@@ -232,7 +247,9 @@ export function computeProjectItems(
         }
 
         let nivel_alerta: ComputedProjectItem['nivel_alerta'] = 'Normal';
-        if (status_visao_geral === 'Concluído') {
+        if (status_visao_geral === 'Backlog') {
+          nivel_alerta = 'Normal';
+        } else if (status_visao_geral === 'Concluído') {
           nivel_alerta = 'Finalizado';
         } else if (tempo_etapa > 30) {
           nivel_alerta = 'Muito crítico';

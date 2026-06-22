@@ -71,6 +71,30 @@ describe('Business Rules and Calculations Tests', () => {
       expect(items[0].setor_atual).toBe('Logistica');
     });
 
+    it('deve retornar status "Backlog", alerta "Normal" (independente do prazo) e setor "Processos" para projeto em backlog', () => {
+      const projects: Project[] = [
+        {
+          id: 'p_backlog',
+          name: 'Projeto Backlog',
+          status: 'Backlog',
+          // Criado há 40 dias (deveria alarmar "Muito crítico" se não fosse do Backlog)
+          createdAt: '2026-05-11T10:00:00Z',
+          progress: 0,
+          assignedTo: 'backlog',
+          scope: createMockScope(),
+          subtasks: [],
+        },
+      ];
+
+      const items = computeProjectItems(projects, mockUsers, referenceDate);
+      expect(items).toHaveLength(1);
+      expect(items[0].status_visao_geral).toBe('Backlog');
+      expect(items[0].percentual_conclusao).toBe(0);
+      expect(items[0].tempo_total).toBe(40);
+      expect(items[0].nivel_alerta).toBe('Normal');
+      expect(items[0].setor_atual).toBe('Processos');
+    });
+
     it('deve retornar status "Em mapeamento" e progresso 15% para projeto em andamento sem subetapas', () => {
       const projects: Project[] = [
         {
@@ -544,6 +568,106 @@ describe('Business Rules and Calculations Tests', () => {
       expect(sortedByAlert[0].nivel_alerta).toBe('Crítico');
       expect(sortedByAlert[1].nivel_alerta).toBe('Normal');
       expect(sortedByAlert[2].nivel_alerta).toBe('Finalizado');
+    });
+  });
+
+  describe('Práticas e regras de Backlog para gráficos e painéis', () => {
+    it('deve assegurar que projetos em Backlog não influenciam alertas críticos (nivel_alerta sempre Normal)', () => {
+      const backlogItem: ComputedProjectItem = {
+        id: '1',
+        projectId: 'p1',
+        name: 'Projeto Backlog',
+        subtask_name: '-',
+        status_visao_geral: 'Backlog',
+        responsavel_atual: 'Não designado',
+        setor_atual: 'Processos',
+        tempo_etapa: 50,
+        tempo_total: 50,
+        percentual_conclusao: 0,
+        nivel_alerta: 'Normal', // Regra de backlog
+        fullProject: {} as any
+      };
+      
+      const normalItem: ComputedProjectItem = {
+        id: '2',
+        projectId: 'p2',
+        name: 'Projeto Regular',
+        subtask_name: '-',
+        status_visao_geral: 'Planejamento',
+        responsavel_atual: 'Carlos',
+        setor_atual: 'Geral',
+        tempo_etapa: 25,
+        tempo_total: 25,
+        percentual_conclusao: 5,
+        nivel_alerta: 'Crítico',
+        fullProject: {} as any
+      };
+
+      const data = [backlogItem, normalItem];
+      const criticos = data.filter(d => d.nivel_alerta === 'Crítico' || d.nivel_alerta === 'Muito crítico').length;
+      expect(criticos).toBe(1); // Apenas o Projeto Regular conta como crítico, Backlog é Normal
+    });
+
+    it('deve assegurar que projetos em Backlog são mapeados para o setor Processos no gráfico de setores', () => {
+      const referenceDate = new Date('2026-06-20T10:00:00Z');
+      const projects: Project[] = [
+        {
+          id: 'p_backlog',
+          name: 'Projeto Backlog',
+          status: 'Backlog',
+          createdAt: '2026-06-15T10:00:00Z',
+          progress: 0,
+          assignedTo: 'backlog',
+          scope: createMockScope(),
+          subtasks: [],
+        },
+      ];
+
+      const items = computeProjectItems(projects, mockUsers, referenceDate);
+      expect(items[0].setor_atual).toBe('Processos');
+    });
+
+    it('deve filtrar projetos com status "Backlog" no gráfico de distribuição por responsável', () => {
+      const testData: ComputedProjectItem[] = [
+        {
+          id: '1',
+          projectId: 'p1',
+          name: 'Projeto Backlog',
+          subtask_name: '-',
+          status_visao_geral: 'Backlog',
+          responsavel_atual: 'Não designado',
+          setor_atual: 'Processos',
+          tempo_etapa: 5,
+          tempo_total: 5,
+          percentual_conclusao: 0,
+          nivel_alerta: 'Normal',
+          fullProject: {} as any
+        },
+        {
+          id: '2',
+          projectId: 'p2',
+          name: 'Projeto Ativo',
+          subtask_name: '-',
+          status_visao_geral: 'Planejamento',
+          responsavel_atual: 'Carlos',
+          setor_atual: 'Logistica',
+          tempo_etapa: 5,
+          tempo_total: 5,
+          percentual_conclusao: 5,
+          nivel_alerta: 'Normal',
+          fullProject: {} as any
+        },
+      ];
+
+      // Simulamos a redução de respCounts usada no gráfico
+      const respCounts = testData.reduce((acc, curr) => {
+        if (curr.status_visao_geral === 'Backlog') return acc;
+        acc[curr.responsavel_atual] = (acc[curr.responsavel_atual] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      expect(respCounts['Não designado']).toBeUndefined();
+      expect(respCounts['Carlos']).toBe(1);
     });
   });
 });

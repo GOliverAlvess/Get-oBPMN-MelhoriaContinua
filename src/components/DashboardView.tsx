@@ -73,9 +73,11 @@ export default function DashboardView({ projects, users, actions, onProjectClick
     const inImprovement = filteredProjects.filter(p => p.status === 'Em melhoria').length;
     const inProgress = filteredProjects.filter(p => p.status === 'Em andamento').length;
     const planning = filteredProjects.filter(p => p.status === 'Planejamento').length;
+    const backlog = filteredProjects.filter(p => p.status === 'Backlog').length;
 
     // Process Status Data for Pie Chart
     const processStatusData = [
+      { name: 'Backlog', value: backlog, color: '#64748b' }, // Slate
       { name: 'Planejamento', value: planning, color: '#EABE41' }, // Brand Gold
       { name: 'Em andamento', value: inProgress, color: '#3b82f6' }, // Brighter Blue for Dark Mode
       { name: 'Em melhoria', value: inImprovement, color: '#818cf8' }, // Lighter Indigo

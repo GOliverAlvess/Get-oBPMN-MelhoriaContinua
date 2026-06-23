@@ -1,4 +1,4 @@
-import { Project, User, Subtask } from '../types';
+import { Project, User, Subtask, OperationalAction } from '../types';
 
 export interface ComputedProjectItem {
   id: string;
@@ -337,4 +337,56 @@ export function sortComputedData(
   });
   return data;
 }
+
+export type ActionDeadlineAlert = 
+  | 'Dentro do prazo'
+  | 'Próximo do vencimento'
+  | 'Concluído no prazo'
+  | 'Concluído fora do prazo'
+  | 'Atrasado';
+
+/**
+ * Calculates the deadline alert status for an action dynamically.
+ */
+export function calculateActionAlert(
+  action: { status: string; forecastDate: string; completionDate?: string },
+  now: Date = new Date()
+): ActionDeadlineAlert {
+  const getLocalDateString = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const currentDateStr = getLocalDateString(now);
+  const forecastStr = action.forecastDate;
+
+  if (action.status === 'Concluído') {
+    const completionStr = action.completionDate || currentDateStr;
+    if (completionStr <= forecastStr) {
+      return 'Concluído no prazo';
+    } else {
+      return 'Concluído fora do prazo';
+    }
+  }
+
+  if (currentDateStr > forecastStr) {
+    return 'Atrasado';
+  }
+
+  // Próximo do vencimento: até 2 dias antes do vencimento (0, 1 ou 2 dias)
+  const forecastDateObj = new Date(forecastStr + 'T12:00:00');
+  const currentDateObj = new Date(currentDateStr + 'T12:00:00');
+  
+  const diffTime = forecastDateObj.getTime() - currentDateObj.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  if (diffDays >= 0 && diffDays <= 2) {
+    return 'Próximo do vencimento';
+  }
+
+  return 'Dentro do prazo';
+}
+
 

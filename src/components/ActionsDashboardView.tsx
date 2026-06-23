@@ -30,6 +30,7 @@ import { motion } from 'motion/react';
 import { OperationalAction, User, Project } from '../types';
 import { cn } from '../lib/utils';
 import FilterDropdown from './FilterDropdown';
+import { calculateActionAlert } from '../utils/calculations';
 
 interface ActionsDashboardViewProps {
   actions: OperationalAction[];
@@ -56,6 +57,17 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
     const pending = filteredActions.filter(a => a.status === 'Pendente').length;
     const inProgress = filteredActions.filter(a => a.status === 'Em andamento').length;
     const completed = filteredActions.filter(a => a.status === 'Concluído').length;
+
+    const completedActions = filteredActions.filter(a => a.status === 'Concluído');
+    const completedOnTime = completedActions.filter(a => {
+      const alert = calculateActionAlert(a);
+      return alert === 'Concluído no prazo';
+    }).length;
+
+    const completedOverdue = completedActions.filter(a => {
+      const alert = calculateActionAlert(a);
+      return alert === 'Concluído fora do prazo';
+    }).length;
 
     // Status Data for Pie Chart
     const statusData = [
@@ -99,6 +111,8 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
       pending,
       inProgress,
       completed,
+      completedOnTime,
+      completedOverdue,
       statusData,
       collaboratorRanking,
       projectRanking
@@ -187,6 +201,22 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
           value={stats.completed} 
           icon={<CheckCircle2 size={20} />} 
           color="bg-emerald-500" 
+        />
+      </div>
+
+      {/* Indicadores de Prazos das Ações Concluídas */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+        <SummaryCard 
+          title="Concluídas no Prazo" 
+          value={stats.completedOnTime} 
+          icon={<CheckCircle2 size={20} />} 
+          color="bg-blue-600" 
+        />
+        <SummaryCard 
+          title="Concluídas Fora do Prazo" 
+          value={stats.completedOverdue} 
+          icon={<AlertCircle size={20} />} 
+          color="bg-violet-600" 
         />
       </div>
 

@@ -21,6 +21,7 @@ import { ptBR } from 'date-fns/locale';
 import { Project, User, OperationalAction, ProjectPriority } from '../types';
 import { cn, exportarCSVPadrao, cleanObject } from '../lib/utils';
 import { db, setDoc, doc, deleteDoc, handleFirestoreError, OperationType } from '../firebase';
+import { calculateActionAlert } from '../utils/calculations';
 
 interface OperationalActionsTabProps {
   actions: OperationalAction[];
@@ -241,6 +242,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
                 <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[120px] z-[41] border-b border-white/10">Previsão</th>
                 <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[300px] z-[41] border-b border-white/10">Retorno da Tratativa</th>
                 <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[160px] z-[41] border-b border-white/10">Data de Conclusão</th>
+                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px] z-[41] border-b border-white/10">Alerta de Prazo</th>
                 <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest w-32 text-right z-[41] border-b border-white/10">Ações</th>
               </tr>
             </thead>
@@ -333,6 +335,37 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
                         />
                       </div>
                     </td>
+                    <td className="px-6 py-4">
+                      {(() => {
+                        const alert = calculateActionAlert({
+                          status: currentStatus,
+                          forecastDate: action.forecastDate,
+                          completionDate: currentCompletionDate
+                        });
+                        
+                        let badgeStyle = "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300";
+                        if (alert === 'Dentro do prazo') {
+                          badgeStyle = "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+                        } else if (alert === 'Próximo do vencimento') {
+                          badgeStyle = "bg-amber-500/10 text-amber-600/90 dark:text-amber-400";
+                        } else if (alert === 'Atrasado') {
+                          badgeStyle = "bg-rose-500/10 text-rose-600 dark:text-rose-400";
+                        } else if (alert === 'Concluído no prazo') {
+                          badgeStyle = "bg-blue-500/10 text-blue-600 dark:text-blue-400";
+                        } else if (alert === 'Concluído fora do prazo') {
+                          badgeStyle = "bg-violet-500/10 text-violet-600 dark:text-violet-400";
+                        }
+
+                        return (
+                          <span className={cn(
+                            "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider inline-block whitespace-nowrap",
+                            badgeStyle
+                          )}>
+                            {alert}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {isEditing ? (
@@ -378,7 +411,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
               })}
               {filteredActions.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-6 py-20 text-center">
+                  <td colSpan={11} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-200">
                         <History size={32} />

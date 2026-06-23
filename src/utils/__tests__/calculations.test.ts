@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterActiveProjects, computeProjectItems, ComputedProjectItem, filterComputedData, sortComputedData } from '../calculations';
+import { filterActiveProjects, computeProjectItems, ComputedProjectItem, filterComputedData, sortComputedData, calculateActionAlert } from '../calculations';
 import { Project, User, Subtask, PDCACycle } from '../../types';
 
 // Helper to create empty mockup scope
@@ -668,6 +668,97 @@ describe('Business Rules and Calculations Tests', () => {
 
       expect(respCounts['Não designado']).toBeUndefined();
       expect(respCounts['Carlos']).toBe(1);
+    });
+  });
+
+  describe('Alertas de Prazo para Ações Operacionais (calculateActionAlert)', () => {
+    it('deve retornar "Dentro do prazo" quando não concluída e a data atual é menor que forecastDate por mais de 2 dias', () => {
+      const action = {
+        status: 'Pendente',
+        forecastDate: '2026-06-25',
+      };
+      // Hoje é 2026-06-22 (3 dias de diferença)
+      const now = new Date('2026-06-22T10:00:00Z');
+      expect(calculateActionAlert(action, now)).toBe('Dentro do prazo');
+    });
+
+    it('deve retornar "Próximo do vencimento" quando não concluída e a data atual está a até 2 dias da forecastDate', () => {
+      const action = {
+        status: 'Em andamento',
+        forecastDate: '2026-06-25',
+      };
+      
+      // 2 dias antes
+      const now2Days = new Date('2026-06-23T10:00:00Z');
+      expect(calculateActionAlert(action, now2Days)).toBe('Próximo do vencimento');
+
+      // 1 dia antes
+      const now1Day = new Date('2026-06-24T10:00:00Z');
+      expect(calculateActionAlert(action, now1Day)).toBe('Próximo do vencimento');
+
+      // No mesmo dia do vencimento (0 dias)
+      const nowSameDay = new Date('2026-06-25T10:00:00Z');
+      expect(calculateActionAlert(action, nowSameDay)).toBe('Próximo do vencimento');
+    });
+
+    it('deve retornar "Atrasado" quando não concluída e a data atual ultrapassou a forecastDate', () => {
+      const action = {
+        status: 'Pendente',
+        forecastDate: '2026-06-25',
+      };
+      // Hoje é 2026-06-26 (dia seguinte)
+      const now = new Date('2026-06-26T10:00:00Z');
+      expect(calculateActionAlert(action, now)).toBe('Atrasado');
+    });
+
+    it('deve retornar "Concluído no prazo" quando a tarefa está concluída e completionDate é menor ou igual à forecastDate', () => {
+      const actionOnTime = {
+        status: 'Concluído',
+        forecastDate: '2026-06-25',
+        completionDate: '2026-06-25',
+      };
+      expect(calculateActionAlert(actionOnTime)).toBe('Concluído no prazo');
+
+      const actionEarlier = {
+        status: 'Concluído',
+        forecastDate: '2026-06-25',
+        completionDate: '2026-06-23',
+      };
+      expect(calculateActionAlert(actionEarlier)).toBe('Concluído no prazo');
+    });
+
+    it('deve retornar "Concluído fora do prazo" quando a tarefa está concluída e completionDate é maior que a forecastDate', () => {
+      const actionLate = {
+        status: 'Concluído',
+        forecastDate: '2026-06-25',
+        completionDate: '2026-06-26',
+      };
+      expect(calculateActionAlert(actionLate)).toBe('Concluído fora do prazo');
+    });
+
+    it('deve validar os indicadores do dashboard de ações para contagem correta dentro e fora do prazo', () => {
+      const mockActions = [
+        { status: 'Concluído', forecastDate: '2026-06-25', completionDate: '2026-06-23' },
+        { status: 'Concluído', forecastDate: '2026-06-25', completionDate: '2026-06-25' },
+        { status: 'Concluído', forecastDate: '2026-06-25', completionDate: '2026-06-27' },
+        { status: 'Pendente', forecastDate: '2026-06-25' },
+        { status: 'Em andamento', forecastDate: '2026-06-20' },
+      ];
+
+      const completedActions = mockActions.filter(a => a.status === 'Concluído');
+      
+      const completedOnTime = completedActions.filter(a => {
+        const alert = calculateActionAlert(a);
+        return alert === 'Concluído no prazo';
+      }).length;
+
+      const completedOverdue = completedActions.filter(a => {
+        const alert = calculateActionAlert(a);
+        return alert === 'Concluído fora do prazo';
+      }).length;
+
+      expect(completedOnTime).toBe(2);
+      expect(completedOverdue).toBe(1);
     });
   });
 });

@@ -824,7 +824,10 @@ export default function App() {
               label="Histórico de Ações"
               collapsed={isSidebarCollapsed}
             />
+          </nav>
 
+          {/* Configurações isolado na parte inferior */}
+          <div className="p-4 border-t border-theme-border shrink-0">
             <SidebarItem 
               active={activeView === 'settings'}
               onClick={() => handleNavigation(() => {
@@ -836,7 +839,7 @@ export default function App() {
               label="Configurações"
               collapsed={isSidebarCollapsed}
             />
-          </nav>
+          </div>
 
           <div className="p-4 border-t border-theme-border">
             <div className={cn("flex items-center gap-3 px-4 py-3 transition-all duration-300 min-w-0 w-full", isSidebarCollapsed ? "justify-center" : "")}>

@@ -23,6 +23,162 @@ async function startServer() {
 
   app.use(express.json());
 
+  // MongoDB Connection Setup & In-Memory Fallback
+  const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/pdca_system";
+  let db: any = null;
+  const memoryDb: Record<string, Record<string, any>> = {};
+
+  try {
+    const { MongoClient } = await import("mongodb");
+    console.log("Connecting to MongoDB at:", MONGODB_URI);
+    const mongoClient = new MongoClient(MONGODB_URI);
+    await mongoClient.connect();
+    db = mongoClient.db();
+    console.log("Successfully connected to MongoDB database!");
+  } catch (error) {
+    console.warn("MongoDB connection failed. Running in memory-fallback mode...", error);
+  }
+
+  // --- LOCAL NOSQL DATABASE REST API ENDPOINTS ---
+
+  // GET: List all documents in a collection
+  app.get("/api/db/:collection", async (req, res) => {
+    const { collection } = req.params;
+    try {
+      if (db) {
+        const docs = await db.collection(collection).find({}).toArray();
+        const mapped = docs.map((doc: any) => {
+          const { _id, ...rest } = doc;
+          return { id: _id, ...rest };
+        });
+        return res.json(mapped);
+      } else {
+        const col = memoryDb[collection] || {};
+        return res.json(Object.values(col));
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // GET: Get single document
+  app.get("/api/db/:collection/:id", async (req, res) => {
+    const { collection, id } = req.params;
+    try {
+      if (db) {
+        const doc = await db.collection(collection).findOne({ _id: id });
+        if (!doc) return res.status(404).json({ error: "Not found" });
+        const { _id, ...rest } = doc;
+        return res.json({ id: _id, ...rest });
+      } else {
+        const doc = memoryDb[collection]?.[id];
+        if (!doc) return res.status(404).json({ error: "Not found" });
+        return res.json(doc);
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST: Create or overwrite document (with optional merge) - matches setDoc
+  app.post("/api/db/:collection/:id", async (req, res) => {
+    const { collection, id } = req.params;
+    const { data, merge } = req.body;
+    try {
+      const cleanData = { ...data, id };
+      if (cleanData._id) delete cleanData._id; // Remove MongoDB internal keys if leaked
+
+      if (db) {
+        if (merge) {
+          await db.collection(collection).updateOne(
+            { _id: id },
+            { $set: cleanData },
+            { upsert: true }
+          );
+        } else {
+          await db.collection(collection).replaceOne(
+            { _id: id },
+            { ...cleanData },
+            { upsert: true }
+          );
+        }
+        return res.json({ success: true, id });
+      } else {
+        if (!memoryDb[collection]) memoryDb[collection] = {};
+        if (merge) {
+          memoryDb[collection][id] = { ...memoryDb[collection][id], ...cleanData };
+        } else {
+          memoryDb[collection][id] = cleanData;
+        }
+        return res.json({ success: true, id });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // PUT: Update partial fields in a document - matches updateDoc
+  app.put("/api/db/:collection/:id", async (req, res) => {
+    const { collection, id } = req.params;
+    const { data } = req.body;
+    try {
+      if (data._id) delete data._id; // Prevent _id modification
+      if (db) {
+        await db.collection(collection).updateOne(
+          { _id: id },
+          { $set: data }
+        );
+        return res.json({ success: true, id });
+      } else {
+        if (memoryDb[collection]?.[id]) {
+          memoryDb[collection][id] = { ...memoryDb[collection][id], ...data };
+          return res.json({ success: true, id });
+        }
+        return res.status(404).json({ error: "Not found" });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // DELETE: Delete a document
+  app.delete("/api/db/:collection/:id", async (req, res) => {
+    const { collection, id } = req.params;
+    try {
+      if (db) {
+        await db.collection(collection).deleteOne({ _id: id });
+        return res.json({ success: true });
+      } else {
+        if (memoryDb[collection]) {
+          delete memoryDb[collection][id];
+        }
+        return res.json({ success: true });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // POST: Create a new document with an auto-generated ID - matches addDoc
+  app.post("/api/db/:collection", async (req, res) => {
+    const { collection } = req.params;
+    const { data } = req.body;
+    try {
+      const generatedId = "doc_" + Math.random().toString(36).substring(2, 11);
+      const cleanData = { ...data, id: generatedId };
+      if (db) {
+        await db.collection(collection).insertOne({ ...cleanData, _id: generatedId });
+        return res.json({ success: true, id: generatedId });
+      } else {
+        if (!memoryDb[collection]) memoryDb[collection] = {};
+        memoryDb[collection][generatedId] = cleanData;
+        return res.json({ success: true, id: generatedId });
+      }
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   // Google Drive Setup
   const SCOPES = ["https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"];
   

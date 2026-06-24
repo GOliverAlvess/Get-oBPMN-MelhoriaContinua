@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - master # Trata ambas as nomenclaturas comuns de branch principal
+      - master # O Actions será ativado APENAS quando houver push/merge para a main ou master
 
 jobs:
   test-and-lint:

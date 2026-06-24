@@ -3,7 +3,7 @@ name: Build and Push to Docker Hub
 on:
   push:
     branches:
-      - dev # Triga a pipeline para envios na branch dev, permitindo abertura de PRs para a main/master
+      - main-master
 
 jobs:
   test-and-lint:

@@ -3,8 +3,7 @@ name: Build and Push to Docker Hub
 on:
   push:
     branches:
-      - main
-      - master # O Actions será ativado APENAS quando houver push/merge para a main ou master
+      - main-master
 
 jobs:
   test-and-lint:

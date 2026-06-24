@@ -22,7 +22,7 @@ WORKDIR /app
 
 # Set production environment
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=3002
 
 # Copy necessary package configurations
 COPY --from=builder /app/package.json ./package.json
@@ -36,7 +36,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server.ts ./server.ts
 
 # Expose the internal port of the Express server
-EXPOSE 3000
+EXPOSE 3002
 
 # Command to execute the production server using tsx
 CMD ["npx", "tsx", "server.ts"]

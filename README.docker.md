@@ -12,6 +12,36 @@ Este documento contém todas as instruções necessárias para rodar o projeto e
    - `app`: O seu servidor web Node/Express.
 3. **`.dockerignore`**: Garante que arquivos desnecessários de desenvolvimento local não fiquem dentro da imagem final de produção.
 4. **`src/firebase.ts`**: Atualizado para uma camada de compatibilidade de alto desempenho que converte os métodos do Firestore em requisições REST otimizadas para o seu banco local MongoDB, com sincronização em tempo real (smart-polling) e login local seguro por e-mail/nome.
+5. **`.github/workflows/docker-publish.yml`**: Configuração da pipeline de integração contínua (CI/CD) para compilar e enviar a imagem atualizada automaticamente para o Docker Hub sempre que houver novos commits na branch principal.
+
+---
+
+## ⚡ Automação com GitHub Actions (Docker Hub)
+
+Foi configurada uma pipeline que compila a imagem Docker e a envia automaticamente para o seu repositório no **Docker Hub** a cada alteração aprovada nas branches `main` ou `master`.
+
+### Como Configurar em 3 Passos Simples:
+
+#### 1. Criar um Access Token no Docker Hub
+1. Acesse o [Docker Hub](https://hub.docker.com/) e faça login.
+2. Vá em **Account Settings** (Configurações da Conta) > **Security** > **Personal Access Tokens**.
+3. Clique em **New Access Token**, dê uma descrição (ex: `Github Actions CI`) e selecione as permissões de Escrita (`Read & Write` ou `Read, Write, Delete`).
+4. **Copie o token gerado** (você só verá ele uma vez).
+
+#### 2. Configurar os Secrets no Repositório do GitHub
+No seu repositório do GitHub onde este código está hospedado:
+1. Acesse a aba **Settings** (Configurações).
+2. Na barra lateral esquerda, clique em **Secrets and variables** > **Actions**.
+3. Clique no botão verde **New repository secret** no canto superior direito.
+4. Crie os dois segredos a seguir:
+   * **`DOCKERHUB_USERNAME`**: Insira o seu nome de usuário (ID) do Docker Hub.
+   * **`DOCKERHUB_TOKEN`**: Cole o Access Token gerado no passo 1.
+
+#### 3. Pronto! Como testar:
+Sempre que você fizer um `git push` para as branches `main` ou `master`, o GitHub Actions irá disparar automaticamente. Você pode acompanhar o progresso em tempo real na aba **Actions** do seu repositório no GitHub.
+
+Ao concluir com sucesso, a imagem estará disponível no Docker Hub sob o nome:
+`seu-usuario-do-dockerhub/pdca-system-app:latest` e `seu-usuario-do-dockerhub/pdca-system-app:<short-sha-do-commit>`
 
 ---
 
@@ -55,7 +85,7 @@ docker compose up -d --build
 O Docker irá:
 1. Baixar a imagem base do MongoDB e iniciar o banco de dados.
 2. Criar um volume Docker nomeado (`mongodb_data`) para garantir que os dados de ações, projetos e usuários fiquem **salvos permanentemente no disco rígido da VPS**.
-3. Compilar a imagem do seu app e subir o servidor na porta `3000`.
+3. Compilar a imagem do seu app e subir o servidor na porta `3002`.
 
 ---
 
@@ -86,5 +116,5 @@ docker compose restart
 ## 🔒 Segurança e Acesso de Rede
 
 * **Banco de Dados Protegido**: O MongoDB está configurado para expor a porta `27017` apenas para `127.0.0.1` (localhost da máquina host) e conexões internas do Docker, mantendo seus dados 100% seguros contra ataques externos.
-* **Acesso Web**: O app web roda na porta `3000` (`http://IP_DA_SUA_VPS:3000`).
-* **Usando Porta 80/443 (Opcional)**: Se quiser que o app responda diretamente no domínio sem a porta `:3000`, recomendamos usar um proxy reverso como o **Nginx** ou **Caddy** instalado na sua VPS apontando para a porta `3000`.
+* **Acesso Web**: O app web roda na porta `3002` (`http://IP_DA_SUA_VPS:3002`).
+* **Usando Porta 80/443 (Opcional)**: Se quiser que o app responda diretamente no domínio sem a porta `:3002`, recomendamos usar um proxy reverso como o **Nginx** ou **Caddy** instalado na sua VPS apontando para a porta `3002`.

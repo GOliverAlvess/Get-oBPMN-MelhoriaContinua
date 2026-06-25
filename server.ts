@@ -73,7 +73,10 @@ async function startServer() {
   try {
     const { MongoClient } = await import("mongodb");
     console.log("Connecting to MongoDB at:", MONGODB_URI);
-    const mongoClient = new MongoClient(MONGODB_URI);
+    const mongoClient = new MongoClient(MONGODB_URI, {
+      serverSelectionTimeoutMS: 2000,
+      connectTimeoutMS: 2000,
+    });
     await mongoClient.connect();
     db = mongoClient.db();
     console.log("Successfully connected to MongoDB database!");
@@ -420,21 +423,37 @@ async function startServer() {
   const SCOPES = ["https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"];
   
   const getDriveClient = () => {
-    const keyString = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+    let keyString = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64;
     if (!keyString) {
-      throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY environment variable is missing");
+      throw new Error("A variável de ambiente GOOGLE_SERVICE_ACCOUNT_KEY ou GOOGLE_SERVICE_ACCOUNT_KEY_BASE64 está ausente. Por favor, configure-a no painel de configurações ou no arquivo .env.");
     }
     
-    let credentials;
+    keyString = keyString.trim();
+    
+    let credentials: any;
     try {
+      // Tentar analisar diretamente como JSON
       credentials = JSON.parse(keyString);
     } catch (e) {
-      throw new Error("Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY as JSON");
+      // Se falhar, tentar decodificar a partir de Base64
+      try {
+        const decoded = Buffer.from(keyString, 'base64').toString('utf8');
+        credentials = JSON.parse(decoded);
+      } catch (base64Error) {
+        throw new Error("Não foi possível analisar GOOGLE_SERVICE_ACCOUNT_KEY como um JSON válido ou decodificá-lo a partir de Base64.");
+      }
     }
+
+    if (!credentials || !credentials.client_email || !credentials.private_key) {
+      throw new Error("Os campos 'client_email' ou 'private_key' estão ausentes na credencial da Conta de Serviço do Google Cloud.");
+    }
+
+    // Normalizar quebras de linha da chave privada (substituir '\\n' por '\n')
+    const formattedPrivateKey = credentials.private_key.replace(/\\n/g, '\n');
 
     const auth = new google.auth.JWT({
       email: credentials.client_email,
-      key: credentials.private_key,
+      key: formattedPrivateKey,
       scopes: SCOPES,
     });
 

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Project, ProjectFile } from '../types';
-import { db, collection, query, where, onSnapshot, addDoc, doc, updateDoc, handleFirestoreError, OperationType } from '../firebase';
+import { db, collection, query, where, onSnapshot, addDoc, doc, updateDoc, handleFirestoreError, OperationType, auth } from '../firebase';
 import { cn } from '../lib/utils';
 
 // Propriedades recebidas pelo componente de lista de anexos do projeto (ProjectFilesSection)
@@ -79,8 +79,17 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
 
     try {
       // Consome a rota da API interna encarregada de interagir com as credenciais OAuth do Google Drive
+      const headers: Record<string, string> = {};
+      if (auth.currentUser?.email) {
+        headers['x-user-email'] = auth.currentUser.email;
+      }
+      if (auth.currentUser?.uid) {
+        headers['x-user-uid'] = auth.currentUser.uid;
+      }
+
       const response = await fetch('/api/drive/upload', {
         method: 'POST',
+        headers,
         body: formData,
       });
 

@@ -2929,18 +2929,32 @@ function SettingsView({ users, globalConfig, projects, actions }: {
   actions: OperationalAction[],
   key?: string 
 }) {
-  const [activeSubTab, setActiveSubTab] = useState<'cadastros' | 'setores-ferramentas' | 'relatorios' | 'ganhos'>('cadastros');
+  const currentUserProfile = users.find(u => u.id === auth.currentUser?.uid);
+  const profile = currentUserProfile?.profile || 'Usuário Analista';
 
+  // Determine permitted menu items
   const menuItems = [
-    { id: 'cadastros', label: 'Cadastros', icon: <Users size={18} /> },
-    { 
-      id: 'setores-ferramentas', 
-      label: 'Setores e Ferramentas', 
-      icon: <Settings size={18} /> 
-    },
-    { id: 'ganhos', label: 'Tipos de Ganhos', icon: <TrendingUp size={18} /> },
+    ...(profile === 'Usuário Master' ? [{ id: 'cadastros', label: 'Cadastros', icon: <Users size={18} /> }] : []),
+    ...(profile !== 'Usuário Visualizador' ? [
+      { 
+        id: 'setores-ferramentas', 
+        label: 'Setores e Ferramentas', 
+        icon: <Settings size={18} /> 
+      },
+      { id: 'ganhos', label: 'Tipos de Ganhos', icon: <TrendingUp size={18} /> }
+    ] : []),
     { id: 'relatorios', label: 'Relatórios', icon: <FileText size={18} /> },
   ] as const;
+
+  const defaultSubTab = profile === 'Usuário Visualizador' 
+    ? 'relatorios' 
+    : (profile === 'Usuário Analista' ? 'setores-ferramentas' : 'cadastros');
+
+  const [activeSubTab, setActiveSubTab] = useState<'cadastros' | 'setores-ferramentas' | 'relatorios' | 'ganhos'>(defaultSubTab);
+
+  useEffect(() => {
+    setActiveSubTab(defaultSubTab);
+  }, [profile]);
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 w-full min-h-[600px]">
@@ -3899,6 +3913,7 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
               >
                 <option value="Usuário Analista">Usuário Analista</option>
                 <option value="Usuário Master">Usuário Master</option>
+                <option value="Usuário Visualizador">Usuário Visualizador</option>
               </select>
             </div>
             <div className="flex gap-3">
@@ -3942,7 +3957,9 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
                       <p className="text-sm font-bold text-slate-800 truncate">{u.name}</p>
                       <span className={cn(
                         "text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider",
-                        (u.profile || 'Usuário Analista') === 'Usuário Master' ? "bg-indigo-100 text-indigo-700" : "bg-slate-200 text-slate-600"
+                        (u.profile || 'Usuário Analista') === 'Usuário Master' ? "bg-indigo-100 text-indigo-700" : 
+                        (u.profile || 'Usuário Analista') === 'Usuário Visualizador' ? "bg-emerald-100 text-emerald-700" :
+                        "bg-slate-200 text-slate-600"
                       )}>
                         {u.profile || 'Usuário Analista'}
                       </span>

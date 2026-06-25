@@ -253,7 +253,7 @@ export interface Project {
 }
 
 // Tipos de perfis de responsabilidade de acesso e manipulação de fluxos
-export type UserProfile = 'Usuário Analista' | 'Usuário Master';
+export type UserProfile = 'Usuário Analista' | 'Usuário Master' | 'Usuário Visualizador';
 
 // Informações estruturadas de cadastro de colaboradores no sistema
 export interface User {

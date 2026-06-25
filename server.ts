@@ -83,7 +83,172 @@ async function startServer() {
     await seedUsers(null);
   }
 
+  const getUserByEmail = async (email: string) => {
+    if (!email) return null;
+    const emailLower = email.trim().toLowerCase();
+    
+    const defaultUsers = [
+      {
+        id: "ga_oliveira_master",
+        name: "Gabriel Oliveira",
+        email: "ga.oliveira@ativalog.com.br",
+        sector: "Diretoria",
+        profile: "Usuário Master"
+      },
+      {
+        id: "biel_alves_master",
+        name: "Gabriel Alves",
+        email: "bielalves201@gmail.com",
+        sector: "Administração",
+        profile: "Usuário Master"
+      }
+    ];
+    
+    const defaultFound = defaultUsers.find(u => u.email.toLowerCase() === emailLower);
+    if (defaultFound) return defaultFound;
+
+    try {
+      if (db) {
+        return await db.collection("users").findOne({ email: { $regex: new RegExp(`^${emailLower}$`, "i") } });
+      } else {
+        const col = memoryDb["users"] || {};
+        return Object.values(col).find((u: any) => u.email?.toLowerCase() === emailLower) || null;
+      }
+    } catch (err) {
+      console.error("Error fetching user by email:", err);
+      return null;
+    }
+  };
+
+  const authorizeMutation = async (req: express.Request, collection: string, id: string | undefined, method: string) => {
+    const email = req.headers['x-user-email'] as string;
+    if (!email) {
+      return { authorized: true }; // Allow operations during registration or seed
+    }
+
+    const user = await getUserByEmail(email);
+    if (!user) {
+      return { authorized: false, error: "Usuário não autorizado." };
+    }
+
+    const profile = user.profile || 'Usuário Analista';
+
+    if (profile === 'Usuário Master') {
+      return { authorized: true };
+    }
+
+    if (profile === 'Usuário Visualizador') {
+      if (collection === 'reportLogs' && method === 'POST') {
+        return { authorized: true };
+      }
+      return { authorized: false, error: "Usuário com perfil de Visualizador não possui permissão para alterar dados." };
+    }
+
+    if (profile === 'Usuário Analista') {
+      if (collection === 'users') {
+        return { authorized: false, error: "Usuário com perfil de Analista não possui permissão para gerenciar usuários." };
+      }
+      if (collection === 'config') {
+        return { authorized: false, error: "Usuário com perfil de Analista não possui permissão para alterar configurações." };
+      }
+      if (collection === 'bpmnSavedColors') {
+        return { authorized: true };
+      }
+
+      if (collection === 'projects') {
+        const payload = req.body?.data;
+        if (method === 'DELETE') {
+          let existingProj: any = null;
+          if (db) {
+            existingProj = await db.collection('projects').findOne({ _id: id });
+          } else {
+            existingProj = memoryDb['projects']?.[id!];
+          }
+          if (existingProj && existingProj.assignedTo !== user.id) {
+            return { authorized: false, error: "Você não é o responsável designado para este projeto." };
+          }
+        } else {
+          if (payload) {
+            if (payload.assignedTo && payload.assignedTo !== user.id) {
+              return { authorized: false, error: "Você só pode salvar ou mover projetos atribuídos a você mesmo." };
+            }
+          }
+        }
+      }
+
+      if (collection === 'operationalActions') {
+        const payload = req.body?.data;
+        if (method === 'DELETE') {
+          let existingAction: any = null;
+          if (db) {
+            existingAction = await db.collection('operationalActions').findOne({ _id: id });
+          } else {
+            existingAction = memoryDb['operationalActions']?.[id!];
+          }
+          if (existingAction && existingAction.responsibleId !== user.id) {
+            return { authorized: false, error: "Você não é o responsável por esta ação." };
+          }
+        } else {
+          if (payload && payload.responsibleId && payload.responsibleId !== user.id) {
+            return { authorized: false, error: "Você só pode salvar ações atribuídas a você mesmo." };
+          }
+        }
+      }
+
+      return { authorized: true };
+    }
+
+    return { authorized: true };
+  };
+
   // --- LOCAL NOSQL DATABASE REST API ENDPOINTS ---
+
+  // --- REAL-TIME SYNC VIA SERVER-SENT EVENTS (SSE) ---
+  const sseClients = new Set<express.Response>();
+
+  const broadcastSync = (collection: string, id: string, type: "set" | "update" | "delete", data: any) => {
+    const payload = JSON.stringify({ collection, id, type, data });
+    for (const client of sseClients) {
+      client.write(`data: ${payload}\n\n`);
+    }
+  };
+
+  const broadcastDocChange = async (collection: string, id: string, type: "set" | "update" | "delete") => {
+    try {
+      if (type === "delete") {
+        broadcastSync(collection, id, "delete", null);
+        return;
+      }
+      let docData: any = null;
+      if (db) {
+        const found = await db.collection(collection).findOne({ _id: id });
+        if (found) {
+          const { _id, ...rest } = found;
+          docData = { id: _id, ...rest };
+        }
+      } else {
+        docData = memoryDb[collection]?.[id] || null;
+      }
+      if (docData) {
+        broadcastSync(collection, id, type, docData);
+      }
+    } catch (err) {
+      console.error("Error broadcasting sync:", err);
+    }
+  };
+
+  app.get("/api/db-sync", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.write(": open\n\n");
+
+    sseClients.add(res);
+
+    req.on("close", () => {
+      sseClients.delete(res);
+    });
+  });
 
   // GET: List all documents in a collection
   app.get("/api/db/:collection", async (req, res) => {
@@ -129,6 +294,11 @@ async function startServer() {
     const { collection, id } = req.params;
     const { data, merge } = req.body;
     try {
+      const authCheck = await authorizeMutation(req, collection, id, 'POST');
+      if (!authCheck.authorized) {
+        return res.status(403).json({ error: authCheck.error || "Ação não autorizada para seu perfil" });
+      }
+
       const cleanData = { ...data, id };
       if (cleanData._id) delete cleanData._id; // Remove MongoDB internal keys if leaked
 
@@ -146,6 +316,7 @@ async function startServer() {
             { upsert: true }
           );
         }
+        await broadcastDocChange(collection, id, 'set');
         return res.json({ success: true, id });
       } else {
         if (!memoryDb[collection]) memoryDb[collection] = {};
@@ -154,6 +325,7 @@ async function startServer() {
         } else {
           memoryDb[collection][id] = cleanData;
         }
+        await broadcastDocChange(collection, id, 'set');
         return res.json({ success: true, id });
       }
     } catch (error: any) {
@@ -166,16 +338,23 @@ async function startServer() {
     const { collection, id } = req.params;
     const { data } = req.body;
     try {
+      const authCheck = await authorizeMutation(req, collection, id, 'PUT');
+      if (!authCheck.authorized) {
+        return res.status(403).json({ error: authCheck.error || "Ação não autorizada para seu perfil" });
+      }
+
       if (data._id) delete data._id; // Prevent _id modification
       if (db) {
         await db.collection(collection).updateOne(
           { _id: id },
           { $set: data }
         );
+        await broadcastDocChange(collection, id, 'update');
         return res.json({ success: true, id });
       } else {
         if (memoryDb[collection]?.[id]) {
           memoryDb[collection][id] = { ...memoryDb[collection][id], ...data };
+          await broadcastDocChange(collection, id, 'update');
           return res.json({ success: true, id });
         }
         return res.status(404).json({ error: "Not found" });
@@ -189,13 +368,20 @@ async function startServer() {
   app.delete("/api/db/:collection/:id", async (req, res) => {
     const { collection, id } = req.params;
     try {
+      const authCheck = await authorizeMutation(req, collection, id, 'DELETE');
+      if (!authCheck.authorized) {
+        return res.status(403).json({ error: authCheck.error || "Ação não autorizada para seu perfil" });
+      }
+
       if (db) {
         await db.collection(collection).deleteOne({ _id: id });
+        await broadcastDocChange(collection, id, 'delete');
         return res.json({ success: true });
       } else {
         if (memoryDb[collection]) {
           delete memoryDb[collection][id];
         }
+        await broadcastDocChange(collection, id, 'delete');
         return res.json({ success: true });
       }
     } catch (error: any) {
@@ -208,14 +394,21 @@ async function startServer() {
     const { collection } = req.params;
     const { data } = req.body;
     try {
+      const authCheck = await authorizeMutation(req, collection, undefined, 'POST');
+      if (!authCheck.authorized) {
+        return res.status(403).json({ error: authCheck.error || "Ação não autorizada para seu perfil" });
+      }
+
       const generatedId = "doc_" + Math.random().toString(36).substring(2, 11);
       const cleanData = { ...data, id: generatedId };
       if (db) {
         await db.collection(collection).insertOne({ ...cleanData, _id: generatedId });
+        await broadcastDocChange(collection, generatedId, 'set');
         return res.json({ success: true, id: generatedId });
       } else {
         if (!memoryDb[collection]) memoryDb[collection] = {};
         memoryDb[collection][generatedId] = cleanData;
+        await broadcastDocChange(collection, generatedId, 'set');
         return res.json({ success: true, id: generatedId });
       }
     } catch (error: any) {
@@ -255,6 +448,14 @@ async function startServer() {
     try {
       const { projectId, projectName, driveFolderId } = req.body;
       const file = req.file;
+
+      const email = req.headers['x-user-email'] as string;
+      if (email) {
+        const user = await getUserByEmail(email);
+        if (user && (user.profile || 'Usuário Analista') === 'Usuário Visualizador') {
+          return res.status(403).json({ error: "Perfil de Visualizador não possui permissão para enviar arquivos." });
+        }
+      }
 
       if (!file || !projectId || !projectName) {
         return res.status(400).json({ error: "Missing required fields" });

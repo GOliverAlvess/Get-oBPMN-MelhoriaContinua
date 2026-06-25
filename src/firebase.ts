@@ -29,6 +29,7 @@ export interface FirebaseUser {
   isAnonymous: boolean;
   tenantId: string | null;
   providerData: any[];
+  profile?: string;
 }
 
 class MockAuth {
@@ -146,7 +147,8 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
               emailVerified: true,
               isAnonymous: false,
               tenantId: null,
-              providerData: []
+              providerData: [],
+              profile: matchedUser.profile || 'Usuário Analista'
             };
             
             authInstance.currentUser = mockUser;
@@ -285,7 +287,8 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
           emailVerified: true,
           isAnonymous: false,
           tenantId: null,
-          providerData: []
+          providerData: [],
+          profile: matchedUser.profile || 'Usuário Analista'
         };
 
         authInstance.currentUser = mockUser;
@@ -382,16 +385,41 @@ export function orderBy(field: string, direction: 'asc' | 'desc' = 'asc') {
 
 const API_BASE = '/api/db';
 
+function getAuthHeaders(extra: Record<string, string> = {}) {
+  const headers: Record<string, string> = { ...extra };
+  if (auth.currentUser?.email) {
+    headers['x-user-email'] = auth.currentUser.email;
+  }
+  if (auth.currentUser?.uid) {
+    headers['x-user-uid'] = auth.currentUser.uid;
+  }
+  return headers;
+}
+
+async function handleResponse(response: Response, defaultMessage: string) {
+  if (!response.ok) {
+    try {
+      const errBody = await response.json();
+      if (errBody?.error) {
+        throw new Error(errBody.error);
+      }
+    } catch (e: any) {
+      if (e.message && e.message !== 'Unexpected token < in JSON at position 0') {
+        throw e;
+      }
+    }
+    throw new Error(defaultMessage);
+  }
+}
+
 export async function setDoc(docRef: DocumentReference, data: any, options?: { merge?: boolean }) {
   const url = `${API_BASE}/${docRef.collection}/${docRef.id}`;
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ data, merge: options?.merge !== false }),
   });
-  if (!response.ok) {
-    throw new Error(`Failed to set document: ${response.statusText}`);
-  }
+  await handleResponse(response, `Failed to set document: ${response.statusText}`);
   return Promise.resolve();
 }
 
@@ -399,12 +427,10 @@ export async function updateDoc(docRef: DocumentReference, data: any) {
   const url = `${API_BASE}/${docRef.collection}/${docRef.id}`;
   const response = await fetch(url, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ data }),
   });
-  if (!response.ok) {
-    throw new Error(`Failed to update document: ${response.statusText}`);
-  }
+  await handleResponse(response, `Failed to update document: ${response.statusText}`);
   return Promise.resolve();
 }
 
@@ -412,10 +438,9 @@ export async function deleteDoc(docRef: DocumentReference) {
   const url = `${API_BASE}/${docRef.collection}/${docRef.id}`;
   const response = await fetch(url, {
     method: 'DELETE',
+    headers: getAuthHeaders(),
   });
-  if (!response.ok) {
-    throw new Error(`Failed to delete document: ${response.statusText}`);
-  }
+  await handleResponse(response, `Failed to delete document: ${response.statusText}`);
   return Promise.resolve();
 }
 
@@ -423,12 +448,10 @@ export async function addDoc(colRef: CollectionReference, data: any) {
   const url = `${API_BASE}/${colRef.name}`;
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ data }),
   });
-  if (!response.ok) {
-    throw new Error(`Failed to add document: ${response.statusText}`);
-  }
+  await handleResponse(response, `Failed to add document: ${response.statusText}`);
   const result = await response.json();
   return { id: result.id };
 }
@@ -456,13 +479,13 @@ class MockQuerySnapshot {
 
 export async function getDoc(docRef: DocumentReference) {
   const url = `${API_BASE}/${docRef.collection}/${docRef.id}`;
-  const response = await fetch(url);
+  const response = await fetch(url, {
+    headers: getAuthHeaders(),
+  });
   if (response.status === 404) {
     return new MockDocumentSnapshot(docRef.id, null);
   }
-  if (!response.ok) {
-    throw new Error(`Failed to fetch document: ${response.statusText}`);
-  }
+  await handleResponse(response, `Failed to fetch document: ${response.statusText}`);
   const data = await response.json();
   return new MockDocumentSnapshot(docRef.id, data);
 }
@@ -470,56 +493,150 @@ export async function getDoc(docRef: DocumentReference) {
 export async function getDocs(queryRef: CollectionReference | QueryReference) {
   const collectionName = queryRef.type === 'query' ? queryRef.collection : queryRef.name;
   const url = `${API_BASE}/${collectionName}`;
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch collection docs: ${response.statusText}`);
-  }
+  const response = await fetch(url, {
+    headers: getAuthHeaders(),
+  });
+  await handleResponse(response, `Failed to fetch collection docs: ${response.statusText}`);
   const data = await response.json();
   return new MockQuerySnapshot(data);
 }
 
-// --- REAL-TIME SYNC VIA SMART POLLING ---
+// --- REAL-TIME SYNC VIA SERVER-SENT EVENTS (SSE) ---
+
+interface ActiveListener {
+  id: string;
+  target: DocumentReference | CollectionReference | QueryReference;
+  callback: (snapshot: any) => void;
+  onError?: (error: any) => void;
+  currentDocs: any[];
+  currentDoc: any | null;
+  resync: () => Promise<void>;
+}
+
+const activeListeners = new Set<ActiveListener>();
+let eventSource: EventSource | null = null;
+let reconnectTimeout: any = null;
+
+function handleIncomingMutation(payload: { collection: string; id: string; type: "set" | "update" | "delete"; data: any }) {
+  const { collection, id, type, data } = payload;
+
+  for (const listener of activeListeners) {
+    const target = listener.target;
+    const isCollection = target.type === 'collection' || target.type === 'query';
+    const listenerColName = isCollection 
+      ? (target.type === 'query' ? (target as QueryReference).collection : (target as CollectionReference).name)
+      : (target as DocumentReference).collection;
+
+    if (listenerColName !== collection) continue;
+
+    if (isCollection) {
+      const updatedDocs = [...listener.currentDocs];
+      const index = updatedDocs.findIndex(d => d.id === id);
+
+      if (type === 'delete') {
+        if (index !== -1) {
+          updatedDocs.splice(index, 1);
+        } else {
+          continue;
+        }
+      } else {
+        if (index !== -1) {
+          updatedDocs[index] = { ...updatedDocs[index], ...data };
+        } else {
+          updatedDocs.push(data);
+        }
+      }
+
+      listener.currentDocs = updatedDocs;
+      listener.callback(new MockQuerySnapshot(updatedDocs));
+    } else {
+      if ((target as DocumentReference).id !== id) continue;
+
+      if (type === 'delete') {
+        listener.currentDoc = null;
+        listener.callback(new MockDocumentSnapshot(id, null));
+      } else {
+        listener.currentDoc = { ...listener.currentDoc, ...data };
+        listener.callback(new MockDocumentSnapshot(id, listener.currentDoc));
+      }
+    }
+  }
+}
+
+function connectSync() {
+  if (eventSource) {
+    eventSource.close();
+  }
+
+  const es = new EventSource('/api/db-sync');
+  eventSource = es;
+
+  es.onopen = () => {
+    console.log('📡 Real-time sync connected successfully.');
+    for (const listener of activeListeners) {
+      listener.resync();
+    }
+  };
+
+  es.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      if (!payload || !payload.collection) return;
+      handleIncomingMutation(payload);
+    } catch (e) {
+      console.error('Error handling sync message:', e);
+    }
+  };
+
+  es.onerror = () => {
+    console.warn('⚠️ Real-time sync connection lost. Reconnecting...');
+    es.close();
+    eventSource = null;
+    
+    if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    reconnectTimeout = setTimeout(connectSync, 3000);
+  };
+}
 
 export function onSnapshot(
   target: DocumentReference | CollectionReference | QueryReference,
   callback: (snapshot: any) => void,
   onError?: (error: any) => void
 ) {
-  let active = true;
-  let lastHash = '';
+  if (!eventSource && typeof window !== 'undefined') {
+    connectSync();
+  }
 
-  const check = async () => {
-    if (!active) return;
-    try {
-      let snapshot: any;
-      if (target.type === 'doc') {
-        snapshot = await getDoc(target);
-      } else {
-        snapshot = await getDocs(target as any);
+  const listenerId = Math.random().toString(36).substring(2, 11);
+
+  const listener: ActiveListener = {
+    id: listenerId,
+    target,
+    callback,
+    onError,
+    currentDocs: [],
+    currentDoc: null,
+    resync: async function() {
+      try {
+        if (target.type === 'doc') {
+          const snapshot = await getDoc(target);
+          this.currentDoc = snapshot.data();
+          this.callback(snapshot);
+        } else {
+          const snapshot = await getDocs(target as any);
+          this.currentDocs = snapshot.docs.map(d => d.data());
+          this.callback(snapshot);
+        }
+      } catch (e) {
+        if (this.onError) this.onError(e);
       }
-
-      // Compute a hash of the snapshot's data
-      const currentData = target.type === 'doc' ? snapshot.data() : snapshot.docs.map((d: any) => d.data());
-      const currentHash = JSON.stringify(currentData);
-
-      if (currentHash !== lastHash) {
-        lastHash = currentHash;
-        callback(snapshot);
-      }
-    } catch (e) {
-      if (onError) onError(e);
-      else console.error('onSnapshot polling error:', e);
     }
   };
 
-  // Run immediate first check
-  check();
-
-  // Poll every 2.5 seconds
-  const interval = setInterval(check, 2500);
+  listener.resync();
+  activeListeners.add(listener);
 
   return () => {
-    active = false;
-    clearInterval(interval);
+    activeListeners.delete(listener);
   };
 }

@@ -73,7 +73,10 @@ async function startServer() {
   try {
     const { MongoClient } = await import("mongodb");
     console.log("Connecting to MongoDB at:", MONGODB_URI);
-    const mongoClient = new MongoClient(MONGODB_URI);
+    const mongoClient = new MongoClient(MONGODB_URI, {
+      serverSelectionTimeoutMS: 2000,
+      connectTimeoutMS: 2000,
+    });
     await mongoClient.connect();
     db = mongoClient.db();
     console.log("Successfully connected to MongoDB database!");
@@ -422,19 +425,28 @@ async function startServer() {
   const getDriveClient = () => {
     const keyString = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
     if (!keyString) {
-      throw new Error("GOOGLE_SERVICE_ACCOUNT_KEY environment variable is missing");
+      throw new Error("A variável de ambiente GOOGLE_SERVICE_ACCOUNT_KEY está ausente. Por favor, configure-a com o JSON da Service Account no painel de configurações ou no arquivo .env.");
     }
     
-    let credentials;
+    const trimmedKey = keyString.trim();
+    
+    let credentials: any;
     try {
-      credentials = JSON.parse(keyString);
-    } catch (e) {
-      throw new Error("Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY as JSON");
+      credentials = JSON.parse(trimmedKey);
+    } catch (e: any) {
+      throw new Error(`Erro ao analisar a variável GOOGLE_SERVICE_ACCOUNT_KEY como JSON válido: ${e.message}`);
     }
+
+    if (!credentials || !credentials.client_email || !credentials.private_key) {
+      throw new Error("Os campos 'client_email' ou 'private_key' estão ausentes na credencial da Conta de Serviço do Google Cloud.");
+    }
+
+    // Normalizar quebras de linha da chave privada (substituir '\\n' por '\n')
+    const formattedPrivateKey = credentials.private_key.replace(/\\n/g, '\n');
 
     const auth = new google.auth.JWT({
       email: credentials.client_email,
-      key: credentials.private_key,
+      key: formattedPrivateKey,
       scopes: SCOPES,
     });
 

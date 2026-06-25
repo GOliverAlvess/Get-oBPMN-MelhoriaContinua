@@ -423,25 +423,18 @@ async function startServer() {
   const SCOPES = ["https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/drive"];
   
   const getDriveClient = () => {
-    let keyString = process.env.GOOGLE_SERVICE_ACCOUNT_KEY || process.env.GOOGLE_SERVICE_ACCOUNT_KEY_BASE64;
+    const keyString = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
     if (!keyString) {
-      throw new Error("A variável de ambiente GOOGLE_SERVICE_ACCOUNT_KEY ou GOOGLE_SERVICE_ACCOUNT_KEY_BASE64 está ausente. Por favor, configure-a no painel de configurações ou no arquivo .env.");
+      throw new Error("A variável de ambiente GOOGLE_SERVICE_ACCOUNT_KEY está ausente. Por favor, configure-a com o JSON da Service Account no painel de configurações ou no arquivo .env.");
     }
     
-    keyString = keyString.trim();
+    const trimmedKey = keyString.trim();
     
     let credentials: any;
     try {
-      // Tentar analisar diretamente como JSON
-      credentials = JSON.parse(keyString);
-    } catch (e) {
-      // Se falhar, tentar decodificar a partir de Base64
-      try {
-        const decoded = Buffer.from(keyString, 'base64').toString('utf8');
-        credentials = JSON.parse(decoded);
-      } catch (base64Error) {
-        throw new Error("Não foi possível analisar GOOGLE_SERVICE_ACCOUNT_KEY como um JSON válido ou decodificá-lo a partir de Base64.");
-      }
+      credentials = JSON.parse(trimmedKey);
+    } catch (e: any) {
+      throw new Error(`Erro ao analisar a variável GOOGLE_SERVICE_ACCOUNT_KEY como JSON válido: ${e.message}`);
     }
 
     if (!credentials || !credentials.client_email || !credentials.private_key) {

@@ -1,6 +1,20 @@
 // NoSQL & Local Auth Compatibility Layer (Replaces Firebase)
 import { cn } from './lib/utils';
 
+// Check if this window was opened as a Google OAuth callback popup
+if (typeof window !== 'undefined' && window.location.hash && window.opener) {
+  const hashParams = new URLSearchParams(window.location.hash.substring(1));
+  const accessToken = hashParams.get('access_token');
+  if (accessToken) {
+    try {
+      window.opener.postMessage({ type: 'GOOGLE_OAUTH_TOKEN', token: accessToken }, window.location.origin);
+      window.close();
+    } catch (e) {
+      console.error('Error sending OAuth token message:', e);
+    }
+  }
+}
+
 export const dbId = 'local-nosql-db';
 export const db = { name: 'local-nosql' };
 
@@ -64,47 +78,140 @@ export function onAuthStateChanged(authInstance: MockAuth, callback: (user: Fire
 // Sleek, beautiful modern modal for custom login without Google/Firebase OAuth setup
 export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<any> {
   return new Promise((resolve, reject) => {
-    // Check if modal already exists
+    // Check if real Google Client ID is configured
+    const googleClientId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID;
+    
+    if (googleClientId) {
+      // 1. Real Google Sign-In Flow
+      const redirectUri = window.location.origin;
+      const scope = 'profile email openid';
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${googleClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${encodeURIComponent(scope)}`;
+      
+      const authWindow = window.open(authUrl, 'google_oauth_popup', 'width=500,height=600');
+      if (!authWindow) {
+        alert('Por favor, permita pop-ups para fazer login com o Google.');
+        reject(new Error('Popup blocked'));
+        return;
+      }
+      
+      const messageHandler = async (event: MessageEvent) => {
+        if (event.origin !== window.location.origin) return;
+        if (event.data?.type === 'GOOGLE_OAUTH_TOKEN') {
+          const token = event.data.token;
+          window.removeEventListener('message', messageHandler);
+          
+          try {
+            // Fetch profile info from Google
+            const userInfoRes = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${token}`);
+            if (!userInfoRes.ok) throw new Error("Falha ao obter perfil do Google");
+            const googleUser = await userInfoRes.json();
+            const email = googleUser.email?.toLowerCase();
+            
+            // Validate email against database
+            const usersRes = await fetch(`${API_BASE}/users`);
+            if (!usersRes.ok) throw new Error("Falha ao consultar banco de dados de usuários");
+            const dbUsers = await usersRes.json();
+            
+            let matchedUser = dbUsers.find((u: any) => u.email?.toLowerCase() === email);
+            
+            // Local seed fallback as double guarantee for master admin
+            if (!matchedUser) {
+              const seeds = [
+                { id: "ga_oliveira_master", name: "Gabriel Oliveira", email: "ga.oliveira@ativalog.com.br", profile: "Usuário Master", sector: "Diretoria" },
+                { id: "biel_alves_master", name: "Gabriel Alves", email: "bielalves201@gmail.com", profile: "Usuário Master", sector: "Administração" }
+              ];
+              const matchedSeed = seeds.find(s => s.email.toLowerCase() === email);
+              if (matchedSeed) {
+                // Save seed user to database
+                await fetch(`${API_BASE}/users/${matchedSeed.id}`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ data: matchedSeed, merge: true })
+                });
+                matchedUser = matchedSeed;
+              }
+            }
+            
+            if (!matchedUser) {
+              alert("Usuário não autorizado. Entre em contato com o administrador.");
+              reject(new Error("Usuário não autorizado"));
+              return;
+            }
+            
+            const mockUser: FirebaseUser = {
+              uid: matchedUser.id,
+              email: matchedUser.email,
+              displayName: matchedUser.name,
+              photoURL: googleUser.picture || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(matchedUser.name)}`,
+              emailVerified: true,
+              isAnonymous: false,
+              tenantId: null,
+              providerData: []
+            };
+            
+            authInstance.currentUser = mockUser;
+            localStorage.setItem('pdca_auth_user', JSON.stringify(mockUser));
+            authInstance.emitChange();
+            resolve({ user: mockUser });
+          } catch (err: any) {
+            alert(`Erro na autenticação: ${err.message}`);
+            reject(err);
+          }
+        }
+      };
+      
+      window.addEventListener('message', messageHandler);
+      return;
+    }
+
+    // 2. Simulated Google Account Selector Flow (Fallback when Google Client ID is not configured)
     if (document.getElementById('custom-auth-modal')) return;
 
     const modalContainer = document.createElement('div');
     modalContainer.id = 'custom-auth-modal';
-    modalContainer.className = 'fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in';
+    modalContainer.className = 'fixed inset-0 bg-slate-950/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 animate-fade-in';
 
     modalContainer.innerHTML = `
-      <div class="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl max-w-md w-full p-8 space-y-6 transform scale-95 transition-transform duration-200">
+      <div class="bg-white dark:bg-[#111625] border border-slate-200 dark:border-slate-800/80 rounded-3xl shadow-2xl max-w-sm w-full p-8 md:p-10 space-y-8 transform scale-95 transition-all duration-200">
+        <!-- Google Icon -->
+        <div class="flex justify-center">
+          <svg class="w-8 h-8" viewBox="0 0 24 24">
+            <path fill="#EA4335" d="M12 5.04c1.66 0 3.2.57 4.38 1.69l3.27-3.27C17.67 1.48 14.99 1 12 1 7.35 1 3.4 3.65 1.5 7.5l3.9 3.03C6.35 7.55 8.95 5.04 12 5.04z"/>
+            <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.36H12v4.51h6.43c-.28 1.44-1.1 2.66-2.33 3.48l3.63 2.81c2.13-1.96 3.76-4.85 3.76-8.44z"/>
+            <path fill="#FBBC05" d="M5.4 10.53a7.19 7.19 0 010 2.94l-3.9 3.03A11.964 11.964 0 011 12c0-1.63.32-3.18.9-4.61l3.5 3.14z"/>
+            <path fill="#34A853" d="M12 23c3.24 0 5.97-1.07 7.96-2.91l-3.63-2.81c-1.1.74-2.51 1.18-4.33 1.18-3.05 0-5.65-2.51-6.57-5.49l-3.9 3.03C3.4 20.35 7.35 23 12 23z"/>
+          </svg>
+        </div>
+        
         <div class="text-center space-y-2">
-          <div class="w-12 h-12 bg-indigo-600 rounded-2xl mx-auto flex items-center justify-center text-white shadow-lg shadow-indigo-100 dark:shadow-none">
-            <span class="text-xl font-black">P</span>
-          </div>
-          <h2 class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Entrar no Sistema</h2>
-          <p class="text-sm text-slate-500 dark:text-slate-400">Insira suas credenciais para acessar os planos de ação</p>
+          <h2 class="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight">Fazer login</h2>
+          <p class="text-sm text-slate-600 dark:text-slate-400 font-medium">Use sua Conta do Google</p>
         </div>
 
-        <form id="auth-form" class="space-y-4">
+        <form id="auth-form" class="space-y-6">
+          <div id="auth-error-container" class="hidden text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 p-3.5 rounded-xl font-bold leading-relaxed"></div>
+          
           <div class="space-y-1">
-            <label class="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Nome Completo</label>
-            <input type="text" id="auth-name" required value="Gabriel Alves"
-              class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-medium" />
+            <div class="relative">
+              <input type="email" id="auth-email" required placeholder="E-mail do Google" value="ga.oliveira@ativalog.com.br"
+                class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium placeholder:text-slate-400" />
+            </div>
           </div>
 
-          <div class="space-y-1">
-            <label class="text-xs font-black uppercase tracking-wider text-slate-400 dark:text-slate-500">Endereço de E-mail</label>
-            <input type="email" id="auth-email" required value="bielalves201@gmail.com"
-              class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-medium" />
+          <div class="text-xs text-slate-400 dark:text-slate-500 font-medium leading-relaxed">
+            Para continuar, o Google confirmará seu nome, endereço de e-mail e foto do perfil com o GIP Flow.
           </div>
 
-          <button type="submit"
-            class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.98] transition-all text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2">
-            Confirmar Login
-          </button>
+          <div class="flex justify-between items-center pt-4">
+            <button id="auth-cancel" type="button" class="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-bold transition-colors">
+              Cancelar
+            </button>
+            <button type="submit" id="auth-submit-btn"
+              class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] transition-all text-white rounded-xl font-bold text-sm shadow-md shadow-blue-100 dark:shadow-none flex items-center justify-center gap-2">
+              Próxima
+            </button>
+          </div>
         </form>
-
-        <div class="text-center">
-          <button id="auth-cancel" type="button" class="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-medium transition-colors">
-            Cancelar
-          </button>
-        </div>
       </div>
     `;
 
@@ -119,27 +226,80 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
       }
     };
 
-    form.addEventListener('submit', (e) => {
+    form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const nameInput = modalContainer.querySelector('#auth-name') as HTMLInputElement;
       const emailInput = modalContainer.querySelector('#auth-email') as HTMLInputElement;
+      const errorContainer = modalContainer.querySelector('#auth-error-container') as HTMLDivElement;
+      const submitBtn = modalContainer.querySelector('#auth-submit-btn') as HTMLButtonElement;
+      
+      const emailVal = emailInput.value.trim().toLowerCase();
 
-      const mockUser: FirebaseUser = {
-        uid: 'user_' + Math.random().toString(36).substring(2, 9),
-        email: emailInput.value.trim(),
-        displayName: nameInput.value.trim(),
-        photoURL: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(nameInput.value)}`,
-        emailVerified: true,
-        isAnonymous: false,
-        tenantId: null,
-        providerData: []
-      };
+      errorContainer.classList.add('hidden');
+      errorContainer.textContent = '';
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Verificando...';
 
-      authInstance.currentUser = mockUser;
-      localStorage.setItem('pdca_auth_user', JSON.stringify(mockUser));
-      authInstance.emitChange();
-      cleanup();
-      resolve({ user: mockUser });
+      try {
+        // Fetch all registered users
+        const response = await fetch(`${API_BASE}/users`);
+        if (!response.ok) {
+          throw new Error('Falha ao conectar com o banco de dados de usuários.');
+        }
+        const users = await response.json();
+
+        // Find user by email (case-insensitive)
+        let matchedUser = users.find((u: any) => u.email?.toLowerCase() === emailVal);
+
+        // Fallback to local master seeds if database list is empty or doesn't have it yet
+        if (!matchedUser) {
+          const seeds = [
+            { id: "ga_oliveira_master", name: "Gabriel Oliveira", email: "ga.oliveira@ativalog.com.br", profile: "Usuário Master", sector: "Diretoria" },
+            { id: "biel_alves_master", name: "Gabriel Alves", email: "bielalves201@gmail.com", profile: "Usuário Master", sector: "Administração" }
+          ];
+          const matchedSeed = seeds.find(s => s.email.toLowerCase() === emailVal);
+          
+          if (matchedSeed) {
+            // Seed to database on demand
+            await fetch(`${API_BASE}/users/${matchedSeed.id}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ data: matchedSeed, merge: true })
+            });
+            matchedUser = matchedSeed;
+          }
+        }
+
+        if (!matchedUser) {
+          errorContainer.textContent = 'Usuário não autorizado';
+          errorContainer.classList.remove('hidden');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Próxima';
+          return;
+        }
+
+        const mockUser: FirebaseUser = {
+          uid: matchedUser.id,
+          email: matchedUser.email,
+          displayName: matchedUser.name,
+          photoURL: `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(matchedUser.name)}`,
+          emailVerified: true,
+          isAnonymous: false,
+          tenantId: null,
+          providerData: []
+        };
+
+        authInstance.currentUser = mockUser;
+        localStorage.setItem('pdca_auth_user', JSON.stringify(mockUser));
+        authInstance.emitChange();
+        cleanup();
+        resolve({ user: mockUser });
+
+      } catch (err: any) {
+        errorContainer.textContent = err.message || 'Erro inesperado na autenticação.';
+        errorContainer.classList.remove('hidden');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Próxima';
+      }
     });
 
     cancelBtn.addEventListener('click', () => {

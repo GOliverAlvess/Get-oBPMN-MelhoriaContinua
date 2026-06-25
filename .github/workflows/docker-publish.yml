@@ -3,7 +3,7 @@ name: Build and Push to Docker Hub
 on:
   push:
     branches:
-      - main-master
+      - main-master # Ativa a pipeline apenas para envios na branch main-master e não na dev
 
 jobs:
   test-and-lint:

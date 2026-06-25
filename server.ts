@@ -28,6 +28,48 @@ async function startServer() {
   let db: any = null;
   const memoryDb: Record<string, Record<string, any>> = {};
 
+  const seedUsers = async (dbInstance: any) => {
+    const defaultUsers = [
+      {
+        id: "ga_oliveira_master",
+        name: "Gabriel Oliveira",
+        email: "ga.oliveira@ativalog.com.br",
+        sector: "Diretoria",
+        profile: "Usuário Master"
+      },
+      {
+        id: "biel_alves_master",
+        name: "Gabriel Alves",
+        email: "bielalves201@gmail.com",
+        sector: "Administração",
+        profile: "Usuário Master"
+      }
+    ];
+
+    try {
+      if (dbInstance) {
+        const collection = dbInstance.collection("users");
+        for (const user of defaultUsers) {
+          const existing = await collection.findOne({ email: user.email });
+          if (!existing) {
+            console.log(`Seeding user to MongoDB: ${user.email}`);
+            await collection.insertOne({ ...user, _id: user.id });
+          }
+        }
+      } else {
+        if (!memoryDb["users"]) memoryDb["users"] = {};
+        for (const user of defaultUsers) {
+          if (!memoryDb["users"][user.id]) {
+            console.log(`Seeding user to MemoryDB: ${user.email}`);
+            memoryDb["users"][user.id] = user;
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error seeding users:", err);
+    }
+  };
+
   try {
     const { MongoClient } = await import("mongodb");
     console.log("Connecting to MongoDB at:", MONGODB_URI);
@@ -35,8 +77,10 @@ async function startServer() {
     await mongoClient.connect();
     db = mongoClient.db();
     console.log("Successfully connected to MongoDB database!");
+    await seedUsers(db);
   } catch (error) {
     console.warn("MongoDB connection failed. Running in memory-fallback mode...", error);
+    await seedUsers(null);
   }
 
   // --- LOCAL NOSQL DATABASE REST API ENDPOINTS ---

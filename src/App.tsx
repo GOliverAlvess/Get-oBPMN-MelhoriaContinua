@@ -312,39 +312,10 @@ export default function App() {
     };
   }, [user]);
 
-  // Sync User Profile to Firestore
+  // Sync User Profile to Firestore disabled to prevent automatic user creation on login
   useEffect(() => {
-    if (user) {
-      const userDocRef = doc(db, 'users', user.uid);
-      const isAdminEmail = user.email === 'bielalves201@gmail.com';
-      
-      // Check if user already exists to avoid overwriting profile
-      getDoc(userDocRef).then(docSnap => {
-        if (!docSnap.exists()) {
-          setDoc(userDocRef, {
-            id: user.uid,
-            name: user.displayName || 'Usuário sem nome',
-            email: user.email || '',
-            profile: isAdminEmail ? 'Usuário Master' : 'Usuário Analista'
-          }).catch(error => handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`));
-        } else {
-          const data = docSnap.data();
-          // If profile is missing or if it's the admin and not Master, upgrade it
-          if (!data?.profile || (isAdminEmail && data.profile !== 'Usuário Master')) {
-            setDoc(userDocRef, {
-              profile: isAdminEmail ? 'Usuário Master' : (data?.profile || 'Usuário Analista')
-            }, { merge: true }).catch(error => handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`));
-          }
-          
-          // Always keep name and email updated
-          setDoc(userDocRef, {
-            id: user.uid,
-            name: user.displayName || 'Usuário sem nome',
-            email: user.email || '',
-          }, { merge: true }).catch(error => handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`));
-        }
-      });
-    }
+    // Access validation and control is handled strictly during the login popup flow.
+    // This blocks automatic creation of new user profiles on login.
   }, [user]);
 
   const handleLogin = async () => {
@@ -352,6 +323,9 @@ export default function App() {
       await signInWithPopup(auth, googleProvider);
     } catch (error: any) {
       console.error("Login failed", error);
+      if (error.message === 'Login cancelado pelo usuário' || error.message === 'Popup blocked') {
+        return; // Ignora graciosamente cancelamentos ou pop-up bloqueado se já alertado
+      }
       if (error.code === 'auth/unauthorized-domain') {
         alert(`Erro de Domínio: O domínio atual não está autorizado no Firebase. Adicione "${window.location.hostname}" na lista de domínios autorizados do Console do Firebase.`);
       } else if (error.code === 'auth/popup-blocked') {
@@ -3756,7 +3730,7 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fallback check for admin email just in case the profile isn't loaded yet in state
-  const isMaster = currentUser?.profile === 'Usuário Master' || auth.currentUser?.email === 'bielalves201@gmail.com';
+  const isMaster = currentUser?.profile === 'Usuário Master' || (auth.currentUser?.email && ['bielalves201@gmail.com', 'ga.oliveira@ativalog.com.br'].includes(auth.currentUser.email));
 
   useEffect(() => {
     if (editingUser) {
@@ -3781,6 +3755,14 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
     
     setIsSubmitting(true);
     try {
+      const emailLower = email.trim().toLowerCase();
+      const duplicate = users.find(u => u.email?.trim().toLowerCase() === emailLower);
+      if (duplicate && (!editingUser || editingUser.id !== duplicate.id)) {
+        alert('Este e-mail já está cadastrado no sistema!');
+        setIsSubmitting(false);
+        return;
+      }
+
       const userId = editingUser ? editingUser.id : uuidv4();
       const userData: User = {
         id: userId,

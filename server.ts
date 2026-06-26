@@ -474,7 +474,7 @@ async function startServer() {
       }
 
       const drive = getDriveClient();
-      const parentFolderId = process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID || "1fvFyLFU1QGZkfOxYvreHxtEZVWE8l_96";
+      const parentFolderId = process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID || "0AFf6OFctpR_7Uk9PVA";
       
       let currentFolderId = driveFolderId;
 
@@ -485,6 +485,8 @@ async function startServer() {
           q: `mimeType='application/vnd.google-apps.folder' and name='${projectName}' and '${parentFolderId}' in parents and trashed=false`,
           fields: "files(id, name)",
           spaces: "drive",
+          supportsAllDrives: true,
+          includeItemsFromAllDrives: true
         });
 
         const existingFolder = response.data.files?.[0];
@@ -502,6 +504,7 @@ async function startServer() {
           const folder = await drive.files.create({
             requestBody: folderMetadata,
             fields: "id",
+            supportsAllDrives: true
           });
           
           currentFolderId = folder.data.id;
@@ -523,6 +526,7 @@ async function startServer() {
         requestBody: fileMetadata,
         media: media,
         fields: "id, name, webViewLink, size, mimeType",
+        supportsAllDrives: true
       });
 
       res.json({

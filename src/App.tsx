@@ -43,7 +43,8 @@ import {
   Download,
   Sun,
   Moon,
-  Menu
+  Menu,
+  Lock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -2944,13 +2945,14 @@ function SettingsView({ users, globalConfig, projects, actions }: {
       { id: 'ganhos', label: 'Tipos de Ganhos', icon: <TrendingUp size={18} /> }
     ] : []),
     { id: 'relatorios', label: 'Relatórios', icon: <FileText size={18} /> },
+    { id: 'alterar-senha', label: 'Alterar Senha', icon: <Lock size={18} /> }
   ] as const;
 
   const defaultSubTab = profile === 'Usuário Visualizador' 
     ? 'relatorios' 
     : (profile === 'Usuário Analista' ? 'setores-ferramentas' : 'cadastros');
 
-  const [activeSubTab, setActiveSubTab] = useState<'cadastros' | 'setores-ferramentas' | 'relatorios' | 'ganhos'>(defaultSubTab);
+  const [activeSubTab, setActiveSubTab] = useState<'cadastros' | 'setores-ferramentas' | 'relatorios' | 'ganhos' | 'alterar-senha'>(defaultSubTab);
 
   useEffect(() => {
     setActiveSubTab(defaultSubTab);
@@ -3011,6 +3013,7 @@ function SettingsView({ users, globalConfig, projects, actions }: {
             {activeSubTab === 'relatorios' && (
               <ReportsTab projects={projects} users={users} actions={actions} />
             )}
+            {activeSubTab === 'alterar-senha' && <ChangePasswordTab />}
           </motion.div>
         </AnimatePresence>
       </div>
@@ -3737,6 +3740,7 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [sector, setSector] = useState('');
+  const [password, setPassword] = useState('');
   const [profile, setProfile] = useState<UserProfile>('Usuário Analista');
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
@@ -3752,11 +3756,13 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
       setEmail(editingUser.email || '');
       setSector(editingUser.sector || '');
       setProfile(editingUser.profile || 'Usuário Analista');
+      setPassword('');
     } else {
       setName('');
       setEmail('');
       setSector('');
       setProfile('Usuário Analista');
+      setPassword('');
     }
   }, [editingUser]);
 
@@ -3764,6 +3770,11 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
     e.preventDefault();
     if (!name || !email || !sector) {
       alert('Por favor, preencha todos os campos obrigatórios.');
+      return;
+    }
+
+    if (!editingUser && !password) {
+      alert('Por favor, defina uma senha para o novo usuário.');
       return;
     }
     
@@ -3783,7 +3794,8 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
         name,
         email,
         sector,
-        profile
+        profile,
+        ...(password ? { password } : {})
       };
 
       await setDoc(doc(db, 'users', userId), userData, { merge: true });
@@ -3791,6 +3803,7 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
       setName('');
       setEmail('');
       setSector('');
+      setPassword('');
       setProfile('Usuário Analista');
       setEditingUser(null);
       alert(editingUser ? 'Usuário atualizado com sucesso!' : 'Usuário cadastrado com sucesso!');
@@ -3900,6 +3913,20 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
                 value={sector}
                 onChange={(e) => setSector(e.target.value)}
                 placeholder="Ex: Qualidade, Produção, RH"
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-semibold text-slate-700 ml-1">
+                {editingUser ? 'Senha (deixe em branco para não alterar)' : 'Senha'}
+              </label>
+              <input 
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={editingUser ? '••••••••' : 'Defina uma senha'}
+                required={!editingUser}
+                minLength={6}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
               />
             </div>
@@ -4077,6 +4104,139 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
           </div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function ChangePasswordTab() {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setSuccessMsg('');
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setErrorMsg('Por favor, preencha todos os campos.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setErrorMsg('A nova senha e a confirmação não coincidem.');
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setErrorMsg('A nova senha deve ter no mínimo 6 caracteres.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: auth.currentUser?.uid,
+          currentPassword,
+          newPassword
+        })
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.error || 'Erro ao alterar a senha.');
+      }
+
+      setSuccessMsg('Senha alterada com sucesso!');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Erro inesperado ao alterar a senha.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="p-8 space-y-12 w-full overflow-y-auto max-h-[85vh] custom-scrollbar">
+      <div className="flex items-center gap-4 border-b border-slate-100 pb-8">
+        <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center shadow-inner">
+          <Lock size={24} />
+        </div>
+        <div>
+          <h3 className="text-xl font-bold text-slate-900 leading-tight">Alterar Senha</h3>
+          <p className="text-slate-500 text-sm mt-1">Mantenha sua conta segura alterando sua senha periodicamente.</p>
+        </div>
+      </div>
+
+      <div className="max-w-md space-y-6">
+        {errorMsg && (
+          <div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 p-4 rounded-2xl font-bold">
+            {errorMsg}
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="text-xs text-emerald-600 bg-emerald-50 border border-emerald-200 p-4 rounded-2xl font-bold">
+            {successMsg}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-700 ml-1">Senha Atual</label>
+            <input 
+              type="password"
+              required
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              placeholder="Digite sua senha atual"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-700 ml-1">Nova Senha (mín. 6 caracteres)</label>
+            <input 
+              type="password"
+              required
+              minLength={6}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Digite a nova senha"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-sm font-semibold text-slate-700 ml-1">Confirmar Nova Senha</label>
+            <input 
+              type="password"
+              required
+              minLength={6}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirme a nova senha"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
+            />
+          </div>
+
+          <button 
+            type="submit"
+            disabled={isSubmitting || !currentPassword || !newPassword || !confirmPassword}
+            className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50"
+          >
+            {isSubmitting ? 'Alterando...' : 'Alterar Senha'}
+          </button>
+        </form>
+      </div>
     </div>
   );
 }

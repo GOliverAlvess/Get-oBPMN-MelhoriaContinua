@@ -6,6 +6,7 @@ import multer from "multer";
 import { google } from "googleapis";
 import { Readable } from "stream";
 import dotenv from "dotenv";
+import bcryptjs from "bcryptjs";
 
 dotenv.config();
 
@@ -204,6 +205,196 @@ async function startServer() {
     return { authorized: true };
   };
 
+  // --- CUSTOM AUTHENTICATION ENDPOINTS ---
+  app.post("/api/auth/check-user", async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "E-mail é obrigatório." });
+    }
+    const emailLower = email.trim().toLowerCase();
+    
+    try {
+      let user = await getUserByEmail(emailLower);
+      
+      // If user not found, check if it matches master seed and auto-seed if yes
+      if (!user) {
+        const defaultUsers = [
+          {
+            id: "ga_oliveira_master",
+            name: "Gabriel Oliveira",
+            email: "ga.oliveira@ativalog.com.br",
+            sector: "Diretoria",
+            profile: "Usuário Master"
+          },
+          {
+            id: "biel_alves_master",
+            name: "Gabriel Alves",
+            email: "bielalves201@gmail.com",
+            sector: "Administração",
+            profile: "Usuário Master"
+          }
+        ];
+        const seed = defaultUsers.find(u => u.email.toLowerCase() === emailLower);
+        if (seed) {
+          if (db) {
+            await db.collection("users").insertOne({ ...seed, _id: seed.id });
+          } else {
+            if (!memoryDb["users"]) memoryDb["users"] = {};
+            memoryDb["users"][seed.id] = seed;
+          }
+          user = seed;
+          console.log(`Auto-seeded seed user: ${emailLower}`);
+        }
+      }
+
+      if (!user) {
+        return res.json({ exists: false });
+      }
+
+      return res.json({
+        exists: true,
+        hasPassword: !!user.passwordHash,
+        userId: user.id || user._id
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    const { email, password } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: "E-mail é obrigatório." });
+    }
+    const emailLower = email.trim().toLowerCase();
+
+    try {
+      const user = await getUserByEmail(emailLower);
+      if (!user) {
+        return res.status(401).json({ error: "Usuário não autorizado." });
+      }
+
+      // Check if user has password set yet
+      if (!user.passwordHash) {
+        return res.json({ status: "first_access", userId: user.id || user._id });
+      }
+
+      if (!password) {
+        return res.status(400).json({ error: "Senha é obrigatória." });
+      }
+
+      // Compare password
+      const isValid = bcryptjs.compareSync(password, user.passwordHash);
+      if (!isValid) {
+        return res.status(401).json({ error: "Senha incorreta." });
+      }
+
+      return res.json({
+        status: "success",
+        user: {
+          id: user.id || user._id,
+          name: user.name,
+          email: user.email,
+          profile: user.profile || "Usuário Analista"
+        }
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/auth/register-password", async (req, res) => {
+    const { userId, password } = req.body;
+    if (!userId || !password) {
+      return res.status(400).json({ error: "Campos obrigatórios ausentes." });
+    }
+
+    try {
+      let user: any = null;
+      if (db) {
+        user = await db.collection("users").findOne({ _id: userId });
+      } else {
+        user = memoryDb["users"]?.[userId];
+      }
+
+      if (!user) {
+        return res.status(404).json({ error: "Usuário não encontrado." });
+      }
+
+      const passwordHash = bcryptjs.hashSync(password, 10);
+
+      if (db) {
+        await db.collection("users").updateOne(
+          { _id: userId },
+          { $set: { passwordHash } }
+        );
+      } else {
+        if (!memoryDb["users"]) memoryDb["users"] = {};
+        memoryDb["users"][userId] = { ...memoryDb["users"][userId], passwordHash };
+      }
+
+      // Broadcast update
+      await broadcastDocChange("users", userId, "update");
+
+      return res.json({
+        status: "success",
+        user: {
+          id: user.id || user._id,
+          name: user.name,
+          email: user.email,
+          profile: user.profile || "Usuário Analista"
+        }
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/auth/change-password", async (req, res) => {
+    const { userId, currentPassword, newPassword } = req.body;
+    if (!userId || !currentPassword || !newPassword) {
+      return res.status(400).json({ error: "Campos obrigatórios ausentes." });
+    }
+
+    try {
+      let user: any = null;
+      if (db) {
+        user = await db.collection("users").findOne({ _id: userId });
+      } else {
+        user = memoryDb["users"]?.[userId];
+      }
+
+      if (!user) {
+        return res.status(404).json({ error: "Usuário não encontrado." });
+      }
+
+      // Verify current password
+      const isValid = user.passwordHash ? bcryptjs.compareSync(currentPassword, user.passwordHash) : false;
+      if (!isValid) {
+        return res.status(401).json({ error: "Senha atual incorreta." });
+      }
+
+      const passwordHash = bcryptjs.hashSync(newPassword, 10);
+
+      if (db) {
+        await db.collection("users").updateOne(
+          { _id: userId },
+          { $set: { passwordHash } }
+        );
+      } else {
+        if (!memoryDb["users"]) memoryDb["users"] = {};
+        memoryDb["users"][userId] = { ...memoryDb["users"][userId], passwordHash };
+      }
+
+      // Broadcast update
+      await broadcastDocChange("users", userId, "update");
+
+      return res.json({ status: "success" });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // --- LOCAL NOSQL DATABASE REST API ENDPOINTS ---
 
   // --- REAL-TIME SYNC VIA SERVER-SENT EVENTS (SSE) ---
@@ -263,10 +454,24 @@ async function startServer() {
           const { _id, ...rest } = doc;
           return { id: _id, ...rest };
         });
+        if (collection === "users") {
+          mapped.forEach((user: any) => {
+            delete user.password;
+            delete user.passwordHash;
+          });
+        }
         return res.json(mapped);
       } else {
         const col = memoryDb[collection] || {};
-        return res.json(Object.values(col));
+        const list = Object.values(col);
+        if (collection === "users") {
+          const sanitized = list.map((user: any) => {
+            const { password, passwordHash, ...rest } = user;
+            return rest;
+          });
+          return res.json(sanitized);
+        }
+        return res.json(list);
       }
     } catch (error: any) {
       res.status(500).json({ error: error.message });
@@ -281,10 +486,19 @@ async function startServer() {
         const doc = await db.collection(collection).findOne({ _id: id });
         if (!doc) return res.status(404).json({ error: "Not found" });
         const { _id, ...rest } = doc;
-        return res.json({ id: _id, ...rest });
+        const mapped = { id: _id, ...rest };
+        if (collection === "users") {
+          delete mapped.password;
+          delete mapped.passwordHash;
+        }
+        return res.json(mapped);
       } else {
         const doc = memoryDb[collection]?.[id];
         if (!doc) return res.status(404).json({ error: "Not found" });
+        if (collection === "users") {
+          const { password, passwordHash, ...rest } = doc;
+          return res.json(rest);
+        }
         return res.json(doc);
       }
     } catch (error: any) {
@@ -302,8 +516,26 @@ async function startServer() {
         return res.status(403).json({ error: authCheck.error || "Ação não autorizada para seu perfil" });
       }
 
-      const cleanData = { ...data, id };
+      let cleanData = { ...data, id };
       if (cleanData._id) delete cleanData._id; // Remove MongoDB internal keys if leaked
+
+      if (collection === "users") {
+        if (cleanData.password) {
+          cleanData.passwordHash = bcryptjs.hashSync(cleanData.password, 10);
+          delete cleanData.password;
+        } else {
+          // If no new password is sent, retain existing password hash from database
+          let existingUser: any = null;
+          if (db) {
+            existingUser = await db.collection("users").findOne({ _id: id });
+          } else {
+            existingUser = memoryDb["users"]?.[id];
+          }
+          if (existingUser && existingUser.passwordHash) {
+            cleanData.passwordHash = existingUser.passwordHash;
+          }
+        }
+      }
 
       if (db) {
         if (merge) {
@@ -346,17 +578,24 @@ async function startServer() {
         return res.status(403).json({ error: authCheck.error || "Ação não autorizada para seu perfil" });
       }
 
-      if (data._id) delete data._id; // Prevent _id modification
+      let cleanData = { ...data };
+      if (cleanData._id) delete cleanData._id; // Prevent _id modification
+
+      if (collection === "users" && cleanData.password) {
+        cleanData.passwordHash = bcryptjs.hashSync(cleanData.password, 10);
+        delete cleanData.password;
+      }
+
       if (db) {
         await db.collection(collection).updateOne(
           { _id: id },
-          { $set: data }
+          { $set: cleanData }
         );
         await broadcastDocChange(collection, id, 'update');
         return res.json({ success: true, id });
       } else {
         if (memoryDb[collection]?.[id]) {
-          memoryDb[collection][id] = { ...memoryDb[collection][id], ...data };
+          memoryDb[collection][id] = { ...memoryDb[collection][id], ...cleanData };
           await broadcastDocChange(collection, id, 'update');
           return res.json({ success: true, id });
         }
@@ -403,7 +642,13 @@ async function startServer() {
       }
 
       const generatedId = "doc_" + Math.random().toString(36).substring(2, 11);
-      const cleanData = { ...data, id: generatedId };
+      let cleanData = { ...data, id: generatedId };
+
+      if (collection === "users" && cleanData.password) {
+        cleanData.passwordHash = bcryptjs.hashSync(cleanData.password, 10);
+        delete cleanData.password;
+      }
+
       if (db) {
         await db.collection(collection).insertOne({ ...cleanData, _id: generatedId });
         await broadcastDocChange(collection, generatedId, 'set');

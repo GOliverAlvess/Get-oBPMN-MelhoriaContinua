@@ -2821,10 +2821,13 @@ function CreateProjectModal({ isOpen, onClose, onCreate, users }: {
   const [assignedTo, setAssignedTo] = useState('');
 
   useEffect(() => {
-    if (isOpen && users.length > 0 && !assignedTo) {
-      setAssignedTo(users[0].id);
+    if (isOpen) {
+      setName('');
+      setDescription('');
+      setPriority('Média');
+      setAssignedTo(users.length > 0 ? users[0].id : '');
     }
-  }, [isOpen, users, assignedTo]);
+  }, [isOpen, users]);
 
   if (!isOpen) return null;
 

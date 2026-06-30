@@ -90,26 +90,6 @@ async function startServer() {
   const getUserByEmail = async (email: string) => {
     if (!email) return null;
     const emailLower = email.trim().toLowerCase();
-    
-    const defaultUsers = [
-      {
-        id: "ga_oliveira_master",
-        name: "Gabriel Oliveira",
-        email: "ga.oliveira@ativalog.com.br",
-        sector: "Diretoria",
-        profile: "Usuário Master"
-      },
-      {
-        id: "biel_alves_master",
-        name: "Gabriel Alves",
-        email: "bielalves201@gmail.com",
-        sector: "Administração",
-        profile: "Usuário Master"
-      }
-    ];
-    
-    const defaultFound = defaultUsers.find(u => u.email.toLowerCase() === emailLower);
-    if (defaultFound) return defaultFound;
 
     try {
       if (db) {
@@ -214,38 +194,7 @@ async function startServer() {
     const emailLower = email.trim().toLowerCase();
     
     try {
-      let user = await getUserByEmail(emailLower);
-      
-      // If user not found, check if it matches master seed and auto-seed if yes
-      if (!user) {
-        const defaultUsers = [
-          {
-            id: "ga_oliveira_master",
-            name: "Gabriel Oliveira",
-            email: "ga.oliveira@ativalog.com.br",
-            sector: "Diretoria",
-            profile: "Usuário Master"
-          },
-          {
-            id: "biel_alves_master",
-            name: "Gabriel Alves",
-            email: "bielalves201@gmail.com",
-            sector: "Administração",
-            profile: "Usuário Master"
-          }
-        ];
-        const seed = defaultUsers.find(u => u.email.toLowerCase() === emailLower);
-        if (seed) {
-          if (db) {
-            await db.collection("users").insertOne({ ...seed, _id: seed.id });
-          } else {
-            if (!memoryDb["users"]) memoryDb["users"] = {};
-            memoryDb["users"][seed.id] = seed;
-          }
-          user = seed;
-          console.log(`Auto-seeded seed user: ${emailLower}`);
-        }
-      }
+      const user = await getUserByEmail(emailLower);
 
       if (!user) {
         return res.json({ exists: false });
@@ -319,6 +268,11 @@ async function startServer() {
 
       if (!user) {
         return res.status(404).json({ error: "Usuário não encontrado." });
+      }
+
+      // Security: block setting a password if the user already has one defined
+      if (user.passwordHash) {
+        return res.status(400).json({ error: "Este usuário já possui uma senha cadastrada." });
       }
 
       const passwordHash = bcryptjs.hashSync(password, 10);

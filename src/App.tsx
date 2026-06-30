@@ -3748,7 +3748,7 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fallback check for admin email just in case the profile isn't loaded yet in state
-  const isMaster = currentUser?.profile === 'Usuário Master' || (auth.currentUser?.email && ['bielalves201@gmail.com', 'ga.oliveira@ativalog.com.br'].includes(auth.currentUser.email));
+  const isMaster = currentUser?.profile === 'Usuário Master';
 
   useEffect(() => {
     if (editingUser) {

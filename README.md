@@ -177,6 +177,7 @@ Isso iniciará o contêiner da aplicação mapeando a porta `3002`.
     ```bash
     docker restart pdca-system-app
     ```
+    
 2.  **Backups Regulares:** Agende rotinas de backup da pasta de dados física do MongoDB (`/data/db` mapeada na sua VPS) para garantir segurança máxima das informações estratégicas cadastradas no sistema PDCA.
 
 ---

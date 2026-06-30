@@ -263,6 +263,8 @@ export interface User {
   sector?: string; // Departamento organizacional do colaborador
   avatar?: string; // URL da imagem ou iniciais para ícones no header
   profile?: UserProfile; // Perfil de atuação determinando seus níveis de gravação
+  password?: string; // Senha em texto puro (usada temporariamente no formulário)
+  passwordHash?: string; // Hash seguro da senha de acesso
 }
 
 // Ações operacionais avulsas enviadas para os usuários ou definidas no histórico interativo

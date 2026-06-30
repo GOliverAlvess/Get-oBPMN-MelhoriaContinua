@@ -670,6 +670,30 @@ export async function getDoc(docRef: DocumentReference) {
   return new MockDocumentSnapshot(docRef.id, data);
 }
 
+function matchesConstraints(docVal: any, constraints: any[]): boolean {
+  if (!constraints) return true;
+  for (const c of constraints) {
+    if (c.type === 'where') {
+      const { field, op, value } = c;
+      const docValue = docVal[field];
+      if (op === '==') {
+        if (docValue !== value) return false;
+      } else if (op === '!=') {
+        if (docValue === value) return false;
+      } else if (op === '>') {
+        if (!(docValue > value)) return false;
+      } else if (op === '>=') {
+        if (!(docValue >= value)) return false;
+      } else if (op === '<') {
+        if (!(docValue < value)) return false;
+      } else if (op === '<=') {
+        if (!(docValue <= value)) return false;
+      }
+    }
+  }
+  return true;
+}
+
 export async function getDocs(queryRef: CollectionReference | QueryReference) {
   const collectionName = queryRef.type === 'query' ? queryRef.collection : queryRef.name;
   const url = `${API_BASE}/${collectionName}`;
@@ -677,7 +701,48 @@ export async function getDocs(queryRef: CollectionReference | QueryReference) {
     headers: getAuthHeaders(),
   });
   await handleResponse(response, `Failed to fetch collection docs: ${response.statusText}`);
-  const data = await response.json();
+  let data = await response.json();
+
+  if (queryRef.type === 'query' && queryRef.constraints) {
+    for (const c of queryRef.constraints) {
+      if (c.type === 'where') {
+        const { field, op, value } = c;
+        data = data.filter((item: any) => {
+          const docValue = item[field];
+          if (op === '==') {
+            return docValue === value;
+          }
+          if (op === '!=') {
+            return docValue !== value;
+          }
+          if (op === '>') {
+            return docValue > value;
+          }
+          if (op === '>=') {
+            return docValue >= value;
+          }
+          if (op === '<') {
+            return docValue < value;
+          }
+          if (op === '<=') {
+            return docValue <= value;
+          }
+          return true;
+        });
+      } else if (c.type === 'orderBy') {
+        const { field, direction } = c;
+        data = [...data].sort((a: any, b: any) => {
+          const valA = a[field];
+          const valB = b[field];
+          if (valA === undefined || valB === undefined) return 0;
+          if (valA < valB) return direction === 'asc' ? -1 : 1;
+          if (valA > valB) return direction === 'asc' ? 1 : -1;
+          return 0;
+        });
+      }
+    }
+  }
+
   return new MockQuerySnapshot(data);
 }
 
@@ -710,7 +775,7 @@ function handleIncomingMutation(payload: { collection: string; id: string; type:
     if (listenerColName !== collection) continue;
 
     if (isCollection) {
-      const updatedDocs = [...listener.currentDocs];
+      let updatedDocs = [...listener.currentDocs];
       const index = updatedDocs.findIndex(d => d.id === id);
 
       if (type === 'delete') {
@@ -720,10 +785,39 @@ function handleIncomingMutation(payload: { collection: string; id: string; type:
           continue;
         }
       } else {
+        const docWithNewData = index !== -1 ? { ...updatedDocs[index], ...data } : data;
+        const constraints = target.type === 'query' ? (target as QueryReference).constraints : [];
+        const matches = matchesConstraints(docWithNewData, constraints);
+
         if (index !== -1) {
-          updatedDocs[index] = { ...updatedDocs[index], ...data };
+          if (matches) {
+            updatedDocs[index] = docWithNewData;
+          } else {
+            updatedDocs.splice(index, 1);
+          }
         } else {
-          updatedDocs.push(data);
+          if (matches) {
+            updatedDocs.push(docWithNewData);
+          } else {
+            continue;
+          }
+        }
+      }
+
+      // Apply orderBy sorting if any
+      if (target.type === 'query' && (target as QueryReference).constraints) {
+        for (const c of (target as QueryReference).constraints) {
+          if (c.type === 'orderBy') {
+            const { field, direction } = c;
+            updatedDocs = [...updatedDocs].sort((a: any, b: any) => {
+              const valA = a[field];
+              const valB = b[field];
+              if (valA === undefined || valB === undefined) return 0;
+              if (valA < valB) return direction === 'asc' ? -1 : 1;
+              if (valA > valB) return direction === 'asc' ? 1 : -1;
+              return 0;
+            });
+          }
         }
       }
 

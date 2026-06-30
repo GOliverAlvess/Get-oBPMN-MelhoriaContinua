@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Project, ProjectFile } from '../types';
-import { db, collection, query, where, onSnapshot, addDoc, doc, updateDoc, handleFirestoreError, OperationType, auth } from '../firebase';
+import { db, collection, query, where, onSnapshot, addDoc, doc, updateDoc, deleteDoc, handleFirestoreError, OperationType, auth } from '../firebase';
 import { cn } from '../lib/utils';
 
 // Propriedades recebidas pelo componente de lista de anexos do projeto (ProjectFilesSection)
@@ -133,6 +133,16 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
     }
   };
 
+  const handleFileDelete = async (fileId: string) => {
+    if (!window.confirm('Tem certeza de que deseja excluir este arquivo?')) return;
+    try {
+      await deleteDoc(doc(db, 'projectFiles', fileId));
+    } catch (error) {
+      console.error("Erro ao deletar arquivo:", error);
+      alert("Falha ao deletar arquivo.");
+    }
+  };
+
   // Formata o tamanho em bytes do documento para uma string amigável ao usuário (KB, MB, GB, etc)
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return '0 B';
@@ -240,6 +250,13 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
                   >
                     <Download size={14} />
                   </a>
+                  <button 
+                    onClick={() => handleFileDelete(file.id)}
+                    className="p-1.5 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100 hover:text-rose-600 transition-all ml-1"
+                    title="Excluir"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               </div>
             ))}

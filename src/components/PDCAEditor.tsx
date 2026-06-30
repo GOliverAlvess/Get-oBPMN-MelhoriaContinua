@@ -4371,7 +4371,7 @@ export default function PDCAEditor({
                                                 </div>
                                               ) : item.status !==
                                                 "Concluído" ? (
-                                                <div className="bg-slate-900 p-6 rounded-[2rem] text-white space-y-6 shadow-xl shadow-slate-200">
+                                                <div className="pdca-new-log-card p-6 rounded-[2rem] space-y-6 shadow-xl">
                                                   <div className="flex items-center gap-3">
                                                     <div className="w-8 h-8 rounded-lg bg-indigo-500 flex items-center justify-center">
                                                       <Plus size={18} />
@@ -4388,23 +4388,23 @@ export default function PDCAEditor({
                                                       </label>
                                                       <select
                                                         id={`status-${item.id}`}
-                                                        className="w-full bg-slate-800 border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                                                        className="pdca-new-log-input w-full border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 dark:ring-slate-600 focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
                                                       >
                                                         <option
                                                           value="Pendente"
-                                                          className="bg-slate-900"
+                                                          className="bg-slate-900 dark:bg-slate-50 text-white"
                                                         >
                                                           Pendente
                                                         </option>
                                                         <option
                                                           value="Em andamento"
-                                                          className="bg-slate-900"
+                                                          className="bg-slate-900 dark:bg-slate-50 text-white"
                                                         >
                                                           Em andamento
                                                         </option>
                                                         <option
                                                           value="Concluído"
-                                                          className="bg-slate-900"
+                                                          className="bg-slate-900 dark:bg-slate-50 text-white"
                                                         >
                                                           Concluído
                                                         </option>
@@ -4418,7 +4418,7 @@ export default function PDCAEditor({
                                                         id={`sector-${item.id}`}
                                                         type="text"
                                                         placeholder="Setor do responsável"
-                                                        className="w-full bg-slate-800 border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
+                                                        className="pdca-new-log-input w-full border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 dark:ring-slate-600 focus:ring-2 focus:ring-indigo-500 transition-all"
                                                       />
                                                     </div>
                                                     <div className="space-y-2">
@@ -4429,7 +4429,7 @@ export default function PDCAEditor({
                                                         id={`obs-${item.id}`}
                                                         type="text"
                                                         placeholder="O que foi feito nesta etapa?"
-                                                        className="w-full bg-slate-800 border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 focus:ring-2 focus:ring-indigo-500 transition-all placeholder:text-slate-600"
+                                                        className="pdca-new-log-input w-full border-none px-4 py-3 rounded-xl text-xs font-bold outline-none ring-1 ring-slate-700 dark:ring-slate-600 focus:ring-2 focus:ring-indigo-500 transition-all"
                                                       />
                                                     </div>
                                                   </div>

@@ -453,3 +453,55 @@
     background-color: transparent !important;
   }
 }
+
+/* Custom styling for the "Nova Atualização" card to keep it beautifully integrated in both light and dark modes */
+.pdca-new-log-card {
+  background-color: #0f172a !important; /* Elegant dark slate-blue in light mode */
+  color: #ffffff !important;
+  border: 1px solid transparent !important;
+}
+
+.pdca-new-log-card h6 {
+  color: #ffffff !important;
+}
+
+.pdca-new-log-card label {
+  color: #94a3b8 !important; /* Muted silver text for labels in light mode */
+}
+
+.pdca-new-log-input {
+  background-color: #1e293b !important; /* Slightly lighter slate for inputs in light mode */
+  color: #ffffff !important;
+  border: 1px solid #334155 !important;
+}
+
+.pdca-new-log-input::placeholder {
+  color: #64748b !important;
+}
+
+/* Dark mode overrides for Nova Atualização card */
+[data-theme="dark"] .pdca-new-log-card {
+  background-color: #111827 !important; /* Exact dark mode card background */
+  color: #f3f4f6 !important;
+  border: 1px solid #1f2937 !important;
+  box-shadow: none !important;
+}
+
+[data-theme="dark"] .pdca-new-log-card h6 {
+  color: #ffffff !important;
+}
+
+[data-theme="dark"] .pdca-new-log-card label {
+  color: #9ca3af !important;
+}
+
+[data-theme="dark"] .pdca-new-log-input {
+  background-color: #1f2937 !important; /* Match other input components in dark mode */
+  color: #ffffff !important;
+  border: 1px solid #374151 !important;
+}
+
+[data-theme="dark"] .pdca-new-log-input::placeholder {
+  color: #9ca3af !important;
+}
+

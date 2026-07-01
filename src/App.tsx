@@ -229,6 +229,17 @@ export default function App() {
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
   const [pendingNavigationAction, setPendingNavigationAction] = useState<(() => void) | null>(null);
 
+  const hasChangesRef = useRef(hasChanges);
+  const selectedProjectIdRef = useRef(selectedProjectId);
+
+  useEffect(() => {
+    hasChangesRef.current = hasChanges;
+  }, [hasChanges]);
+
+  useEffect(() => {
+    selectedProjectIdRef.current = selectedProjectId;
+  }, [selectedProjectId]);
+
   const handleNavigation = (action: () => void) => {
     if (hasChanges) {
       setPendingNavigationAction(() => action);
@@ -282,7 +293,17 @@ export default function App() {
     // Listen for Projects
     const projectsUnsubscribe = onSnapshot(collection(db, 'projects'), (snapshot) => {
       const projectsData = snapshot.docs.map(doc => doc.data() as Project);
-      setProjects(projectsData);
+      setProjects(prevProjects => {
+        return projectsData.map(dbProj => {
+          if (dbProj.id === selectedProjectIdRef.current && hasChangesRef.current) {
+            const localProj = prevProjects.find(p => p.id === dbProj.id);
+            if (localProj) {
+              return localProj;
+            }
+          }
+          return dbProj;
+        });
+      });
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'projects'));
 
     // Listen for Global Config

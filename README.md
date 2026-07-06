@@ -130,7 +130,7 @@ GOOGLE_DRIVE_PARENT_FOLDER_ID=0AFf6OFctpR_7Uk9PVA
 PORT=3002
 ```
 
-> ⚠️ **Atenção:** Nunca suba o arquivo `.env` para o repositório Git público. Mantenha as chaves salvas como **Secrets** no GitHub Actions e injete-as diretamente no Portainer/Docker da VPS.
+> ⚠️ **AVISO:** Nunca suba o arquivo `.env` para o repositório Git público. Mantenha as chaves salvas como **Secrets** no GitHub Actions e injete-as diretamente no Portainer/Docker da VPS.
 
 ---
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Component, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, Component, useRef } from 'react';
 import { 
   LayoutDashboard, 
   Plus, 
@@ -96,6 +96,7 @@ import OperationalActionsTab from './components/OperationalActionsTab';
 import ReportsTab from './components/ReportsTab';
 import ProjectFilesSection from './components/ProjectFilesSection';
 import { calculateProjectProgress, calculateProjectStatus, calculateSubtaskStatus, getCardProgress, hasPendingSubtasksOrPDCA } from './lib/projectUtils';
+import { calculateActionAlert } from './utils/calculations';
 
 // Error Boundary Component
 interface ErrorBoundaryProps {
@@ -944,6 +945,7 @@ export default function App() {
                 saveStatus={saveStatus}
                 initialSubtaskId={targetSubtaskId}
                 onClearInitialSubtask={() => setTargetSubtaskId(null)}
+                actions={operationalActions}
               />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
@@ -1575,7 +1577,8 @@ function ProjectDetailView({
   onDeleteGlobalColor,
   saveStatus,
   initialSubtaskId,
-  onClearInitialSubtask
+  onClearInitialSubtask,
+  actions = []
 }: { 
   project: Project, 
   activeTab: string, 
@@ -1592,7 +1595,8 @@ function ProjectDetailView({
   saveStatus: 'idle' | 'saving' | 'success' | 'error',
   initialSubtaskId?: string | null,
   onClearInitialSubtask?: () => void,
-  key?: string
+  key?: string,
+  actions?: OperationalAction[]
 }) {
   const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(initialSubtaskId || null);
 
@@ -1821,6 +1825,7 @@ function ProjectDetailView({
             setProjects={setProjects} 
             users={users} 
             globalConfig={globalConfig} 
+            actions={actions}
             onSelectSubtask={(taskId) => {
               setSelectedSubtaskId(taskId);
               setActiveTab('mapping');
@@ -1871,18 +1876,192 @@ const ODS_LIST = [
   { id: 17, label: "ODS 17", name: "Parcerias e Meios de Implementação", color: "#1f476a" },
 ];
 
+interface SubtaskActionsTooltipProps {
+  rect: { top: number; left: number; width: number; height: number };
+  actions: OperationalAction[];
+  subtaskId: string;
+}
+
+function SubtaskActionsTooltip({ rect, actions, subtaskId }: SubtaskActionsTooltipProps) {
+  const tooltipRef = useRef<HTMLDivElement>(null);
+  const [position, setPosition] = useState<{ top: number; left: number; opacity: number }>({ top: 0, left: 0, opacity: 0 });
+
+  const subtaskActions = (actions || []).filter(a => a.subtaskId === subtaskId);
+  if (subtaskActions.length === 0) return null;
+
+  // Sort actions: 1. Atrasadas, 2. Em andamento, 3. Concluídas
+  const sorted = [...subtaskActions].sort((a, b) => {
+    const isLateA = calculateActionAlert(a) === 'Atrasado';
+    const isLateB = calculateActionAlert(b) === 'Atrasado';
+    if (isLateA && !isLateB) return -1;
+    if (!isLateA && isLateB) return 1;
+
+    const isCompletedA = a.status === 'Concluído';
+    const isCompletedB = b.status === 'Concluído';
+    if (!isCompletedA && isCompletedB) return -1;
+    if (isCompletedA && !isCompletedB) return 1;
+
+    return 0;
+  });
+
+  const displayedActions = sorted.slice(0, 3);
+  const extraCount = subtaskActions.length - 3;
+
+  useLayoutEffect(() => {
+    if (!tooltipRef.current) return;
+    const tooltipRect = tooltipRef.current.getBoundingClientRect();
+    const tooltipWidth = tooltipRect.width || 320;
+    const tooltipHeight = tooltipRect.height || 250;
+    
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const margin = 12;
+
+    // 1. Vertical positioning
+    // Default is BELOW
+    let idealTop = rect.top + rect.height + 8;
+    
+    // Check if it fits below
+    if (idealTop + tooltipHeight > viewportHeight - margin) {
+      // Doesn't fit below, try ABOVE
+      const topAbove = rect.top - tooltipHeight - 8;
+      if (topAbove >= margin) {
+        idealTop = topAbove;
+      } else {
+        // Doesn't fit above either, place where there is more space and clamp
+        const spaceBelow = viewportHeight - (rect.top + rect.height);
+        const spaceAbove = rect.top;
+        if (spaceAbove > spaceBelow) {
+          idealTop = Math.max(margin, rect.top - tooltipHeight - 8);
+        } else {
+          idealTop = Math.min(viewportHeight - tooltipHeight - margin, rect.top + rect.height + 8);
+        }
+      }
+    }
+
+    // 2. Horizontal positioning (Centered on subtask by default)
+    let idealLeft = rect.left + (rect.width / 2) - (tooltipWidth / 2);
+    
+    // Clamp to viewport boundaries
+    if (idealLeft + tooltipWidth > viewportWidth - margin) {
+      idealLeft = viewportWidth - tooltipWidth - margin;
+    }
+    if (idealLeft < margin) {
+      idealLeft = margin;
+    }
+
+    setPosition({
+      top: idealTop,
+      left: idealLeft,
+      opacity: 1
+    });
+  }, [rect, subtaskId, subtaskActions.length]);
+
+  return (
+    <div className="fixed inset-0 z-[9999] pointer-events-none">
+      <motion.div
+        ref={tooltipRef}
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: position.opacity, scale: position.opacity > 0 ? 1 : 0.95 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        transition={{ duration: 0.15 }}
+        className="absolute bg-white border border-slate-200/85 shadow-2xl p-4 rounded-2xl w-80 text-left pointer-events-none text-slate-800"
+        style={{
+          top: position.top,
+          left: position.left,
+        }}
+      >
+        <div className="space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest flex items-center gap-1">
+              <Clock size={12} />
+              Ações Recentes ({subtaskActions.length})
+            </span>
+          </div>
+          
+          <div className="space-y-3">
+            {displayedActions.map((act) => {
+              const alert = calculateActionAlert(act);
+              let alertLabel = 'No prazo';
+              let alertIcon = <CheckCircle2 size={12} className="text-emerald-500 shrink-0" />;
+              
+              if (alert === 'Atrasado') {
+                alertLabel = 'Atrasado';
+                alertIcon = <AlertCircle size={12} className="text-rose-500 shrink-0" />;
+              } else if (alert === 'Próximo do vencimento') {
+                alertLabel = 'Próximo';
+                alertIcon = <Clock size={12} className="text-amber-500 shrink-0" />;
+              } else if (act.status === 'Concluído') {
+                alertLabel = 'OK';
+                alertIcon = <CheckCircle2 size={12} className="text-emerald-500 shrink-0" />;
+              }
+              
+              const truncatedFeedback = act.feedback 
+                ? (act.feedback.length > 70 ? act.feedback.slice(0, 70) + '...' : act.feedback)
+                : 'Sem retorno cadastrado';
+                
+              return (
+                <div key={act.id} className="text-xs space-y-1">
+                  <div className="font-extrabold text-slate-800 flex items-start gap-1">
+                    <span className="text-indigo-500 mt-0.5">•</span>
+                    <span>{act.action}</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[10px] font-bold text-slate-400 pl-3">
+                    <div>Prioridade: <span className={cn(
+                      "font-extrabold",
+                      act.priority === 'Alta' || act.priority === 'Urgente' ? "text-rose-500" :
+                      act.priority === 'Média' ? "text-indigo-500" : "text-slate-500"
+                    )}>{act.priority}</span></div>
+                    <div>Status: <span className={cn(
+                      "font-extrabold",
+                      act.status === 'Concluído' ? "text-emerald-500" :
+                      act.status === 'Em andamento' ? "text-amber-500" : "text-slate-500"
+                    )}>{act.status}</span></div>
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 pl-3">
+                    <span>Prazo:</span>
+                    <span className="flex items-center gap-0.5 font-extrabold">
+                      {alertIcon}
+                      <span className={cn(
+                        alert === 'Atrasado' ? "text-rose-500" :
+                        alert === 'Próximo do vencimento' ? "text-amber-500" :
+                        act.status === 'Concluído' ? "text-emerald-500" : "text-emerald-600"
+                      )}>{alertLabel}</span>
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 pl-3 italic bg-slate-50 p-1.5 rounded-lg border border-slate-100 mt-1 leading-normal break-words">
+                    Retorno: {truncatedFeedback}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          
+          {extraCount > 0 && (
+            <div className="text-[9px] font-bold text-indigo-500 bg-indigo-50/60 px-2 py-0.5 rounded text-center">
+              e mais {extraCount} {extraCount === 1 ? 'ação' : 'ações'}...
+            </div>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+
 function ScopeTab({ 
   project, 
   setProjects, 
   users, 
   globalConfig,
-  onSelectSubtask
+  onSelectSubtask,
+  actions = []
 }: { 
   project: Project, 
   setProjects: (p: Project) => void, 
   users: User[], 
   globalConfig: GlobalConfig,
-  onSelectSubtask: (taskId: string) => void
+  onSelectSubtask: (taskId: string) => void,
+  actions?: OperationalAction[]
 }) {
   const currentUserProfile = users.find(u => u.id === auth.currentUser?.uid);
   const profile = currentUserProfile?.profile || 'Usuário Analista';
@@ -1902,6 +2081,36 @@ function ScopeTab({
   const [odsSearch, setOdsSearch] = useState('');
   const [odsDropdownOpen, setOdsDropdownOpen] = useState(false);
   const odsDropdownRef = useRef<HTMLDivElement>(null);
+
+  const [hoveredSubtaskActionsId, setHoveredSubtaskActionsId] = useState<string | null>(null);
+  const [hoveredSubtaskRect, setHoveredSubtaskRect] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
+  const hoverTimeoutRef = useRef<any>(null);
+
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    };
+  }, []);
+
+  const handleMouseEnterSubtask = (e: React.MouseEvent<HTMLDivElement>, subtaskId: string) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    hoverTimeoutRef.current = setTimeout(() => {
+      setHoveredSubtaskActionsId(subtaskId);
+      setHoveredSubtaskRect({
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+        height: rect.height
+      });
+    }, 200);
+  };
+
+  const handleMouseLeaveSubtask = () => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    setHoveredSubtaskActionsId(null);
+    setHoveredSubtaskRect(null);
+  };
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -2514,13 +2723,51 @@ function ScopeTab({
                           autoFocus
                         />
                       ) : (
-                        <div>
-                          <span className={cn(
-                            "font-bold transition-colors",
-                            isReadOnly ? "text-slate-400" : "text-slate-700"
-                          )}>
-                            {subtask.title}
-                          </span>
+                        <div 
+                          className="relative inline-block"
+                          onMouseEnter={(e) => handleMouseEnterSubtask(e, subtask.id)}
+                          onMouseLeave={handleMouseLeaveSubtask}
+                        >
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={cn(
+                              "font-bold transition-colors",
+                              isReadOnly ? "text-slate-400" : "text-slate-700"
+                            )}>
+                              {subtask.title}
+                            </span>
+                            {/* Actions Badge Indicator */}
+                            {(() => {
+                              const subtaskActions = (actions || []).filter(a => a.subtaskId === subtask.id);
+                              if (subtaskActions.length === 0) return null;
+                              
+                              const hasLate = subtaskActions.some(a => calculateActionAlert(a) === 'Atrasado');
+                              const allCompleted = subtaskActions.every(a => a.status === 'Concluído');
+                              
+                              let dotColor = 'bg-amber-500';
+                              let textColor = 'text-amber-700 dark:text-amber-400 border-amber-200/50 dark:border-amber-500/20';
+                              let bgColor = 'bg-amber-50 dark:bg-amber-500/10';
+                              
+                              if (hasLate) {
+                                dotColor = 'bg-red-500';
+                                textColor = 'text-red-700 dark:text-red-400 border-red-200/50 dark:border-red-500/20';
+                                bgColor = 'bg-red-50 dark:bg-red-500/10';
+                              } else if (allCompleted) {
+                                dotColor = 'bg-emerald-500';
+                                textColor = 'text-emerald-700 dark:text-emerald-400 border-emerald-200/50 dark:border-emerald-500/20';
+                                bgColor = 'bg-emerald-50 dark:bg-emerald-500/10';
+                              }
+                              
+                              return (
+                                <div className={cn(
+                                  "inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-black shadow-sm select-none transition-all",
+                                  textColor, bgColor
+                                )}>
+                                  <span className={cn("w-1.5 h-1.5 rounded-full animate-pulse", dotColor)} />
+                                  <span>{subtaskActions.length}</span>
+                                </div>
+                              );
+                            })()}
+                          </div>
                           <div className="flex items-center gap-2 mt-1">
                             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                               {subtask.pdcaCycles.length} Ciclos PDCA
@@ -2822,6 +3069,17 @@ function ScopeTab({
               </div>
             </motion.div>
           </div>
+        )}
+      </AnimatePresence>
+
+      {/* Floating Hover Tooltip/Popover */}
+      <AnimatePresence>
+        {hoveredSubtaskActionsId && hoveredSubtaskRect && (
+          <SubtaskActionsTooltip 
+            rect={hoveredSubtaskRect} 
+            actions={actions} 
+            subtaskId={hoveredSubtaskActionsId} 
+          />
         )}
       </AnimatePresence>
     </div>

@@ -39,7 +39,7 @@ import {
   OperationalAction
 } from '../types';
 import { cn } from '../lib/utils';
-import { calculateProjectProgress } from '../lib/projectUtils';
+import { calculateProjectProgress, getCardProgress } from '../lib/projectUtils';
 import ActionsDashboardView from './ActionsDashboardView';
 import FilterDropdown from './FilterDropdown';
 import DetailedOverviewTab from './DetailedOverviewTab';
@@ -149,7 +149,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
       id: p.id,
       name: p.name,
       priority: p.priority || 'Baixa',
-      progress: calculateProjectProgress(p)
+      progress: getCardProgress(p)
     })).sort((a, b) => {
       const priorityOrder = { 'Alta': 0, 'Média': 1, 'Baixa': 2 };
       const valA = priorityOrder[a.priority] ?? 3;

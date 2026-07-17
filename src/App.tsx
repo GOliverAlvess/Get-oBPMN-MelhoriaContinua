@@ -44,7 +44,9 @@ import {
   Sun,
   Moon,
   Menu,
-  Lock
+  Lock,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -93,7 +95,7 @@ import DashboardView from './components/DashboardView';
 import OperationalActionsTab from './components/OperationalActionsTab';
 import ReportsTab from './components/ReportsTab';
 import ProjectFilesSection from './components/ProjectFilesSection';
-import { calculateProjectProgress, calculateProjectStatus, calculateSubtaskStatus } from './lib/projectUtils';
+import { calculateProjectProgress, calculateProjectStatus, calculateSubtaskStatus, getCardProgress, hasPendingSubtasksOrPDCA } from './lib/projectUtils';
 
 // Error Boundary Component
 interface ErrorBoundaryProps {
@@ -416,7 +418,7 @@ export default function App() {
         createdAt: isValidDate(projectToSync.createdAt) 
           ? projectToSync.createdAt 
           : new Date().toISOString(),
-        progress: calculateProjectProgress(projectToSync),
+        progress: getCardProgress(projectToSync),
         scope: {
           ...projectToSync.scope,
           title: projectToSync.name,
@@ -1029,12 +1031,37 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
   onDeleteProject: (id: string) => void,
   key?: string
 }) {
-  const [groupBy, setGroupBy] = useState<'status' | 'collaborator'>('status');
+  const [groupBy, setGroupBy] = useState<'status' | 'collaborator'>(() => {
+    const savedTab = localStorage.getItem('kanbanActiveTab');
+    if (savedTab === 'status' || savedTab === 'collaborator') {
+      return savedTab;
+    }
+    return 'status';
+  });
   const [visibleStatuses, setVisibleStatuses] = useState<ProjectStatus[]>([]);
   const [visibleCollaborators, setVisibleCollaborators] = useState<string[]>([]);
   const [visibleParticipants, setVisibleParticipants] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  // Reset scroll to top upon returning to/entering the Projects View
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
+  // Sync tab changes to localStorage for persistence
+  const handleTabChange = (tab: 'status' | 'collaborator') => {
+    setGroupBy(tab);
+    localStorage.setItem('kanbanActiveTab', tab);
+  };
+
+  // Recover tab from localStorage upon load
+  useEffect(() => {
+    const savedTab = localStorage.getItem('kanbanActiveTab');
+    if (savedTab === 'status' || savedTab === 'collaborator') {
+      setGroupBy(savedTab);
+    }
+  }, []);
 
   const statuses: ProjectStatus[] = ['Backlog', 'Planejamento', 'Em andamento', 'Em melhoria', 'Concluído'];
 
@@ -1056,7 +1083,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
     );
   };
 
-  const filteredProjects = projects.map(p => ({ ...p, progress: calculateProjectProgress(p) })).filter(p => {
+  const filteredProjects = projects.map(p => ({ ...p, progress: getCardProgress(p) })).filter(p => {
     const projectParticipants = Array.from(new Set(p.subtasks?.map(s => s.responsibleId).filter(Boolean) || [])) as string[];
     
     const matchesStatus = visibleStatuses.length === 0 || visibleStatuses.includes(p.status);
@@ -1104,7 +1131,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
 
           <div className="flex bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
             <button 
-              onClick={() => setGroupBy('status')}
+              onClick={() => handleTabChange('status')}
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2",
                 groupBy === 'status' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
@@ -1114,7 +1141,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
               Status
             </button>
             <button 
-              onClick={() => setGroupBy('collaborator')}
+              onClick={() => handleTabChange('collaborator')}
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2",
                 groupBy === 'collaborator' ? "bg-indigo-600 text-white shadow-md shadow-indigo-100" : "text-slate-500 hover:bg-slate-50"
@@ -1519,6 +1546,13 @@ function ProjectCard({ project, users, onClick, onDelete }: { project: Project, 
             )}
           />
         </div>
+
+        {hasPendingSubtasksOrPDCA(project) && (project.status === 'Concluído' || project.progress === 99) && (
+          <div className="text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 px-2.5 py-1 rounded-md border border-amber-200 dark:border-amber-900/30 font-semibold flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse shrink-0" />
+            <span className="truncate">Existem subtarefas ou PDCAs pendentes</span>
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -1754,15 +1788,20 @@ function ProjectDetailView({
           <div className="hidden md:flex flex-col items-end gap-1">
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Progresso</span>
-              <span className="text-lg font-black text-indigo-400">{calculateProjectProgress(project)}%</span>
+              <span className="text-lg font-black text-indigo-400">{getCardProgress(project)}%</span>
             </div>
             <div className="w-32 h-2 bg-theme-border rounded-full overflow-hidden">
               <motion.div 
                 initial={{ width: 0 }}
-                animate={{ width: `${calculateProjectProgress(project)}%` }}
+                animate={{ width: `${getCardProgress(project)}%` }}
                 className="h-full bg-indigo-500 rounded-full"
               />
             </div>
+            {hasPendingSubtasksOrPDCA(project) && (project.status === 'Concluído' || getCardProgress(project) === 99) && (
+              <span className="text-[10px] text-amber-500 font-bold tracking-tight text-right max-w-[150px]">
+                ⚠️ Existem subtarefas ou PDCAs pendentes
+              </span>
+            )}
           </div>
           <button 
             onClick={() => onSave(project)}
@@ -3773,6 +3812,8 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
   const [userToDelete, setUserToDelete] = useState<User | null>(null);
   const [showMasterAlertModal, setShowMasterAlertModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [isEditingUserPasswordDisabled, setIsEditingUserPasswordDisabled] = useState(true);
 
   // Fallback check for admin email just in case the profile isn't loaded yet in state
   const isMaster = currentUser?.profile === 'Usuário Master';
@@ -3784,12 +3825,16 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
       setSector(editingUser.sector || '');
       setProfile(editingUser.profile || 'Usuário Analista');
       setPassword('');
+      setIsEditingUserPasswordDisabled(true);
+      setShowPassword(false);
     } else {
       setName('');
       setEmail('');
       setSector('');
       setProfile('Usuário Analista');
       setPassword('');
+      setIsEditingUserPasswordDisabled(false);
+      setShowPassword(false);
     }
   }, [editingUser]);
 
@@ -3802,6 +3847,11 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
 
     if (!editingUser && !password) {
       alert('Por favor, defina uma senha para o novo usuário.');
+      return;
+    }
+
+    if (editingUser && !isEditingUserPasswordDisabled && !password) {
+      alert('Por favor, digite a nova senha ou desmarque a opção de alteração.');
       return;
     }
     
@@ -3822,7 +3872,7 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
         email,
         sector,
         profile,
-        ...(password ? { password } : {})
+        ...((!editingUser || !isEditingUserPasswordDisabled) && password ? { password } : {})
       };
 
       await setDoc(doc(db, 'users', userId), userData, { merge: true });
@@ -3945,17 +3995,63 @@ function UserRegistrationTab({ users, currentUser }: { users: User[], currentUse
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-slate-700 ml-1">
-                {editingUser ? 'Senha (deixe em branco para não alterar)' : 'Senha'}
+                Senha
               </label>
-              <input 
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={editingUser ? '••••••••' : 'Defina uma senha'}
-                required={!editingUser}
-                minLength={6}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
-              />
+              <div className="relative flex items-center">
+                <input 
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={editingUser ? '••••••••' : 'Defina uma senha'}
+                  required={!editingUser && !isEditingUserPasswordDisabled}
+                  disabled={editingUser ? isEditingUserPasswordDisabled : false}
+                  minLength={6}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-4 pr-12 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all disabled:opacity-60"
+                />
+                {((!editingUser || !isEditingUserPasswordDisabled) && password) ? (
+                  <button 
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 text-slate-400 hover:text-slate-600 transition-colors p-1"
+                    title={showPassword ? "Ocultar senha" : "Mostrar senha"}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                ) : null}
+              </div>
+              {editingUser && (
+                <div className="mt-2 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="change-password-toggle"
+                      checked={!isEditingUserPasswordDisabled}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setIsEditingUserPasswordDisabled(!checked);
+                        if (!checked) {
+                          setPassword('');
+                          setShowPassword(false);
+                        }
+                      }}
+                      className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <label htmlFor="change-password-toggle" className="text-xs font-semibold text-slate-600 cursor-pointer select-none">
+                      Alterar senha deste colaborador
+                    </label>
+                  </div>
+                  <div className="text-[11px] text-slate-500 bg-slate-50 border border-slate-100 p-2 rounded-lg flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 animate-pulse" />
+                    <span>
+                      {editingUser.lastPasswordChange ? (
+                        <>Senha definida • Última alteração: <strong>{new Date(editingUser.lastPasswordChange).toLocaleString('pt-BR')}</strong></>
+                      ) : (
+                        "Senha definida"
+                      )}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-semibold text-slate-700 ml-1">Perfil</label>

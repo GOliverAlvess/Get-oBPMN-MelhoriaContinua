@@ -22,7 +22,9 @@ import {
   Plus,
   Minus,
   Move,
-  BookOpen
+  BookOpen,
+  Copy,
+  Clipboard
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -74,6 +76,27 @@ export default function BPMNModeler({
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const isSyncingRef = useRef(false);
   const isLoadedRef = useRef(false);
+
+  const [hasCopied, setHasCopied] = useState(false);
+  const [hasPasted, setHasPasted] = useState(false);
+  const [isConfirmingPaste, setIsConfirmingPaste] = useState(false);
+  const [hasClipboardData, setHasClipboardData] = useState(() => {
+    try {
+      return !!localStorage.getItem('gipflow_copied_bpmn_mapping');
+    } catch {
+      return false;
+    }
+  });
+
+  // Keep clipboard presence up to date whenever active mapping changes
+  useEffect(() => {
+    try {
+      setHasClipboardData(!!localStorage.getItem('gipflow_copied_bpmn_mapping'));
+    } catch {
+      setHasClipboardData(false);
+    }
+    setIsConfirmingPaste(false);
+  }, [mapping]);
 
   // Sync customData from props if they change externally (e.g. from Firestore)
   useEffect(() => {
@@ -218,6 +241,163 @@ export default function BPMNModeler({
     }
   }, [mapping, onUpdateMapping]);
 
+  const handleCopyDiagram = async () => {
+    console.log('[handleCopyDiagram] Iniciando cópia do diagrama...');
+    if (!modelerRef.current) {
+      console.warn('[handleCopyDiagram] Modeler não disponível.');
+      return;
+    }
+    try {
+      const { xml } = await modelerRef.current.saveXML({ format: true });
+      console.log('[handleCopyDiagram] XML gerado com sucesso. Tamanho:', xml?.length);
+      const dataToCopy = {
+        xml,
+        customData: customDataRef.current
+      };
+      localStorage.setItem('gipflow_copied_bpmn_mapping', JSON.stringify(dataToCopy));
+      setHasClipboardData(true);
+      setHasCopied(true);
+      setTimeout(() => setHasCopied(false), 2000);
+      console.log('[handleCopyDiagram] Dados salvos com sucesso no localStorage.');
+    } catch (err) {
+      console.error('[handleCopyDiagram] Erro ao salvar XML:', err);
+    }
+  };
+
+  const handlePasteDiagram = async () => {
+    console.log('[handlePasteDiagram] Clique detectado no botão Colar.');
+    if (readOnly) {
+      console.warn('[handlePasteDiagram] Modo somente leitura ativo. Abortando colagem.');
+      return;
+    }
+    if (!modelerRef.current) {
+      console.warn('[handlePasteDiagram] Instância do modeler não disponível.');
+      alert('Editor de fluxogramas ainda não está pronto.');
+      return;
+    }
+
+    const copiedDataStr = localStorage.getItem('gipflow_copied_bpmn_mapping');
+    console.log('[handlePasteDiagram] Conteúdo recuperado do localStorage:', copiedDataStr ? 'Dados encontrados' : 'Vazio');
+    if (!copiedDataStr) {
+      alert('Nenhum fluxograma copiado na memória.');
+      return;
+    }
+
+    let copiedData;
+    try {
+      copiedData = JSON.parse(copiedDataStr);
+      console.log('[handlePasteDiagram] JSON decodificado com sucesso.', {
+        hasXml: !!copiedData?.xml,
+        hasCustomData: !!copiedData?.customData
+      });
+    } catch (e) {
+      console.error('[handlePasteDiagram] Erro ao decodificar JSON do localStorage:', e);
+      alert('Os dados copiados estão corrompidos ou em formato inválido.');
+      return;
+    }
+
+    if (!copiedData || !copiedData.xml) {
+      console.warn('[handlePasteDiagram] XML ausente ou inválido nos dados copiados.');
+      alert('Nenhum desenho de fluxograma válido foi encontrado no conteúdo copiado.');
+      return;
+    }
+
+    // Se já estiver na fase de confirmação, executa a colagem
+    if (!isConfirmingPaste) {
+      console.log('[handlePasteDiagram] Iniciando fluxo de confirmação visual.');
+      setIsConfirmingPaste(true);
+      return;
+    }
+
+    // Se confirmou, realiza a importação
+    console.log('[handlePasteDiagram] Confirmação recebida. Importando XML...');
+    const xml = copiedData.xml;
+    
+    modelerRef.current.importXML(xml)
+      .then(() => {
+        console.log('[handlePasteDiagram] Importação bem-sucedida pelo modeler.');
+        
+        // Reidratação dos metadados customizados com tratamento de segurança
+        try {
+          const pastedCustomData = copiedData.customData || {};
+          console.log('[handlePasteDiagram] Reidratando metadados customizados:', Object.keys(pastedCustomData).length, 'itens');
+          setCustomData(pastedCustomData);
+          customDataRef.current = pastedCustomData;
+        } catch (metadataError) {
+          console.error('[handlePasteDiagram] Erro ao reidratar os metadados:', metadataError);
+        }
+
+        // Ajuste de visualização do canvas
+        const canvas = modelerRef.current?.get('canvas') as any;
+        if (canvas) {
+          try {
+            canvas.zoom('fit-viewport');
+            console.log('[handlePasteDiagram] Zoom ajustado para fit-viewport.');
+          } catch (zoomError) {
+            console.warn('[handlePasteDiagram] Não foi possível ajustar zoom do canvas:', zoomError);
+          }
+        }
+
+        // Salvar as alterações imediatamente persistindo no banco
+        setTimeout(() => {
+          saveChanges();
+          console.log('[handlePasteDiagram] Alterações salvas com sucesso.');
+        }, 50);
+
+        setHasPasted(true);
+        setIsConfirmingPaste(false);
+        setTimeout(() => setHasPasted(false), 2000);
+      })
+      .catch(err => {
+        console.error("[handlePasteDiagram] Erro ao importar XML:", err);
+        alert('Erro ao importar o fluxograma copiado. Verifique se o formato do XML é suportado.');
+        setIsConfirmingPaste(false);
+      });
+  };
+
+  // Keyboard shortcuts (Ctrl+C / Cmd+C and Ctrl+V / Cmd+V)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only process if the modeler is initialized
+      if (!modelerRef.current) return;
+
+      // Do not trigger if user is focusing an input, textarea, select, or contenteditable
+      const activeEl = document.activeElement;
+      if (activeEl && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.tagName === 'SELECT' ||
+        activeEl.hasAttribute('contenteditable') ||
+        activeEl.closest('input') ||
+        activeEl.closest('textarea') ||
+        activeEl.closest('select')
+      )) {
+        return;
+      }
+
+      // Check for Ctrl (Windows/Linux) or Cmd (Mac)
+      const isCmdOrCtrl = e.ctrlKey || e.metaKey;
+
+      if (isCmdOrCtrl) {
+        const key = e.key.toLowerCase();
+        if (key === 'c') {
+          e.preventDefault();
+          console.log('[KeyboardShortcut] Ctrl+C / Cmd+C detectado.');
+          handleCopyDiagram();
+        } else if (key === 'v') {
+          e.preventDefault();
+          console.log('[KeyboardShortcut] Ctrl+V / Cmd+V detectado.');
+          handlePasteDiagram();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [readOnly, hasClipboardData, isConfirmingPaste, customData, handleCopyDiagram, handlePasteDiagram]);
+
   const updateElementData = (elementId: string, data: Partial<BPMNTaskData>) => {
     const newCustomData = {
       ...customData,
@@ -294,7 +474,18 @@ export default function BPMNModeler({
     
     allElements.forEach((element: any) => {
       // Only for tasks
-      if (element.type === 'bpmn:Task' || element.type === 'bpmn:UserTask' || element.type === 'bpmn:ServiceTask') {
+      const isTask = element.type === 'bpmn:Task' ||
+                     element.type === 'bpmn:UserTask' ||
+                     element.type === 'bpmn:ServiceTask' ||
+                     element.type === 'bpmn:ManualTask' ||
+                     element.type === 'bpmn:BusinessRuleTask' ||
+                     element.type === 'bpmn:ScriptTask' ||
+                     element.type === 'bpmn:SendTask' ||
+                     element.type === 'bpmn:ReceiveTask' ||
+                     element.type === 'bpmn:CallActivity' ||
+                     element.type === 'bpmn:SubProcess';
+
+      if (isTask) {
         const data = customData[element.id] || {};
         const isProblem = !!data.isProblemStep;
         
@@ -304,7 +495,7 @@ export default function BPMNModeler({
               top: -10,
               right: -10
             },
-            html: `<div style="background-color: #FF6B6B;" class="text-white p-1 rounded-full shadow-lg border-2 border-white animate-pulse flex items-center justify-center transition-all" style="width: 20px; height: 20px;" title="Etapa Problema (Ativo)">
+            html: `<div style="background-color: #FF6B6B; width: 20px; height: 20px; z-index: 9999; pointer-events: none;" class="text-white p-1 rounded-full shadow-lg border-2 border-white animate-pulse flex items-center justify-center transition-all" title="Etapa Problema (Ativo)">
                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
                    </div>`
           });
@@ -435,6 +626,58 @@ export default function BPMNModeler({
             <button onClick={activateHandTool} className="p-1.5 hover:bg-white dark:hover:bg-slate-700 rounded text-slate-400 dark:text-slate-500 transition-all" title="Mover Fluxograma (Arrastar)">
               <Move size={16} />
             </button>
+          </div>
+
+          <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
+
+          <div className="flex items-center gap-1 bg-slate-100/50 dark:bg-slate-800/50 p-1 rounded-lg border border-slate-200 dark:border-slate-700">
+            <button 
+              onClick={handleCopyDiagram} 
+              className="flex items-center gap-1.5 px-3 py-1.5 hover:bg-white dark:hover:bg-slate-700 rounded text-slate-600 dark:text-slate-300 font-bold text-xs transition-all" 
+              title="Copiar Desenho do Fluxograma"
+            >
+              <Copy size={14} className={hasCopied ? "text-emerald-500" : "text-indigo-500"} />
+              <span>{hasCopied ? "Copiado!" : "Copiar"}</span>
+            </button>
+            {!readOnly && (
+              <>
+                <div className="h-4 w-px bg-slate-200 dark:bg-slate-700 mx-1" />
+                {isConfirmingPaste ? (
+                  <div className="flex items-center gap-1">
+                    <button 
+                      onClick={handlePasteDiagram}
+                      className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded font-bold text-xs transition-all shadow-sm"
+                      title="Confirmar substituição e colar fluxograma"
+                    >
+                      <Clipboard size={12} className="text-white" />
+                      <span>Confirmar?</span>
+                    </button>
+                    <button 
+                      onClick={() => setIsConfirmingPaste(false)}
+                      className="px-2 py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded font-bold text-xs transition-all shadow-sm"
+                      title="Cancelar"
+                    >
+                      <span>Cancelar</span>
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={handlePasteDiagram} 
+                    disabled={!hasClipboardData}
+                    className={cn(
+                      "flex items-center gap-1.5 px-3 py-1.5 rounded font-bold text-xs transition-all",
+                      hasClipboardData 
+                        ? "hover:bg-white dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300" 
+                        : "opacity-40 cursor-not-allowed text-slate-400"
+                    )}
+                    title={hasClipboardData ? "Colar Fluxograma Copiado" : "Nenhum fluxograma copiado para colar"}
+                  >
+                    <Clipboard size={14} className={hasPasted ? "text-emerald-500 animate-pulse" : "text-indigo-500"} />
+                    <span>{hasPasted ? "Colado!" : "Colar"}</span>
+                  </button>
+                )}
+              </>
+            )}
           </div>
 
           <div className="h-6 w-px bg-slate-200 dark:bg-slate-700" />
@@ -691,6 +934,10 @@ export default function BPMNModeler({
         }
         .bjs-powered-by {
           display: none !important;
+        }
+        .djs-overlay {
+          z-index: 1000 !important;
+          pointer-events: none;
         }
         .djs-palette {
           display: ${readOnly ? 'none !important' : 'block !important'};

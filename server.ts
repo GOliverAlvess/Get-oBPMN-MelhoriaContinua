@@ -276,15 +276,16 @@ async function startServer() {
       }
 
       const passwordHash = bcryptjs.hashSync(password, 10);
+      const lastPasswordChange = new Date().toISOString();
 
       if (db) {
         await db.collection("users").updateOne(
           { _id: userId },
-          { $set: { passwordHash } }
+          { $set: { passwordHash, lastPasswordChange } }
         );
       } else {
         if (!memoryDb["users"]) memoryDb["users"] = {};
-        memoryDb["users"][userId] = { ...memoryDb["users"][userId], passwordHash };
+        memoryDb["users"][userId] = { ...memoryDb["users"][userId], passwordHash, lastPasswordChange };
       }
 
       // Broadcast update
@@ -329,15 +330,16 @@ async function startServer() {
       }
 
       const passwordHash = bcryptjs.hashSync(newPassword, 10);
+      const lastPasswordChange = new Date().toISOString();
 
       if (db) {
         await db.collection("users").updateOne(
           { _id: userId },
-          { $set: { passwordHash } }
+          { $set: { passwordHash, lastPasswordChange } }
         );
       } else {
         if (!memoryDb["users"]) memoryDb["users"] = {};
-        memoryDb["users"][userId] = { ...memoryDb["users"][userId], passwordHash };
+        memoryDb["users"][userId] = { ...memoryDb["users"][userId], passwordHash, lastPasswordChange };
       }
 
       // Broadcast update
@@ -476,17 +478,23 @@ async function startServer() {
       if (collection === "users") {
         if (cleanData.password) {
           cleanData.passwordHash = bcryptjs.hashSync(cleanData.password, 10);
+          cleanData.lastPasswordChange = new Date().toISOString();
           delete cleanData.password;
         } else {
-          // If no new password is sent, retain existing password hash from database
+          // If no new password is sent, retain existing password hash and lastPasswordChange from database
           let existingUser: any = null;
           if (db) {
             existingUser = await db.collection("users").findOne({ _id: id });
           } else {
             existingUser = memoryDb["users"]?.[id];
           }
-          if (existingUser && existingUser.passwordHash) {
-            cleanData.passwordHash = existingUser.passwordHash;
+          if (existingUser) {
+            if (existingUser.passwordHash) {
+              cleanData.passwordHash = existingUser.passwordHash;
+            }
+            if (existingUser.lastPasswordChange) {
+              cleanData.lastPasswordChange = existingUser.lastPasswordChange;
+            }
           }
         }
       }

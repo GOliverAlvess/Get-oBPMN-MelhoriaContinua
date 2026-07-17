@@ -335,6 +335,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedProjectId, setSelectedProjectId] = useState<string>(''); // For complete report
+  const [completeReportCollaboratorId, setCompleteReportCollaboratorId] = useState<string>('');
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
@@ -425,7 +426,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
 
         // Render subtasks SVGs before document definition is built
         const subtaskSVGs: Record<string, string> = {};
-        const steps = project.subtasks || [];
+        const steps = (project.subtasks || []).filter(sub => !completeReportCollaboratorId || sub.responsibleId === completeReportCollaboratorId);
         const stepProgressDelta = 30 / (steps.length || 1);
         let currentProgress = 30;
 
@@ -640,7 +641,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                     { text: 'PRIORIDADE', style: 'tableHeader' },
                     { text: 'STATUS', style: 'tableHeader' }
                   ],
-                  ...(project.subtasks && project.subtasks.length > 0 ? (project.subtasks || []).map(sub => [
+                  ...(steps && steps.length > 0 ? steps.map(sub => [
                     { text: sub.title.toUpperCase(), style: 'tableCell', bold: true },
                     { text: users.find(u => u.id === sub.responsibleId)?.name || 'N/A', style: 'tableCell' },
                     { text: (sub.priority || 'N/A').toUpperCase(), style: 'tableCell' },
@@ -666,7 +667,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
             // Fluxograma(s)
             ...(() => {
               const diagramContent: any[] = [];
-              const validSubtasksWithMapping = (project.subtasks || []).filter(sub => subtaskSVGs[sub.id]);
+              const validSubtasksWithMapping = steps.filter(sub => subtaskSVGs[sub.id]);
 
               if (validSubtasksWithMapping.length > 0) {
                 diagramContent.push({ text: 'FLUXOGRAMAS DE PROCESSOS (ANEXO)', style: 'fieldLabel', margin: [0, 10, 0, 8] });
@@ -699,7 +700,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                       [
                         {
                           stack: (() => {
-                            const bottlenecks = (project.subtasks || []).flatMap(sub => {
+                            const bottlenecks = steps.flatMap(sub => {
                               const customData = sub.mapping?.customData || {};
                               return Object.entries(customData)
                                 .filter(([nodeId, nodeData]: [string, any]) => !!nodeData?.isProblemStep)
@@ -750,7 +751,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
               margin: [0, 10, 0, 15]
             },
             ...(() => {
-              const cycles = project.subtasks?.flatMap(s => s.pdcaCycles) || [];
+              const cycles = steps.flatMap(s => s.pdcaCycles || []) || [];
               if (cycles.length === 0) {
                 return [{ text: 'Nenhum ciclo PDCA registrado para este projeto.', style: 'bodyHighlight', italic: true, margin: [0, 10, 0, 20] }];
               }
@@ -1329,7 +1330,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                       "PLAN - Causa Raiz": getRootCausa(cycle),
                       "PLAN - Impacto - Descrição": cycle.plan.impact.description || '',
                       "PLAN - Impacto - Valor Atual": cycle.plan.impact.value ?? '',
-                      "PLAN - Meta (%)": cycle.plan.impact.goal ?? '',
+                      "PLAN - Meta (%)": cycle.plan.impact.improvementPercentage ?? cycle.plan.impact.goal ?? '',
                       "PLAN - Impacto - Ganhos Esperados Tangíveis": formatExpectedTangibleGains(cycle.plan.impact.expectedGains),
                       "PLAN - Impacto - Ganhos Esperados Intangíveis": formatExpectedIntangibleGains(cycle.plan.impact.expectedGains),
                       "ODS": (project.scope?.odsSelecionadas && project.scope.odsSelecionadas.length > 0) ? project.scope.odsSelecionadas.join(', ') : '',
@@ -1462,23 +1463,43 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
             </div>
 
             {reportType === 'Relatório Completo' ? (
-              <div className="space-y-3 md:col-span-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">2. Selecione o Projeto</label>
-                <div className="relative">
-                  <Briefcase size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <select
-                    value={selectedProjectId}
-                    onChange={(e) => setSelectedProjectId(e.target.value)}
-                    className="w-full pl-11 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm appearance-none"
-                  >
-                    <option value="">Selecione um projeto...</option>
-                    {projects.map(p => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
+              <>
+                <div className="space-y-3 md:col-span-1 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">2. Selecione o Projeto</label>
+                  <div className="relative">
+                    <Briefcase size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <select
+                      value={selectedProjectId}
+                      onChange={(e) => setSelectedProjectId(e.target.value)}
+                      className="w-full pl-11 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm appearance-none"
+                    >
+                      <option value="">Selecione um projeto...</option>
+                      {projects.map(p => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-[10px] text-slate-400 italic ml-1">Este relatório consolida todas as informações do projeto em um arquivo PDF profissional.</p>
                 </div>
-                <p className="text-[10px] text-slate-400 italic ml-1">Este relatório consolida todas as informações do projeto em um arquivo PDF profissional.</p>
-              </div>
+
+                <div className="space-y-3 md:col-span-1 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">3. Selecione o Colaborador (Opcional)</label>
+                  <div className="relative">
+                    <Users size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <select
+                      value={completeReportCollaboratorId}
+                      onChange={(e) => setCompleteReportCollaboratorId(e.target.value)}
+                      className="w-full pl-11 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm appearance-none"
+                    >
+                      <option value="">Todos os colaboradores</option>
+                      {users.map(u => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <p className="text-[10px] text-slate-400 italic ml-1">Refine as subtarefas e ciclos PDCA do relatório sob a responsabilidade deste colaborador.</p>
+                </div>
+              </>
             ) : (
               <>
                 {/* Período */}
@@ -1583,6 +1604,8 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                 const project = projects.find(p => p.id === selectedProjectId);
                 if (!project) return null;
                 
+                const filteredSubtasks = (project.subtasks || []).filter(sub => !completeReportCollaboratorId || sub.responsibleId === completeReportCollaboratorId);
+                
                 return (
                   <div className="space-y-12">
                     {/* CAPA */}
@@ -1666,9 +1689,9 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                       </div>
 
                       <div className="space-y-4">
-                        {project.subtasks && project.subtasks.length > 0 ? (
+                        {filteredSubtasks && filteredSubtasks.length > 0 ? (
                           <div className="space-y-4">
-                            {project.subtasks.map((sub, idx) => (
+                            {filteredSubtasks.map((sub, idx) => (
                               <div key={sub.id} className="p-6 bg-white border border-slate-100 rounded-3xl shadow-sm space-y-4">
                                 <div className="flex justify-between items-center">
                                   <div className="flex items-center gap-3">
@@ -1714,8 +1737,8 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                       </div>
 
                       <div className="space-y-12">
-                        {project.subtasks && project.subtasks.flatMap(s => s.pdcaCycles).length > 0 ? (
-                          project.subtasks.flatMap(s => s.pdcaCycles).map((cycle, cIdx) => (
+                        {filteredSubtasks && filteredSubtasks.flatMap(s => s.pdcaCycles || []).length > 0 ? (
+                          filteredSubtasks.flatMap(s => s.pdcaCycles || []).map((cycle, cIdx) => (
                             <div key={cycle.id} className="space-y-8 p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100">
                               <div className="flex justify-between items-center">
                                 <h3 className="text-xl font-black text-slate-900">CICLO {cIdx + 1}: {cycle.title}</h3>
@@ -1738,7 +1761,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                                       </div>
                                       <div className="p-3 bg-slate-50 rounded-xl">
                                         <p className="text-[9px] font-black text-slate-400 uppercase mb-1">Meta Definitiva</p>
-                                        <p className="font-black text-emerald-600">{cycle.plan.impact.goal}% de redução</p>
+                                        <p className="font-black text-emerald-600">{cycle.plan.impact.improvementPercentage ?? cycle.plan.impact.goal ?? 0}% de redução</p>
                                       </div>
                                     </div>
                                   </div>
@@ -1863,15 +1886,15 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                       <div className="w-full max-w-2xl grid grid-cols-3 gap-6 pt-12">
                         <div className="p-8 bg-slate-50 rounded-[2rem] space-y-2">
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Subetapas</p>
-                          <p className="text-3xl font-black text-indigo-600">{project.subtasks.length}</p>
+                          <p className="text-3xl font-black text-indigo-600">{filteredSubtasks.length}</p>
                         </div>
                         <div className="p-8 bg-slate-50 rounded-[2rem] space-y-2">
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ciclos Ativos</p>
-                          <p className="text-3xl font-black text-amber-600">{project.subtasks.flatMap(s => s.pdcaCycles).filter(c => c.status === 'Ativo').length}</p>
+                          <p className="text-3xl font-black text-amber-600">{filteredSubtasks.flatMap(s => s.pdcaCycles || []).filter(c => c.status === 'Ativo').length}</p>
                         </div>
                         <div className="p-8 bg-slate-50 rounded-[2rem] space-y-2">
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Concluídos</p>
-                          <p className="text-3xl font-black text-emerald-600">{project.subtasks.flatMap(s => s.pdcaCycles).filter(c => c.status === 'Concluído').length}</p>
+                          <p className="text-3xl font-black text-emerald-600">{filteredSubtasks.flatMap(s => s.pdcaCycles || []).filter(c => c.status === 'Concluído').length}</p>
                         </div>
                       </div>
 

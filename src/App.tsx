@@ -1845,6 +1845,9 @@ function ScopeTab({
   globalConfig: GlobalConfig,
   onSelectSubtask: (taskId: string) => void
 }) {
+  const currentUserProfile = users.find(u => u.id === auth.currentUser?.uid);
+  const profile = currentUserProfile?.profile || 'Usuário Analista';
+
   const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false);
   const [newSubtaskData, setNewSubtaskData] = useState({
     title: '',
@@ -2044,7 +2047,7 @@ function ScopeTab({
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase mb-3 block ml-1">Setores Envolvidos</label>
               <div className="flex flex-wrap gap-2 mb-4">
-                {project.scope.involvedSectors.map(s => (
+                {[...project.scope.involvedSectors].sort((a, b) => a.name.localeCompare(b.name)).map(s => (
                   <span key={s.id} className="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-indigo-100 flex items-center gap-2">
                     {s.name}
                     <button 
@@ -2067,7 +2070,7 @@ function ScopeTab({
                 }}
               >
                 <option value="">+ Adicionar Setor</option>
-                {globalConfig.sectors.map(s => (
+                {[...globalConfig.sectors].sort((a, b) => a.localeCompare(b)).map(s => (
                   <option key={s} value={s}>{s}</option>
                 ))}
               </select>
@@ -2075,7 +2078,7 @@ function ScopeTab({
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase mb-3 block ml-1">Ferramentas Utilizadas</label>
               <div className="flex flex-wrap gap-2 mb-4">
-                {project.scope.toolsUsed.map(t => (
+                {[...project.scope.toolsUsed].sort((a, b) => a.name.localeCompare(b.name)).map(t => (
                   <span key={t.id} className="bg-slate-50 text-slate-700 px-3 py-1.5 rounded-xl text-xs font-bold border border-slate-200 flex items-center gap-2">
                     {t.name}
                     <button 
@@ -2098,7 +2101,7 @@ function ScopeTab({
                 }}
               >
                 <option value="">+ Adicionar Ferramenta</option>
-                {globalConfig.tools.map(t => (
+                {[...globalConfig.tools].sort((a, b) => a.localeCompare(b)).map(t => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
@@ -2581,8 +2584,8 @@ function ScopeTab({
                               <ArrowRight size={18} />
                             </button>
                             
-                            {/* Edição permitida apenas para pendentes */}
-                            {currentStatus === 'Pendente' && (
+                            {/* Edição permitida em qualquer status exceto concluído para Analista/Master */}
+                            {profile !== 'Usuário Visualizador' && currentStatus !== 'Concluído' && (
                               <button 
                                 onClick={() => {
                                   setEditingSubtask(subtask.id);

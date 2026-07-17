@@ -588,7 +588,7 @@ export default function PDCAEditor({
             getRootCausa(cycle),
             cycle.plan.impact.description || "",
             cycle.plan.impact.value ?? "",
-            cycle.plan.impact.goal ?? "",
+            cycle.plan.impact.improvementPercentage ?? cycle.plan.impact.goal ?? "",
             formatExpectedTangibleGains(cycle.plan.impact.expectedGains),
             formatExpectedIntangibleGains(cycle.plan.impact.expectedGains),
             (project.scope?.odsSelecionadas && project.scope.odsSelecionadas.length > 0) ? project.scope.odsSelecionadas.join(", ") : "",
@@ -1324,7 +1324,7 @@ export default function PDCAEditor({
                     width: "30%",
                     stack: [
                       { text: "META DE REDUÇÃO (%)", style: "fieldLabel", margin: [0, 0, 0, 4] },
-                      { text: activeCycle.plan.impact.goal ? `${activeCycle.plan.impact.goal}%` : "0%", style: "bodyHighlight", bold: true, color: "#059669" }
+                      { text: (activeCycle.plan.impact.improvementPercentage ?? activeCycle.plan.impact.goal) ? `${activeCycle.plan.impact.improvementPercentage ?? activeCycle.plan.impact.goal}%` : "0%", style: "bodyHighlight", bold: true, color: "#059669" }
                     ]
                   },
                   {
@@ -3351,20 +3351,22 @@ export default function PDCAEditor({
                                         activeCycle.plan.impact
                                           .improvementPercentage || ""
                                       }
-                                      onChange={(e) =>
+                                      onChange={(e) => {
+                                        const val = Math.min(
+                                          100,
+                                          Math.max(
+                                            0,
+                                            parseFloat(e.target.value) || 0,
+                                          ),
+                                        );
                                         updatePlan({
                                           impact: {
                                             ...activeCycle.plan.impact,
-                                            improvementPercentage: Math.min(
-                                              100,
-                                              Math.max(
-                                                0,
-                                                parseFloat(e.target.value) || 0,
-                                              ),
-                                            ),
+                                            improvementPercentage: val,
+                                            goal: val,
                                           },
-                                        })
-                                      }
+                                        });
+                                      }}
                                       className="w-full p-6 bg-theme-background border border-theme-border rounded-3xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground pr-12"
                                     />
                                     <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-slate-300">
@@ -5618,7 +5620,7 @@ export default function PDCAEditor({
                               />
                               <ReportField
                                 label="Impacto: Meta (%)"
-                                value={`${cycle.plan?.impact?.goal || 0}%`}
+                                value={`${cycle.plan?.impact?.improvementPercentage ?? cycle.plan?.impact?.goal ?? 0}%`}
                               />
                             </div>
                             <ReportField

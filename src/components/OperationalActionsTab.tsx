@@ -20,7 +20,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Project, User, OperationalAction, ProjectPriority } from '../types';
 import { cn, exportarCSVPadrao, cleanObject } from '../lib/utils';
-import { db, setDoc, doc, deleteDoc, handleFirestoreError, OperationType } from '../firebase';
+import { db, setDoc, doc, deleteDoc, handleFirestoreError, OperationType, auth } from '../firebase';
 import { calculateActionAlert } from '../utils/calculations';
 
 interface OperationalActionsTabProps {
@@ -43,6 +43,76 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
   const [tempUpdates, setTempUpdates] = useState<Partial<OperationalAction>>({});
   const [actionToSave, setActionToSave] = useState<OperationalAction | null>(null);
   const [updatesToSave, setUpdatesToSave] = useState<Partial<OperationalAction>>({});
+  const [expandedHistoryIds, setExpandedHistoryIds] = useState<Record<string, boolean>>({});
+
+  // Dynamic filter options (Excel style - based on other filters)
+  const availableProjects = useMemo(() => {
+    if (actions.length === 0) return projects;
+    const ids = new Set(
+      actions.filter(a => {
+        const matchesSearch = a.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            a.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            a.subtaskTitle.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesResponsible = !filterResponsible || a.responsibleId === filterResponsible;
+        const matchesStatus = !filterStatus || a.status === filterStatus;
+        const matchesPriority = !filterPriority || a.priority === filterPriority;
+        return matchesSearch && matchesResponsible && matchesStatus && matchesPriority;
+      }).map(a => a.projectId)
+    );
+    if (filterProject) ids.add(filterProject);
+    return projects.filter(p => ids.has(p.id));
+  }, [actions, searchTerm, filterProject, filterResponsible, filterStatus, filterPriority, projects]);
+
+  const availableResponsibles = useMemo(() => {
+    if (actions.length === 0) return users;
+    const ids = new Set(
+      actions.filter(a => {
+        const matchesSearch = a.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            a.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            a.subtaskTitle.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesProject = !filterProject || a.projectId === filterProject;
+        const matchesStatus = !filterStatus || a.status === filterStatus;
+        const matchesPriority = !filterPriority || a.priority === filterPriority;
+        return matchesSearch && matchesProject && matchesStatus && matchesPriority;
+      }).map(a => a.responsibleId)
+    );
+    if (filterResponsible) ids.add(filterResponsible);
+    return users.filter(u => ids.has(u.id));
+  }, [actions, searchTerm, filterProject, filterResponsible, filterStatus, filterPriority, users]);
+
+  const availableStatuses = useMemo(() => {
+    if (actions.length === 0) return ['Pendente', 'Em andamento', 'Concluído', 'Pausado'];
+    const statuses = new Set(
+      actions.filter(a => {
+        const matchesSearch = a.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            a.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            a.subtaskTitle.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesProject = !filterProject || a.projectId === filterProject;
+        const matchesResponsible = !filterResponsible || a.responsibleId === filterResponsible;
+        const matchesPriority = !filterPriority || a.priority === filterPriority;
+        return matchesSearch && matchesProject && matchesResponsible && matchesPriority;
+      }).map(a => a.status)
+    );
+    if (filterStatus) statuses.add(filterStatus);
+    return ['Pendente', 'Em andamento', 'Concluído', 'Pausado'].filter(s => statuses.has(s as any));
+  }, [actions, searchTerm, filterProject, filterResponsible, filterStatus, filterPriority]);
+
+  const availablePriorities = useMemo(() => {
+    if (actions.length === 0) return ['Baixa', 'Média', 'Alta', 'Urgente'];
+    const priorities = new Set(
+      actions.filter(a => {
+        const matchesSearch = a.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            a.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            a.subtaskTitle.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesProject = !filterProject || a.projectId === filterProject;
+        const matchesResponsible = !filterResponsible || a.responsibleId === filterResponsible;
+        const matchesStatus = !filterStatus || a.status === filterStatus;
+        return matchesSearch && matchesProject && matchesResponsible && matchesStatus;
+      }).map(a => a.priority)
+    );
+    if (filterPriority) priorities.add(filterPriority);
+    return ['Baixa', 'Média', 'Alta', 'Urgente'].filter(p => priorities.has(p as any));
+  }, [actions, searchTerm, filterProject, filterResponsible, filterStatus, filterPriority]);
 
   const filteredActions = useMemo(() => {
     return actions.filter(a => {
@@ -63,7 +133,28 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
       const actionRef = doc(db, 'operationalActions', id);
       const action = actions.find(a => a.id === id);
       if (action) {
-        const finalAction = cleanObject({ ...action, ...updates });
+        // Log follow-up history
+        const originalFeedback = action.feedback || '';
+        const newFeedback = (updates.feedback || '').trim();
+        
+        let updatedHistory = action.historicoTratativas ? [...action.historicoTratativas] : [];
+        if (originalFeedback.trim() !== '' && newFeedback !== originalFeedback.trim()) {
+          const loggedInUser = users.find(u => u.id === auth.currentUser?.uid);
+          const currentUserName = loggedInUser?.name || auth.currentUser?.email || 'Usuário';
+          
+          updatedHistory.push({
+            texto: originalFeedback,
+            usuario: currentUserName,
+            data: new Date().toISOString()
+          });
+        }
+        
+        const finalUpdates = {
+          ...updates,
+          ...(updatedHistory.length > 0 ? { historicoTratativas: updatedHistory } : {})
+        };
+
+        const finalAction = cleanObject({ ...action, ...finalUpdates });
         await setDoc(actionRef, finalAction);
         setEditingActionId(null);
         setTempUpdates({});
@@ -190,7 +281,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
               className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
             >
               <option value="">Todos os Projetos</option>
-              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {availableProjects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
 
             <select 
@@ -199,7 +290,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
               className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
             >
               <option value="">Todos os Responsáveis</option>
-              {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+              {availableResponsibles.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
 
             <select 
@@ -208,9 +299,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
               className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
             >
               <option value="">Todos os Status</option>
-              <option value="Pendente">Pendente</option>
-              <option value="Em andamento">Em andamento</option>
-              <option value="Concluído">Concluído</option>
+              {availableStatuses.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
 
             <select 
@@ -219,9 +308,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
               className="bg-theme-background border border-theme-border text-theme-foreground rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
             >
               <option value="">Todas as Prioridades</option>
-              <option value="Baixa">Baixa</option>
-              <option value="Média">Média</option>
-              <option value="Alta">Alta</option>
+              {availablePriorities.map(p => <option key={p} value={p}>{p}</option>)}
             </select>
           </div>
         </div>
@@ -283,6 +370,7 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
                     <td className="px-6 py-4">
                       <span className={cn(
                         "px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider inline-block",
+                        action.priority === 'Urgente' ? "bg-red-500/15 text-red-500 dark:bg-red-500/25 dark:text-red-400 font-extrabold border border-red-500/20" :
                         action.priority === 'Alta' ? "bg-rose-500/10 text-rose-500" :
                         action.priority === 'Média' ? "bg-indigo-500/10 text-indigo-400" :
                         "bg-theme-background border border-theme-border text-slate-400"
@@ -299,12 +387,14 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
                           "w-full px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider outline-none border border-transparent focus:border-indigo-400 disabled:cursor-not-allowed transition-all text-theme-foreground",
                           currentStatus === 'Concluído' ? "bg-emerald-500/10 text-emerald-500" :
                           currentStatus === 'Em andamento' ? "bg-amber-500/10 text-amber-500" :
+                          currentStatus === 'Pausado' ? "bg-slate-500/15 text-slate-500 dark:text-slate-400" :
                           "bg-theme-background text-slate-400"
                         )}
                       >
                         <option value="Pendente">Pendente</option>
                         <option value="Em andamento">Em andamento</option>
                         <option value="Concluído">Concluído</option>
+                        <option value="Pausado">Pausado</option>
                       </select>
                     </td>
                     <td className="px-6 py-4">
@@ -323,6 +413,41 @@ export default function OperationalActionsTab({ actions, projects, users }: Oper
                         placeholder="Descreva o retorno da tratativa..."
                         className="w-full bg-slate-50/50 p-3 rounded-xl text-[13px] text-slate-600 outline-none border border-slate-100 focus:border-indigo-300 focus:bg-white transition-all resize-none min-h-[80px] leading-relaxed disabled:opacity-75 disabled:cursor-not-allowed"
                       />
+                      {action.historicoTratativas && action.historicoTratativas.length > 0 && (
+                        <div className="mt-3">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setExpandedHistoryIds(prev => ({
+                                ...prev,
+                                [action.id]: !prev[action.id]
+                              }));
+                            }}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-500 transition-colors"
+                          >
+                            <History size={14} />
+                            <span>Histórico de tratativas {expandedHistoryIds[action.id] ? '▲' : '▼'}</span>
+                          </button>
+                          
+                          {expandedHistoryIds[action.id] && (
+                            <div className="mt-3 space-y-3 bg-slate-50 dark:bg-slate-900/50 p-3 rounded-xl border border-slate-100 dark:border-slate-800/40 text-xs">
+                              {action.historicoTratativas.slice().reverse().map((log, index) => (
+                                <div key={index} className="space-y-1 text-slate-600 dark:text-slate-300">
+                                  <div className="font-semibold text-slate-400 dark:text-slate-500 text-[11px]">
+                                    [{new Date(log.data).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}] - {log.usuario}
+                                  </div>
+                                  <p className="whitespace-pre-wrap leading-relaxed">{log.texto}</p>
+                                  {index < action.historicoTratativas!.length - 1 && (
+                                    <div className="text-slate-300 dark:text-slate-700 py-1 font-mono tracking-widest select-none">
+                                      -------------------------
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
                       <div className="relative">
@@ -691,6 +816,7 @@ function CreateActionModal({ isOpen, onClose, projects, users }: { isOpen: boole
                     <option value="Baixa">Baixa</option>
                     <option value="Média">Média</option>
                     <option value="Alta">Alta</option>
+                    <option value="Urgente">Urgente</option>
                   </select>
                 </div>
               </div>

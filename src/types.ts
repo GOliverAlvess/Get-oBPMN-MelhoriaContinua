@@ -2,7 +2,7 @@
 export type ProjectStatus = 'Backlog' | 'Planejamento' | 'Em andamento' | 'Em melhoria' | 'Concluído';
 
 // Tipo que define os níveis de prioridade atribuídos a projetos ou subtarefas
-export type ProjectPriority = 'Baixa' | 'Média' | 'Alta';
+export type ProjectPriority = 'Baixa' | 'Média' | 'Alta' | 'Urgente';
 
 // Interface que representa um departamento ou setor envolvido no escopo de um projeto
 export interface InvolvedSector {
@@ -268,6 +268,12 @@ export interface User {
   lastPasswordChange?: string; // Data da última alteração de senha
 }
 
+export interface ActionFollowUpLog {
+  texto: string;
+  usuario: string;
+  data: string; // timestamp
+}
+
 // Ações operacionais avulsas enviadas para os usuários ou definidas no histórico interativo
 export interface OperationalAction {
   id: string; // ID único da ação operacional avulsa
@@ -279,10 +285,11 @@ export interface OperationalAction {
   responsibleId: string; // Pessoa responsável por executar a respectiva ação
   responsibleName: string; // Nome descritivo da pessoa responsável
   priority: ProjectPriority; // Criticidade de execução
-  status: 'Pendente' | 'Em andamento' | 'Concluído'; // Status de entrega atual
+  status: 'Pendente' | 'Em andamento' | 'Concluído' | 'Pausado'; // Status de entrega atual
   forecastDate: string; // Prazo previsto para a realização técnica
   completionDate?: string; // Data real de finalização de entrega
   feedback?: string; // Observações para redefinir metas ou avaliações de qualidade
+  historicoTratativas?: ActionFollowUpLog[]; // Histórico complementar de tratativas
   createdAt: string; // Timestamp de criação do registro no banco de dados
 }
 

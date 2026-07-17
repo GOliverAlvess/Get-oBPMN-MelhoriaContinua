@@ -265,6 +265,7 @@ export interface User {
   profile?: UserProfile; // Perfil de atuação determinando seus níveis de gravação
   password?: string; // Senha em texto puro (usada temporariamente no formulário)
   passwordHash?: string; // Hash seguro da senha de acesso
+  lastPasswordChange?: string; // Data da última alteração de senha
 }
 
 // Ações operacionais avulsas enviadas para os usuários ou definidas no histórico interativo

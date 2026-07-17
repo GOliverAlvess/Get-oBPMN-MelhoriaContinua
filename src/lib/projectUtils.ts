@@ -1,5 +1,15 @@
 import { Project, ProjectStatus } from '../types';
 
+export const isCardFullyComplete = (project: Project): boolean => {
+  const subtasks = project.subtasks || [];
+  if (subtasks.length === 0) {
+    return project.status === 'Concluído';
+  }
+  return subtasks.every(subtask => {
+    return subtask.status === 'Concluído' && isSubtaskPDCAComplete(subtask);
+  });
+};
+
 export const calculateProjectStatus = (project: Project): ProjectStatus => {
   if (project.status === 'Backlog' || project.assignedTo === 'backlog') {
     return 'Backlog';
@@ -13,8 +23,7 @@ export const calculateProjectStatus = (project: Project): ProjectStatus => {
     return isScopeFilled ? 'Em andamento' : 'Planejamento';
   }
 
-  const allCompleted = subtasks.every(s => s.status === 'Concluído');
-  if (allCompleted) return 'Concluído';
+  if (isCardFullyComplete(project)) return 'Concluído';
 
   const anyInProgress = subtasks.some(s => s.status === 'Em andamento' || s.pdcaCycles.length > 0);
   if (anyInProgress) return 'Em melhoria';
@@ -22,7 +31,35 @@ export const calculateProjectStatus = (project: Project): ProjectStatus => {
   return 'Em andamento';
 };
 
-export const calculateProjectProgress = (project: Project) => {
+export const isSubtaskPDCAComplete = (subtask: any): boolean => {
+  const pdca = subtask.pdcaCycles || [];
+  const mapping = subtask.mapping;
+  const problemSteps = Object.values(mapping?.customData || {}).filter((data: any) => data?.isProblemStep);
+  const requiresPDCA = problemSteps.length > 0;
+
+  if (!requiresPDCA) {
+    return true; // Sem problemas identificados, não exige PDCA obrigatoriamente
+  }
+
+  if (pdca.length === 0) {
+    return false; // Exige PDCA mas não possui ciclos
+  }
+
+  const hasPlan = pdca.some((c: any) => c.plan && c.plan.actionPlan && c.plan.actionPlan.length > 0);
+  const hasDo = pdca.some((c: any) => c.plan && c.plan.actionPlan && c.plan.actionPlan.some((a: any) => a.status === 'Concluído' || a.status === 'Em andamento'));
+  const hasCheck = pdca.some((c: any) => c.plan && c.plan.actionPlan && c.plan.actionPlan.some((a: any) => a.worked !== undefined && a.worked !== null));
+  const hasAct = pdca.some((c: any) => c.status === 'Concluído' || c.etapaAtual === 'REPORT' || (c.plan && c.plan.actionPlan && c.plan.actionPlan.some((a: any) => a.finalProblemStatus)));
+
+  return !!(hasPlan && hasDo && hasCheck && hasAct);
+};
+
+export const calculateProjectProgress = (project: Project): number => {
+  // 1. Validação explícita de conclusão total (Forçar 100% se tudo estiver completo)
+  if (isCardFullyComplete(project)) {
+    console.log('[calculateProjectProgress] Card totalmente concluído! Retornando 100%');
+    return 100;
+  }
+
   // 1. ESCOPO (5%)
   // Só considera completo se os campos principais estiverem preenchidos
   const scope = project.scope;
@@ -41,60 +78,67 @@ export const calculateProjectProgress = (project: Project) => {
   // 2. SUBTAREFAS (95%)
   const subtasks = project.subtasks || [];
   if (subtasks.length === 0) {
-    return scopeProgress;
+    if (project.status === 'Concluído') return 100;
+    if (project.status === 'Backlog') return 0;
+    if (project.status === 'Planejamento') return 5;
+    return isScopeComplete ? 15 : 5;
   }
 
-  const weightPerSubtask = 95 / subtasks.length;
-  let totalSubtasksProgress = 0;
+  const total = subtasks.length;
+  let progressSum = 0;
+  let hasAnyIncomplete = false;
 
   subtasks.forEach(subtask => {
-    let stagesCompleted = 0;
-    const mapping = subtask.mapping;
-    const pdca = subtask.pdcaCycles || [];
+    const isPDCAComplete = isSubtaskPDCAComplete(subtask);
+    const isSubtaskDone = subtask.status === 'Concluído';
 
-    // Estágio 1: Início do mapeamento
-    if (mapping && (mapping.nodes?.length > 0 || mapping.xml)) {
-      stagesCompleted++;
-    }
-
-    // Estágio 2: Mapeamento concluído
-    // Definimos como concluído se o usuário marcou o status ou se o XML existe e tem nodes substanciais
-    const isMappingFinished = subtask.status !== 'Pendente' && mapping?.xml;
-    if (isMappingFinished) {
-      stagesCompleted++;
-    }
-
-    // Verificamos se existem problemas identificados que exigem PDCA
-    const problemSteps = Object.values(mapping?.customData || {}).filter(data => data?.isProblemStep);
-    const requiresPDCA = problemSteps.length > 0;
-
-    if (!requiresPDCA) {
-      // Se não há problemas, os estágios de PDCA são concedidos automaticamente ao concluir o mapeamento
-      if (isMappingFinished) {
-        stagesCompleted += 4;
-      }
+    if (isSubtaskDone && isPDCAComplete) {
+      progressSum += 1.0;
     } else {
-      // Estágio 3: PDCA - PLAN preenchido (Pelo menos um ciclo com plano de ação)
-      const hasPlan = pdca.some(c => c.plan.actionPlan.length > 0);
-      if (hasPlan) stagesCompleted++;
-
-      // Estágio 4: PDCA - DO preenchido (Pelo menos uma ação iniciada ou concluída)
-      const hasDo = pdca.some(c => c.plan.actionPlan.some(a => a.status === 'Concluído' || a.status === 'Em andamento'));
-      if (hasDo) stagesCompleted++;
-
-      // Estágio 5: PDCA - CHECK preenchido (Pelo menos uma ação com status de 'worked' / funcionou)
-      const hasCheck = pdca.some(c => c.plan.actionPlan.some(a => a.worked && a.worked !== undefined));
-      if (hasCheck) stagesCompleted++;
-
-      // Estágio 6: PDCA - ACT concluído (Ciclo finalizado ou ação com status final)
-      const hasAct = pdca.some(c => c.status === 'Concluído' || c.plan.actionPlan.some(a => a.finalProblemStatus));
-      if (hasAct) stagesCompleted++;
+      hasAnyIncomplete = true;
+      if (subtask.status === 'Em andamento' || (isSubtaskDone && !isPDCAComplete)) {
+        progressSum += 0.5; // Progresso parcial
+      } else {
+        progressSum += 0; // Não iniciada
+      }
     }
-
-    totalSubtasksProgress += (stagesCompleted / 6) * weightPerSubtask;
   });
 
-  return Math.min(Math.round(scopeProgress + totalSubtasksProgress), 100);
+  // Log de debug temporário solicitado pelo usuário
+  console.log('[calculateProjectProgress] Debug:', {
+    projectId: project.id,
+    projectName: project.name,
+    total,
+    progressSum,
+    result: (progressSum / total) * 100,
+    hasAnyIncomplete
+  });
+
+  // Cálculo de progresso parcial evitando arredondamentos prematuros
+  const subtasksProgressRatio = progressSum / total;
+  let totalProgress = Math.round(scopeProgress + (subtasksProgressRatio * 95));
+
+  // Regra obrigatória: Se houver QUALQUER subtarefa incompleta ou PDCA incompleto, o card não pode ser 100%
+  if (hasAnyIncomplete && totalProgress >= 100) {
+    totalProgress = 99;
+  }
+
+  return Math.min(Math.max(totalProgress, 0), 100);
+};
+
+export const getCardProgress = (project: Project): number => {
+  return calculateProjectProgress(project);
+};
+
+export const hasPendingSubtasksOrPDCA = (project: Project): boolean => {
+  const subtasks = project.subtasks || [];
+  if (subtasks.length === 0) return false;
+
+  return subtasks.some(subtask => {
+    const isPDCAComplete = isSubtaskPDCAComplete(subtask);
+    const isSubtaskDone = subtask.status === 'Concluído';
+    return !isSubtaskDone || !isPDCAComplete;
+  });
 };
 
 export const calculateSubtaskStatus = (subtask: any): any => {

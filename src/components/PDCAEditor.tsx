@@ -25,6 +25,14 @@ import {
   Lock,
   Zap,
   Award,
+  Pencil,
+  Check,
+  Link2,
+  GitFork,
+  PlusCircle,
+  CheckSquare,
+  Square,
+  AlertTriangle,
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { v4 as uuidv4 } from "uuid";
@@ -51,6 +59,7 @@ import { cn, isValidUrl, formatUrl, exportarCSVPadrao } from "../lib/utils";
 
 import { SYSTEM_LOGO_PATH } from "../constants/pdfLogo";
 import { getBase64ImageFromUrl } from "../lib/utils";
+import { auth } from "../firebase";
 
 const STATUS_MAP: Record<string, string> = {
   pending: "Pendente",
@@ -76,6 +85,7 @@ export default function PDCAEditor({
   onBack,
   defaultTaskId,
   globalConfig,
+  userProfile,
 }: {
   project: Project;
   subtask: Subtask;
@@ -83,6 +93,7 @@ export default function PDCAEditor({
   onBack: () => void;
   defaultTaskId?: string;
   globalConfig?: GlobalConfig;
+  userProfile?: string;
 }) {
   const [activeCycleId, setActiveCycleId] = useState<string | null>(null);
   const [activePhase, setActivePhase] = useState<
@@ -96,6 +107,93 @@ export default function PDCAEditor({
   const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [showActConfirmation, setShowActConfirmation] = useState(false);
+  const [cycleToDelete, setCycleToDelete] = useState<PDCACycle | null>(null);
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [editingLogData, setEditingLogData] = useState<{
+    status: "Pendente" | "Em andamento";
+    sector: string;
+    observation: string;
+  } | null>(null);
+  const [showLogHistoryId, setShowLogHistoryId] = useState<string | null>(null);
+
+  // Modal for choice & linking PDCA
+  const [startOrLinkConfig, setStartOrLinkConfig] = useState<{
+    isOpen: boolean;
+    taskId: string;
+    taskLabel: string;
+  } | null>(null);
+  const [startOrLinkMode, setStartOrLinkMode] = useState<'choice' | 'link'>('choice');
+  const [selectedPdcaToLink, setSelectedPdcaToLink] = useState<string | null>(null);
+  const [selectedSubtasksToLink, setSelectedSubtasksToLink] = useState<string[]>([]);
+
+  // Distinct PDCAs in project across all subtasks
+  const projectPDCAs = useMemo(() => {
+    const map = new Map<string, { cycle: PDCACycle; subtasks: Subtask[] }>();
+    (project.subtasks || []).forEach((st) => {
+      (st.pdcaCycles || []).forEach((c) => {
+        if (!map.has(c.id)) {
+          map.set(c.id, { cycle: c, subtasks: [st] });
+        } else {
+          const existing = map.get(c.id)!;
+          if (!existing.subtasks.some((s) => s.id === st.id)) {
+            existing.subtasks.push(st);
+          }
+        }
+      });
+    });
+    return Array.from(map.values());
+  }, [project.subtasks]);
+
+  // Subtasks linked to the active cycle
+  const linkedSubtasksForActiveCycle = useMemo(() => {
+    if (!activeCycleId || !project.subtasks) return [];
+    return (project.subtasks || []).filter((st) =>
+      (st.pdcaCycles || []).some((c) => c.id === activeCycleId)
+    );
+  }, [project.subtasks, activeCycleId]);
+
+  const isMaster = useMemo(() => {
+    let p = userProfile;
+    if (!p) {
+      try {
+        const saved = sessionStorage.getItem("pdca_auth_user") || localStorage.getItem("pdca_auth_user");
+        if (saved) {
+          const u = JSON.parse(saved);
+          p = u.profile;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    const user = auth.currentUser;
+    if (!p && user) {
+      p = (user as any).profile;
+    }
+    const email = user?.email || "";
+    if (
+      !email ||
+      email === "ga.oliveira@ativalog.com.br" ||
+      email === "bielalves201@gmail.com"
+    ) {
+      return true;
+    }
+    if (!p) return true;
+    const upper = String(p).toUpperCase();
+    return upper.includes("MASTER");
+  }, [userProfile]);
+
+  const handleConfirmDeleteCycle = (cycleId: string) => {
+    const updatedCycles = subtask.pdcaCycles.filter((c) => c.id !== cycleId);
+    onUpdateSubtask({
+      ...subtask,
+      pdcaCycles: updatedCycles,
+    });
+    if (activeCycleId === cycleId) {
+      setActiveCycleId(null);
+      setShowDashboard(true);
+    }
+    setCycleToDelete(null);
+  };
 
   const [confirmingLog, setConfirmingLog] = useState<{
     id: string;
@@ -390,6 +488,70 @@ export default function PDCAEditor({
     if (activeCycle) {
       updateCycle({ etapaAtual: newPhase });
     }
+  };
+
+  const handleStartPdcaFlow = (taskId: string, taskLabel: string) => {
+    const existingActiveCycle = (subtask.pdcaCycles || []).find(
+      (c) => (c.taskId === taskId || c.linkedTaskIds?.includes(taskId)) && c.status === "Ativo"
+    );
+    if (existingActiveCycle) {
+      setActiveCycleId(existingActiveCycle.id);
+      setActivePhase(existingActiveCycle.etapaAtual || "PLAN");
+      setShowDashboard(false);
+      setShowProblemsModal(false);
+      setSaveFeedback("Já existe um ciclo ativo para esta etapa.");
+      return;
+    }
+
+    setStartOrLinkConfig({ isOpen: true, taskId, taskLabel });
+    setStartOrLinkMode("choice");
+    setSelectedPdcaToLink(null);
+    setSelectedSubtasksToLink([subtask.id]);
+  };
+
+  const handleConfirmLink = () => {
+    if (!startOrLinkConfig || !selectedPdcaToLink) return;
+
+    const targetItem = projectPDCAs.find((item) => item.cycle.id === selectedPdcaToLink);
+    if (!targetItem) return;
+
+    const baseCycle = targetItem.cycle;
+
+    const newLinkedTaskIds = Array.from(
+      new Set([...(baseCycle.linkedTaskIds || [baseCycle.taskId]), startOrLinkConfig.taskId])
+    );
+    const newLinkedSubtaskIds = Array.from(new Set(selectedSubtasksToLink));
+
+    const updatedCycle: PDCACycle = {
+      ...baseCycle,
+      linkedTaskIds: newLinkedTaskIds,
+      linkedSubtaskIds: newLinkedSubtaskIds,
+    };
+
+    const hasCycleInCurrent = (subtask.pdcaCycles || []).some((c) => c.id === updatedCycle.id);
+    let newCurrentCycles = subtask.pdcaCycles || [];
+    if (selectedSubtasksToLink.includes(subtask.id)) {
+      if (hasCycleInCurrent) {
+        newCurrentCycles = newCurrentCycles.map((c) => (c.id === updatedCycle.id ? updatedCycle : c));
+      } else {
+        newCurrentCycles = [updatedCycle, ...newCurrentCycles];
+      }
+    } else {
+      newCurrentCycles = newCurrentCycles.filter((c) => c.id !== updatedCycle.id);
+    }
+
+    onUpdateSubtask({
+      ...subtask,
+      pdcaCycles: newCurrentCycles,
+    });
+
+    setActiveCycleId(updatedCycle.id);
+    setActivePhase(updatedCycle.etapaAtual || "PLAN");
+    setShowDashboard(false);
+    setShowProblemsModal(false);
+    setStartOrLinkConfig(null);
+    setSaveFeedback("PDCA vinculado com sucesso!");
+    setTimeout(() => setSaveFeedback(null), 3500);
   };
 
   const createNewCycle = (taskId: string, taskLabel: string) => {
@@ -1887,13 +2049,13 @@ export default function PDCAEditor({
                 Preencha as causas acima para priorizar.
               </p>
             ) : (
-              allIshikawaCauses.map((cause) => {
+              allIshikawaCauses.map((cause, cIdx) => {
                 const isSelected = (
                   activeCycle.plan.rootCauseAnalysis.priorityCauses || []
                 ).includes(cause);
                 return (
                   <button
-                    key={cause}
+                    key={`${cause}-${cIdx}`}
                     onClick={() => {
                       const current =
                         activeCycle.plan.rootCauseAnalysis.priorityCauses || [];
@@ -2341,8 +2503,34 @@ export default function PDCAEditor({
                           Iniciado em{" "}
                           {format(new Date(cycle.createdAt), "dd/MM/yyyy")}
                         </p>
+                        {(() => {
+                          const linkedStCount = (project.subtasks || []).filter(s => (s.pdcaCycles || []).some(c => c.id === cycle.id)).length;
+                          if (linkedStCount <= 1) return null;
+                          return (
+                            <div className="mt-2 inline-flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-2 py-0.5 rounded-md text-[10px] font-extrabold">
+                              <Link2 size={10} />
+                              <span>Vinculado a {linkedStCount} subtarefas</span>
+                            </div>
+                          );
+                        })()}
                       </div>
-                      <StatusBadge status={cycle.status} />
+                      <div className="flex items-center gap-2">
+                        <StatusBadge status={cycle.status} />
+                        {isMaster && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setCycleToDelete(cycle);
+                            }}
+                            className="bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/50 px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm shrink-0"
+                            title="Excluir ciclo PDCA"
+                          >
+                            <Trash2 size={14} />
+                            <span>Excluir ciclo PDCA</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <div className="flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -2457,7 +2645,7 @@ export default function PDCAEditor({
                           </div>
                           {!hasActiveCycle && (
                             <button
-                              onClick={() => createNewCycle(p.id, p.label)}
+                              onClick={() => handleStartPdcaFlow(p.id, p.label)}
                               className="bg-white text-indigo-600 px-4 py-2 rounded-xl text-xs font-black shadow-sm border border-slate-200 hover:bg-indigo-600 hover:text-white hover:border-indigo-600 transition-all"
                             >
                               {isCompleted
@@ -2466,29 +2654,444 @@ export default function PDCAEditor({
                             </button>
                           )}
                           {hasActiveCycle && (
-                            <button
-                              onClick={() => {
-                                const activeCycle = subtask.pdcaCycles.find(
-                                  (c) =>
-                                    c.taskId === p.id && c.status === "Ativo",
-                                );
-                                if (activeCycle) {
-                                  setActiveCycleId(activeCycle.id);
-                                  setActivePhase(
-                                    activeCycle.etapaAtual || "PLAN",
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => {
+                                  const activeCycle = subtask.pdcaCycles.find(
+                                    (c) =>
+                                      c.taskId === p.id && c.status === "Ativo",
                                   );
-                                  setShowDashboard(false);
-                                  setShowProblemsModal(false);
-                                }
-                              }}
-                              className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-black shadow-md hover:bg-indigo-700 transition-all"
-                            >
-                              Ver Ciclo
-                            </button>
+                                  if (activeCycle) {
+                                    setActiveCycleId(activeCycle.id);
+                                    setActivePhase(
+                                      activeCycle.etapaAtual || "PLAN",
+                                    );
+                                    setShowDashboard(false);
+                                    setShowProblemsModal(false);
+                                  }
+                                }}
+                                className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-black shadow-md hover:bg-indigo-700 transition-all"
+                              >
+                                Ver Ciclo
+                              </button>
+                              {isMaster && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const activeCycle = subtask.pdcaCycles.find(
+                                      (c) =>
+                                        c.taskId === p.id && c.status === "Ativo",
+                                    );
+                                    if (activeCycle) {
+                                      setCycleToDelete(activeCycle);
+                                    }
+                                  }}
+                                  className="bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/50 px-3 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-sm shrink-0"
+                                  title="Excluir ciclo PDCA"
+                                >
+                                  <Trash2 size={14} />
+                                  <span>Excluir ciclo PDCA</span>
+                                </button>
+                              )}
+                            </div>
                           )}
                         </div>
                       );
                     })
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {cycleToDelete && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[1000] flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 text-left"
+              >
+                <div className="flex items-center gap-3 text-rose-500 mb-3">
+                  <div className="p-2.5 bg-rose-50 dark:bg-rose-950/50 rounded-xl">
+                    <Trash2 size={22} />
+                  </div>
+                  <h3 className="text-base font-extrabold text-slate-800 dark:text-white">
+                    Excluir ciclo PDCA
+                  </h3>
+                </div>
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed mb-6">
+                  Deseja realmente excluir este ciclo PDCA?{"\n\n"}
+                  Essa ação não poderá ser desfeita.
+                </p>
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setCycleToDelete(null)}
+                    className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmDeleteCycle(cycleToDelete.id)}
+                    className="px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 shadow-md transition-all"
+                  >
+                    Confirmar
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Modal: Iniciar ou Vincular PDCA */}
+        <AnimatePresence>
+          {startOrLinkConfig?.isOpen && (
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[1000] flex items-center justify-center p-4">
+              <motion.div
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white dark:bg-slate-900 rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 dark:border-slate-800 text-left overflow-hidden flex flex-col max-h-[85vh]"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 mb-6 shrink-0">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="p-2 bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 rounded-xl">
+                        <RefreshCw size={20} />
+                      </span>
+                      <h3 className="text-lg font-black text-slate-800 dark:text-white">
+                        {startOrLinkMode === "choice"
+                          ? "Iniciar ou Vincular PDCA"
+                          : "Vincular a PDCA Existente"}
+                      </h3>
+                    </div>
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-1">
+                      Etapa:{" "}
+                      <span className="text-indigo-600 dark:text-indigo-400 font-extrabold">
+                        {startOrLinkConfig.taskLabel}
+                      </span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setStartOrLinkConfig(null)}
+                    className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-2 rounded-xl transition-all"
+                  >
+                    <Plus size={20} className="rotate-45" />
+                  </button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-y-auto space-y-6 pr-1">
+                  {startOrLinkMode === "choice" ? (
+                    <div className="space-y-4">
+                      <p className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                        Como você deseja estruturar o ciclo de melhoria contínua para esta etapa?
+                      </p>
+
+                      {/* Option 1: Iniciar Novo PDCA */}
+                      <div
+                        onClick={() => {
+                          createNewCycle(
+                            startOrLinkConfig.taskId,
+                            startOrLinkConfig.taskLabel
+                          );
+                          setStartOrLinkConfig(null);
+                        }}
+                        className="p-5 border-2 border-slate-200 dark:border-slate-800 hover:border-indigo-500 dark:hover:border-indigo-500 bg-slate-50 dark:bg-slate-800/50 hover:bg-indigo-50/50 dark:hover:bg-indigo-950/30 rounded-2xl cursor-pointer transition-all group flex items-start gap-4 shadow-sm"
+                      >
+                        <div className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-400 rounded-2xl group-hover:bg-indigo-600 group-hover:text-white transition-all shrink-0">
+                          <PlusCircle size={24} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-extrabold text-slate-800 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                              Iniciar Novo PDCA
+                            </h4>
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+                              Padrão
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                            Cria um ciclo PDCA totalmente novo e independente focado exclusivamente nos problemas e causas desta etapa.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Option 2: Vincular a PDCA Existente */}
+                      <div
+                        onClick={() => {
+                          setStartOrLinkMode("link");
+                          if (projectPDCAs.length > 0) {
+                            const firstCycle = projectPDCAs[0];
+                            setSelectedPdcaToLink(firstCycle.cycle.id);
+                            const alreadyLinkedSubtaskIds = firstCycle.subtasks.map(
+                              (s) => s.id
+                            );
+                            setSelectedSubtasksToLink(
+                              Array.from(
+                                new Set([subtask.id, ...alreadyLinkedSubtaskIds])
+                              )
+                            );
+                          }
+                        }}
+                        className="p-5 border-2 border-slate-200 dark:border-slate-800 hover:border-emerald-500 dark:hover:border-emerald-500 bg-slate-50 dark:bg-slate-800/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/30 rounded-2xl cursor-pointer transition-all group flex items-start gap-4 shadow-sm"
+                      >
+                        <div className="p-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-emerald-600 dark:text-emerald-400 rounded-2xl group-hover:bg-emerald-600 group-hover:text-white transition-all shrink-0">
+                          <Link2 size={24} />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-extrabold text-slate-800 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                              Vincular a PDCA Existente
+                            </h4>
+                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+                              Compartilhar
+                            </span>
+                          </div>
+                          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                            Conecta esta etapa a um ciclo PDCA já cadastrado no projeto. O plano de ação e evolução serão compartilhados entre as subtarefas vinculadas.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      {/* Passo 1: Selecionar PDCA Existente */}
+                      <div className="space-y-3">
+                        <label className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                          <span>1. Selecione o PDCA existente do projeto:</span>
+                        </label>
+
+                        {projectPDCAs.length === 0 ? (
+                          <div className="p-5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 rounded-2xl text-center space-y-3">
+                            <AlertCircle
+                              size={28}
+                              className="mx-auto text-amber-600 dark:text-amber-400"
+                            />
+                            <p className="text-xs font-bold text-amber-800 dark:text-amber-200">
+                              Nenhum PDCA existente foi encontrado neste projeto.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                createNewCycle(
+                                  startOrLinkConfig.taskId,
+                                  startOrLinkConfig.taskLabel
+                                );
+                                setStartOrLinkConfig(null);
+                              }}
+                              className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-black hover:bg-indigo-700 transition-all shadow-md"
+                            >
+                              Criar Novo PDCA
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                            {projectPDCAs.map((item) => {
+                              const isSelected = selectedPdcaToLink === item.cycle.id;
+                              const displayName = item.cycle.nomePdca || item.cycle.title;
+
+                              return (
+                                <div
+                                  key={item.cycle.id}
+                                  onClick={() => {
+                                    setSelectedPdcaToLink(item.cycle.id);
+                                    const alreadyLinkedSubtaskIds = item.subtasks.map(
+                                      (s) => s.id
+                                    );
+                                    setSelectedSubtasksToLink(
+                                      Array.from(
+                                        new Set([
+                                          subtask.id,
+                                          ...alreadyLinkedSubtaskIds,
+                                        ])
+                                      )
+                                    );
+                                  }}
+                                  className={cn(
+                                    "p-3.5 border-2 rounded-2xl cursor-pointer transition-all flex items-center justify-between gap-3",
+                                    isSelected
+                                      ? "border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/50 dark:border-indigo-500 shadow-sm"
+                                      : "border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-white dark:bg-slate-800/40"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div
+                                      className={cn(
+                                        "w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all",
+                                        isSelected
+                                          ? "border-indigo-600 bg-indigo-600 text-white"
+                                          : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                                      )}
+                                    >
+                                      {isSelected && (
+                                        <Check size={12} strokeWidth={3} />
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <h5 className="text-xs font-extrabold text-slate-800 dark:text-white truncate max-w-[260px]">
+                                          {displayName}
+                                        </h5>
+                                        <span
+                                          className={cn(
+                                            "text-[9px] font-black uppercase px-2 py-0.5 rounded-full shrink-0",
+                                            item.cycle.status === "Concluído"
+                                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"
+                                              : "bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300"
+                                          )}
+                                        >
+                                          {item.cycle.status}
+                                        </span>
+                                      </div>
+                                      <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1 font-medium">
+                                        <Link2 size={10} />
+                                        Vinculado a {item.subtasks.length} subtarefa(s):{" "}
+                                        <span className="font-bold text-slate-700 dark:text-slate-300 truncate max-w-[200px]">
+                                          {item.subtasks
+                                            .map((s) => s.title)
+                                            .join(", ")}
+                                        </span>
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Passo 2: Selecionar subtarefas */}
+                      {selectedPdcaToLink && (
+                        <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+                          <div>
+                            <label className="text-xs font-black uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                              <span>
+                                2. Selecione as subtarefas do projeto que compartilharão este PDCA:
+                              </span>
+                            </label>
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-medium">
+                              Marque as subtarefas do projeto que farão parte deste ciclo PDCA.
+                            </p>
+                          </div>
+
+                          <div className="space-y-2 max-h-[180px] overflow-y-auto pr-1">
+                            {(project.subtasks || []).map((st) => {
+                              const isChecked = selectedSubtasksToLink.includes(
+                                st.id
+                              );
+                              const isCurrent = st.id === subtask.id;
+
+                              return (
+                                <div
+                                  key={st.id}
+                                  onClick={() => {
+                                    if (isChecked) {
+                                      setSelectedSubtasksToLink((prev) =>
+                                        prev.filter((id) => id !== st.id)
+                                      );
+                                    } else {
+                                      setSelectedSubtasksToLink((prev) => [
+                                        ...prev,
+                                        st.id,
+                                      ]);
+                                    }
+                                  }}
+                                  className={cn(
+                                    "p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between",
+                                    isChecked
+                                      ? "bg-indigo-50/60 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800"
+                                      : "bg-slate-50 dark:bg-slate-800/40 border-slate-200 dark:border-slate-800 opacity-75 hover:opacity-100"
+                                  )}
+                                >
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <div
+                                      className={cn(
+                                        "w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-all",
+                                        isChecked
+                                          ? "bg-indigo-600 border-indigo-600 text-white"
+                                          : "border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800"
+                                      )}
+                                    >
+                                      {isChecked && (
+                                        <Check size={10} strokeWidth={3} />
+                                      )}
+                                    </div>
+                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                                      {st.title}
+                                    </span>
+                                  </div>
+
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    {isCurrent && (
+                                      <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-600 text-white shadow-xs">
+                                        Subtarefa Atual
+                                      </span>
+                                    )}
+                                    <span className="text-[9px] font-bold text-slate-400 dark:text-slate-500">
+                                      {st.status}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800 mt-6 shrink-0">
+                  {startOrLinkMode === "link" ? (
+                    <button
+                      type="button"
+                      onClick={() => setStartOrLinkMode("choice")}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                    >
+                      <ArrowLeft size={14} />
+                      Voltar
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setStartOrLinkConfig(null)}
+                      className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all"
+                    >
+                      Cancelar
+                    </button>
+                  )}
+
+                  {startOrLinkMode === "link" && (
+                    <button
+                      type="button"
+                      disabled={
+                        !selectedPdcaToLink || selectedSubtasksToLink.length === 0
+                      }
+                      onClick={handleConfirmLink}
+                      className={cn(
+                        "px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-black shadow-lg shadow-indigo-200 dark:shadow-none hover:bg-indigo-700 transition-all flex items-center gap-2",
+                        (!selectedPdcaToLink ||
+                          selectedSubtasksToLink.length === 0) &&
+                          "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      <Link2 size={16} />
+                      Confirmar Vínculo
+                    </button>
                   )}
                 </div>
               </motion.div>
@@ -2589,18 +3192,51 @@ export default function PDCAEditor({
                     </h3>
                   )}
                 </div>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <StatusBadge status={activeCycle?.status || "Ativo"} />
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                     {activeCycle &&
                       format(new Date(activeCycle.createdAt), "dd/MM/yyyy")}
                   </span>
+                  {linkedSubtasksForActiveCycle.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeCycle) {
+                          setStartOrLinkConfig({
+                            isOpen: true,
+                            taskId: activeCycle.taskId,
+                            taskLabel: activeCycle.nomePdca || activeCycle.title,
+                          });
+                          setStartOrLinkMode("link");
+                          setSelectedPdcaToLink(activeCycle.id);
+                          setSelectedSubtasksToLink(linkedSubtasksForActiveCycle.map((s) => s.id));
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 px-2.5 py-0.5 rounded-lg text-[10px] font-extrabold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition-all shadow-2xs"
+                      title="Gerenciar subtarefas vinculadas a este PDCA"
+                    >
+                      <Link2 size={12} className="shrink-0" />
+                      <span>Vinculado a {linkedSubtasksForActiveCycle.length} subtarefa(s)</span>
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
           <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto">
+            {isMaster && activeCycle && (
+              <button
+                type="button"
+                onClick={() => setCycleToDelete(activeCycle)}
+                className="bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:hover:bg-rose-900/50 dark:text-rose-400 border border-rose-200/80 dark:border-rose-800/50 px-3 py-2 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition-all shadow-sm shrink-0"
+                title="Excluir ciclo PDCA"
+              >
+                <Trash2 size={14} />
+                <span className="hidden sm:inline">Excluir ciclo PDCA</span>
+              </button>
+            )}
             {saveFeedback && (
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
@@ -2622,6 +3258,35 @@ export default function PDCAEditor({
             </select>
           </div>
         </div>
+
+        {linkedSubtasksForActiveCycle.length > 1 && (
+          <div className="mx-4 sm:mx-8 my-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 p-3.5 rounded-2xl flex items-center justify-between gap-3 text-amber-800 dark:text-amber-200 text-xs font-medium shadow-xs flex-wrap">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <AlertTriangle size={18} className="text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>
+                <strong>Aviso:</strong> Este PDCA está vinculado a <strong>{linkedSubtasksForActiveCycle.length} subtarefas</strong> ({linkedSubtasksForActiveCycle.map(s => s.title).join(", ")}). Alterações efetuadas aqui afetarão todas elas.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (activeCycle) {
+                  setStartOrLinkConfig({
+                    isOpen: true,
+                    taskId: activeCycle.taskId,
+                    taskLabel: activeCycle.nomePdca || activeCycle.title,
+                  });
+                  setStartOrLinkMode("link");
+                  setSelectedPdcaToLink(activeCycle.id);
+                  setSelectedSubtasksToLink(linkedSubtasksForActiveCycle.map((s) => s.id));
+                }
+              }}
+              className="text-[11px] font-extrabold underline hover:text-amber-900 dark:hover:text-amber-100 shrink-0"
+            >
+              Gerenciar vínculos
+            </button>
+          </div>
+        )}
 
         {activeCycle && (
           <div className="px-4 md:px-8 flex gap-4 md:gap-8 border-t border-theme-border overflow-x-auto no-scrollbar">
@@ -3000,14 +3665,14 @@ export default function PDCAEditor({
                                           para priorizar.
                                         </p>
                                       ) : (
-                                        allIshikawaCauses.map((cause) => {
+                                        allIshikawaCauses.map((cause, cIdx) => {
                                           const isSelected = (
                                             activeCycle.plan.rootCauseAnalysis
                                               .priorityCauses || []
                                           ).includes(cause);
                                           return (
                                             <button
-                                              key={cause}
+                                              key={`${cause}-${cIdx}`}
                                               onClick={() => {
                                                 const current =
                                                   activeCycle.plan
@@ -3080,9 +3745,9 @@ export default function PDCAEditor({
                                         </p>
                                         <div className="flex flex-wrap gap-2">
                                           {activeCycle.plan.rootCauseAnalysis.priorityCauses?.map(
-                                            (cause) => (
+                                            (cause, cIdx) => (
                                               <span
-                                                key={cause}
+                                                key={`${cause}-${cIdx}`}
                                                 className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest"
                                               >
                                                 {cause}
@@ -3599,8 +4264,8 @@ export default function PDCAEditor({
                                                 Selecione...
                                               </option>
                                               {availableUnits.length > 0
-                                                ? availableUnits.map((u) => (
-                                                    <option key={u} value={u}>
+                                                ? availableUnits.map((u, uIdx) => (
+                                                    <option key={`${u}-${uIdx}`} value={u}>
                                                       {u}
                                                     </option>
                                                   ))
@@ -3610,8 +4275,8 @@ export default function PDCAEditor({
                                                       .map((u) => u.symbol) ||
                                                     globalConfig?.units ||
                                                     []
-                                                  ).map((u) => (
-                                                    <option key={u} value={u}>
+                                                  ).map((u, uIdx) => (
+                                                    <option key={`${u}-${uIdx}`} value={u}>
                                                       {u}
                                                     </option>
                                                   ))}
@@ -4302,54 +4967,263 @@ export default function PDCAEditor({
                                                         b.timestamp,
                                                       ).getTime(),
                                                   )
-                                                  .map((log) => (
-                                                    <div
-                                                      key={log.id}
-                                                      className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4 hover:border-slate-200 transition-colors"
-                                                    >
-                                                      <div
-                                                        className={cn(
-                                                          "w-2 h-2 rounded-full mt-2 shrink-0 shadow-sm",
-                                                          log.status ===
-                                                            "Concluído"
-                                                            ? "bg-emerald-500"
-                                                            : log.status ===
-                                                                "Em andamento"
-                                                              ? "bg-amber-500"
-                                                              : "bg-slate-300",
-                                                        )}
-                                                      />
-                                                      <div className="flex-1">
-                                                        <div className="flex items-center justify-between mb-1">
-                                                          <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">
-                                                            {log.status}
-                                                          </span>
-                                                          <span className="text-[10px] text-slate-400 font-medium">
-                                                            {format(
-                                                              new Date(
-                                                                log.timestamp,
-                                                              ),
-                                                              "dd/MM/yyyy HH:mm",
-                                                            )}
-                                                          </span>
-                                                        </div>
-                                                        <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                                                          {log.observation}
-                                                        </p>
-                                                        <div className="mt-3 flex items-center gap-2">
-                                                          <span className="text-[10px] bg-slate-100 px-2.5 py-1 rounded-lg text-slate-500 font-bold flex items-center gap-1">
-                                                            <Users size={10} />
-                                                            {log.responsible}
-                                                          </span>
-                                                          {log.sector && (
-                                                            <span className="text-[10px] bg-indigo-50 px-2.5 py-1 rounded-lg text-indigo-600 font-bold">
-                                                              {log.sector}
+                                                  .map((log) => {
+                                                    const isEditing = editingLogId === log.id;
+                                                    const canEdit =
+                                                      (log.status === "Pendente" || log.status === "Em andamento") &&
+                                                      item.status !== "Cancelado";
+
+                                                    if (isEditing) {
+                                                      return (
+                                                        <div
+                                                          key={log.id}
+                                                          className="bg-indigo-50/80 dark:bg-slate-800 p-4 rounded-2xl border border-indigo-200 dark:border-slate-700 space-y-4 shadow-sm"
+                                                        >
+                                                          <div className="flex items-center justify-between pb-2 border-b border-indigo-100 dark:border-slate-700">
+                                                            <span className="text-[10px] font-black uppercase text-indigo-700 dark:text-indigo-400 tracking-wider flex items-center gap-1.5">
+                                                              <Pencil size={12} /> Editar Registro do Histórico
                                                             </span>
+                                                            <span className="text-[10px] text-slate-400 font-medium">
+                                                              {format(new Date(log.timestamp), "dd/MM/yyyy HH:mm")}
+                                                            </span>
+                                                          </div>
+
+                                                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                            <div className="space-y-1">
+                                                              <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                                                                Status
+                                                              </label>
+                                                              <select
+                                                                value={editingLogData?.status || "Pendente"}
+                                                                onChange={(e) =>
+                                                                  setEditingLogData((prev) =>
+                                                                    prev
+                                                                      ? {
+                                                                          ...prev,
+                                                                          status: e.target.value as "Pendente" | "Em andamento",
+                                                                        }
+                                                                      : null,
+                                                                  )
+                                                                }
+                                                                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500"
+                                                              >
+                                                                <option value="Pendente">Pendente</option>
+                                                                <option value="Em andamento">Em andamento</option>
+                                                              </select>
+                                                            </div>
+
+                                                            <div className="space-y-1">
+                                                              <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                                                                Setor
+                                                              </label>
+                                                              <input
+                                                                type="text"
+                                                                value={editingLogData?.sector || ""}
+                                                                onChange={(e) =>
+                                                                  setEditingLogData((prev) =>
+                                                                    prev ? { ...prev, sector: e.target.value } : null,
+                                                                  )
+                                                                }
+                                                                placeholder="Setor do responsável"
+                                                                className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500"
+                                                              />
+                                                            </div>
+                                                          </div>
+
+                                                          <div className="space-y-1">
+                                                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                                                              Observação / Descrição
+                                                            </label>
+                                                            <textarea
+                                                              rows={2}
+                                                              value={editingLogData?.observation || ""}
+                                                              onChange={(e) =>
+                                                                setEditingLogData((prev) =>
+                                                                  prev ? { ...prev, observation: e.target.value } : null,
+                                                                )
+                                                              }
+                                                              placeholder="Descreva o avanço nesta etapa..."
+                                                              className="w-full px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-700 dark:text-slate-200 outline-none focus:ring-2 focus:ring-indigo-500"
+                                                            />
+                                                          </div>
+
+                                                          <div className="flex items-center justify-end gap-2 pt-1">
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => {
+                                                                setEditingLogId(null);
+                                                                setEditingLogData(null);
+                                                              }}
+                                                              className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                                                            >
+                                                              Cancelar
+                                                            </button>
+                                                            <button
+                                                              type="button"
+                                                              onClick={() => {
+                                                                if (!editingLogData || !editingLogData.observation.trim()) return;
+
+                                                                const previousLogState = {
+                                                                  timestamp: log.editedAt || log.timestamp,
+                                                                  status: log.status,
+                                                                  sector: log.sector,
+                                                                  observation: log.observation,
+                                                                };
+
+                                                                const updatedLogs = (item.executionLogs || []).map((l) => {
+                                                                  if (l.id === log.id) {
+                                                                    return {
+                                                                      ...l,
+                                                                      status: editingLogData.status as any,
+                                                                      sector: editingLogData.sector,
+                                                                      observation: editingLogData.observation,
+                                                                      editedAt: new Date().toISOString(),
+                                                                      editHistory: [
+                                                                        ...(l.editHistory || []),
+                                                                        previousLogState,
+                                                                      ],
+                                                                    };
+                                                                  }
+                                                                  return l;
+                                                                });
+
+                                                                const updates: Partial<ActionPlanItem> = {
+                                                                  executionLogs: updatedLogs,
+                                                                };
+
+                                                                const sortedLogs = [...(item.executionLogs || [])].sort(
+                                                                  (a, b) =>
+                                                                    new Date(a.timestamp).getTime() -
+                                                                    new Date(b.timestamp).getTime(),
+                                                                );
+                                                                if (sortedLogs.length > 0 && sortedLogs[sortedLogs.length - 1].id === log.id) {
+                                                                  updates.status = editingLogData.status as any;
+                                                                }
+
+                                                                updateActionPlan(item.id, updates);
+                                                                setEditingLogId(null);
+                                                                setEditingLogData(null);
+                                                              }}
+                                                              className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition-colors flex items-center gap-1.5"
+                                                            >
+                                                              <Check size={14} /> Salvar Alteração
+                                                            </button>
+                                                          </div>
+                                                        </div>
+                                                      );
+                                                    }
+
+                                                    return (
+                                                      <div
+                                                        key={log.id}
+                                                        className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-start gap-4 hover:border-slate-200 transition-colors"
+                                                      >
+                                                        <div
+                                                          className={cn(
+                                                            "w-2 h-2 rounded-full mt-2 shrink-0 shadow-sm",
+                                                            log.status === "Concluído"
+                                                              ? "bg-emerald-500"
+                                                              : log.status === "Em andamento"
+                                                                ? "bg-amber-500"
+                                                                : "bg-slate-300",
+                                                          )}
+                                                        />
+                                                        <div className="flex-1">
+                                                          <div className="flex items-center justify-between mb-1">
+                                                            <div className="flex items-center gap-2">
+                                                              <span className="text-[10px] font-black text-slate-800 uppercase tracking-widest">
+                                                                {log.status}
+                                                              </span>
+                                                              {log.editedAt && (
+                                                                <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded flex items-center gap-1" title="Registro editado">
+                                                                  <Pencil size={9} /> Editado
+                                                                </span>
+                                                              )}
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                              <span className="text-[10px] text-slate-400 font-medium">
+                                                                {format(
+                                                                  new Date(log.timestamp),
+                                                                  "dd/MM/yyyy HH:mm",
+                                                                )}
+                                                              </span>
+                                                              {canEdit && (
+                                                                <button
+                                                                  type="button"
+                                                                  onClick={() => {
+                                                                    setEditingLogId(log.id);
+                                                                    setEditingLogData({
+                                                                      status:
+                                                                        log.status === "Em andamento"
+                                                                          ? "Em andamento"
+                                                                          : "Pendente",
+                                                                      sector: log.sector || "",
+                                                                      observation: log.observation || "",
+                                                                    });
+                                                                  }}
+                                                                  className="p-1 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors ml-1"
+                                                                  title="Editar este registro do histórico"
+                                                                >
+                                                                  <Pencil size={12} />
+                                                                </button>
+                                                              )}
+                                                            </div>
+                                                          </div>
+                                                          <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                                                            {log.observation}
+                                                          </p>
+                                                          <div className="mt-3 flex items-center justify-between">
+                                                            <div className="flex items-center gap-2">
+                                                              <span className="text-[10px] bg-slate-100 px-2.5 py-1 rounded-lg text-slate-500 font-bold flex items-center gap-1">
+                                                                <Users size={10} />
+                                                                {log.responsible}
+                                                              </span>
+                                                              {log.sector && (
+                                                                <span className="text-[10px] bg-indigo-50 px-2.5 py-1 rounded-lg text-indigo-600 font-bold">
+                                                                  {log.sector}
+                                                                </span>
+                                                              )}
+                                                            </div>
+
+                                                            {log.editHistory && log.editHistory.length > 0 && (
+                                                              <button
+                                                                type="button"
+                                                                onClick={() =>
+                                                                  setShowLogHistoryId(
+                                                                    showLogHistoryId === log.id ? null : log.id,
+                                                                  )
+                                                                }
+                                                                className="text-[10px] font-bold text-slate-400 hover:text-indigo-600 transition-colors flex items-center gap-1"
+                                                              >
+                                                                <Clock size={10} />
+                                                                {showLogHistoryId === log.id
+                                                                  ? "Ocultar histórico"
+                                                                  : `Histórico de edições (${log.editHistory.length})`}
+                                                              </button>
+                                                            )}
+                                                          </div>
+
+                                                          {showLogHistoryId === log.id && log.editHistory && (
+                                                            <div className="mt-3 pt-3 border-t border-slate-100 space-y-2 bg-slate-50/80 p-3 rounded-xl">
+                                                              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                                                Rastreabilidade / Alterações Anteriores:
+                                                              </p>
+                                                              {log.editHistory.map((hist, hIdx) => (
+                                                                <div key={hIdx} className="text-[10px] text-slate-500 space-y-0.5 border-l-2 border-amber-300 pl-2">
+                                                                  <div className="flex items-center justify-between font-bold text-slate-600">
+                                                                    <span>Versão {hIdx + 1} ({hist.status})</span>
+                                                                    <span>{format(new Date(hist.timestamp), "dd/MM/yyyy HH:mm")}</span>
+                                                                  </div>
+                                                                  {hist.sector && <div className="text-[9px] text-slate-400">Setor: {hist.sector}</div>}
+                                                                  <div className="italic text-slate-600">"{hist.observation}"</div>
+                                                                </div>
+                                                              ))}
+                                                            </div>
                                                           )}
                                                         </div>
                                                       </div>
-                                                    </div>
-                                                  ))
+                                                    );
+                                                  })
                                               )}
                                             </div>
 
@@ -4893,7 +5767,7 @@ export default function PDCAEditor({
                                                 Funcionou?
                                               </label>
                                               <select
-                                                value={item.worked || "Sim"}
+                                                value={item.worked || ""}
                                                 onChange={(e) =>
                                                   updateActionPlan(item.id, {
                                                     worked: e.target
@@ -4901,14 +5775,19 @@ export default function PDCAEditor({
                                                   })
                                                 }
                                                 className={cn(
-                                                  "w-full px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all",
+                                                  "w-full px-4 py-3 rounded-xl text-xs font-black uppercase tracking-widest outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer",
                                                   item.worked === "Sim"
                                                     ? "bg-emerald-100 text-emerald-700"
                                                     : item.worked === "Não"
                                                       ? "bg-rose-100 text-rose-700"
-                                                      : "bg-amber-100 text-amber-700",
+                                                      : item.worked === "Parcial"
+                                                        ? "bg-amber-100 text-amber-700"
+                                                        : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400",
                                                 )}
                                               >
+                                                <option value="" disabled hidden>
+                                                  Selecione o resultado
+                                                </option>
                                                 <option value="Sim">Sim</option>
                                                 <option value="Não">Não</option>
                                                 <option value="Parcial">
@@ -5877,17 +6756,29 @@ export default function PDCAEditor({
                                         <p className="font-black text-slate-400 uppercase">
                                           Impacto de Ganho
                                         </p>
-                                        <p className="font-bold text-emerald-600">
-                                          R${" "}
-                                          {(item.realGains?.tangible || [])
-                                            .reduce(
-                                              (acc, t) => acc + (t.value || 0),
-                                              0,
-                                            )
-                                            .toLocaleString("pt-BR", {
-                                              minimumFractionDigits: 2,
-                                            })}
-                                        </p>
+                                        {(() => {
+                                          const totalGain = (
+                                            item.realGains?.tangible || []
+                                          ).reduce(
+                                            (acc, t) => acc + (t.value || 0),
+                                            0,
+                                          );
+                                          return (
+                                            <p
+                                              className={cn(
+                                                "font-bold",
+                                                totalGain < 0
+                                                  ? "text-rose-600 dark:text-rose-400"
+                                                  : "text-emerald-600 dark:text-emerald-400",
+                                              )}
+                                            >
+                                              R${" "}
+                                              {totalGain.toLocaleString("pt-BR", {
+                                                minimumFractionDigits: 2,
+                                              })}
+                                            </p>
+                                          );
+                                        })()}
                                       </div>
                                     </div>
                                     <ReportField
@@ -6032,6 +6923,51 @@ export default function PDCAEditor({
             </motion.div>
           </motion.div>
         )}
+
+        {cycleToDelete && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[1000] flex items-center justify-center p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 text-left"
+            >
+              <div className="flex items-center gap-3 text-rose-500 mb-3">
+                <div className="p-2.5 bg-rose-50 dark:bg-rose-950/50 rounded-xl">
+                  <Trash2 size={22} />
+                </div>
+                <h3 className="text-base font-extrabold text-slate-800 dark:text-white">
+                  Excluir ciclo PDCA
+                </h3>
+              </div>
+              <p className="text-sm font-medium text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed mb-6">
+                Deseja realmente excluir este ciclo PDCA?{"\n\n"}
+                Essa ação não poderá ser desfeita.
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setCycleToDelete(null)}
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleConfirmDeleteCycle(cycleToDelete.id)}
+                  className="px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 shadow-md transition-all"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   );
@@ -6118,7 +7054,7 @@ export default function PDCAEditor({
       executionLogs: [],
       monitoringMode: "Dias",
       monitoringPeriod: 1,
-      worked: "Sim",
+      worked: undefined,
       finalProblemStatus: "Resolvido",
       finalAction: "Padronizar processo",
       standardizationModels: [],

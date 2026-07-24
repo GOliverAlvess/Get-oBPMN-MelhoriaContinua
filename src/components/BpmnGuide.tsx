@@ -146,7 +146,7 @@ const BpmnTaskBase = ({ children, className, isCallActivity = false }: { childre
       x="2" y="2" width="56" height="36" rx="5" 
       fill="white" 
       stroke="currentColor" 
-      strokeWidth={isCallActivity ? "4" : "1.5"} 
+      strokeWidth={isCallActivity ? "3.5" : "1.5"} 
     />
     {children}
   </svg>
@@ -154,50 +154,47 @@ const BpmnTaskBase = ({ children, className, isCallActivity = false }: { childre
 
 const UserTaskIcon = () => (
   <BpmnTaskBase className="text-slate-700">
-    <path d="M10 14 C10 12, 12 10, 14 10 C16 10, 18 12, 18 14 C18 16, 16 18, 14 18 C12 18, 10 16, 10 14" fill="none" stroke="currentColor" strokeWidth="1.2" />
-    <path d="M8 26 C8 22, 20 22, 20 26" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M7 10 c0 -1.8 1.2 -3 3 -3 s3 1.2 3 3 s-1.2 3 -3 3 s-3 -1.2 -3 -3 Z M5 17 c0 -2.5 2 -3.8 5 -3.8 s5 1.3 5 3.8 Z" fill="none" stroke="currentColor" strokeWidth="1.2" />
   </BpmnTaskBase>
 );
 
 const ServiceTaskIcon = () => (
   <BpmnTaskBase className="text-slate-700">
-    <path d="M14 10 L14 8 M14 20 L14 18 M10 14 L8 14 M20 14 L18 14" stroke="currentColor" strokeWidth="1.2" />
-    <circle cx="14" cy="14" r="3" fill="none" stroke="currentColor" strokeWidth="1.2" />
-    <path d="M14 14 L14 11" stroke="currentColor" strokeWidth="1" />
+    <circle cx="10" cy="11" r="3" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M10 6.5 v1.5 M10 13.5 v1.5 M5.5 11 h1.5 M13 11 h1.5 M6.8 7.8 l1.1 1.1 M12.1 13.1 l1.1 1.1 M6.8 14.2 l1.1 -1.1 M12.1 8.9 l1.1 -1.1" stroke="currentColor" strokeWidth="1" />
   </BpmnTaskBase>
 );
 
 const SendTaskIcon = () => (
   <BpmnTaskBase className="text-slate-700">
-    <path d="M8 10 H20 V18 H8 Z" fill="currentColor" opacity="0.2" stroke="currentColor" strokeWidth="1" />
-    <path d="M8 10 L14 14 L20 10" fill="none" stroke="currentColor" strokeWidth="1" />
+    <rect x="5" y="7" width="11" height="8" rx="0.5" fill="currentColor" />
+    <path d="M5 7 L10.5 11 L16 7" fill="none" stroke="white" strokeWidth="1" />
   </BpmnTaskBase>
 );
 
 const ReceiveTaskIcon = () => (
   <BpmnTaskBase className="text-slate-700">
-    <path d="M8 10 H20 V18 H8 Z" fill="none" stroke="currentColor" strokeWidth="1" />
-    <path d="M8 10 L14 14 L20 10" fill="none" stroke="currentColor" strokeWidth="1" />
+    <rect x="5" y="7" width="11" height="8" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M5 7 L10.5 11 L16 7" fill="none" stroke="currentColor" strokeWidth="1.2" />
   </BpmnTaskBase>
 );
 
 const ManualTaskIcon = () => (
   <BpmnTaskBase className="text-slate-700">
-    <path d="M10 22 V14 C10 13, 11 12, 12 12 C13 12, 14 13, 14 14 V16 M14 22 V12 C14 11, 15 10, 16 10 C17 10, 18 11, 18 12 V16" fill="none" stroke="currentColor" strokeWidth="1" />
+    <path d="M6 14 v-4 c0-.5.4-.8.8-.8 s.8.3.8.8 v2.5 M7.6 10 c0-.5.4-.8.8-.8 s.8.3.8.8 v2.5 M9.2 10.3 c0-.5.4-.8.8-.8 s.8.3.8.8 v2.2 M10.8 11 c0-.5.4-.8.8-.8 s.8.3.8.8 v2.5 c0 1.5-1.5 2.8-3 2.8 h-1 c-.8 0-1.5-.5-1.8-1.2 l-.8-1.2" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
   </BpmnTaskBase>
 );
 
 const BusinessRuleTaskIcon = () => (
   <BpmnTaskBase className="text-slate-700">
-    <path d="M8 10 H20 V13 H8 Z M8 13 H20 V16 H8 Z M8 16 H20 V19 H8 Z" fill="none" stroke="currentColor" strokeWidth="1" />
-    <path d="M8 10 V19 M12 10 V19" stroke="currentColor" strokeWidth="1" />
+    <rect x="5" y="7" width="11" height="8" rx="0.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+    <path d="M5 10 h11 M5 13 h11 M8.5 7 v8" stroke="currentColor" strokeWidth="1" />
   </BpmnTaskBase>
 );
 
 const ScriptTaskIcon = () => (
   <BpmnTaskBase className="text-slate-700">
-    <path d="M8 10 H20 M8 13 H20 M8 16 H14" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
-    <path d="M20 19 L22 17" stroke="currentColor" strokeWidth="1" />
+    <path d="M6 7 h8 a1.5 1.5 0 0 1 1.5 1.5 v5 a1.5 1.5 0 0 1 -1.5 1.5 h-8 a1.5 1.5 0 0 1 -1.5 -1.5 v-5 a1.5 1.5 0 0 1 1.5 -1.5 M7 9.5 h6 M7 11.5 h4" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
   </BpmnTaskBase>
 );
 
@@ -258,20 +255,32 @@ const SubProcessIcon = () => (
   </BpmnTaskBase>
 );
 
+const StartEventIcon = () => (
+  <svg width="32" height="32" viewBox="0 0 32 32" className="text-emerald-500 overflow-visible">
+    <circle cx="16" cy="16" r="14" fill="white" stroke="currentColor" strokeWidth="1.5" />
+  </svg>
+);
+
+const EndEventIcon = () => (
+  <svg width="32" height="32" viewBox="0 0 32 32" className="text-rose-500 overflow-visible">
+    <circle cx="16" cy="16" r="13" fill="white" stroke="currentColor" strokeWidth="3.5" />
+  </svg>
+);
+
 const BPMN_GUIDE_DATA: BpmnItem[] = [
   // 1. Eventos
   {
     id: 'start-event',
     name: 'Evento de Início',
     description: 'Marca o ponto onde um processo se inicia. Exemplo: chegada de um e-mail ou pedido.',
-    icon: <Circle size={24} className="text-emerald-500" strokeWidth={1.5} />,
+    icon: <StartEventIcon />,
     category: 'Eventos'
   },
   {
     id: 'end-event',
     name: 'Evento de Fim',
     description: 'Indica o término de um caminho do processo ou do processo completo.',
-    icon: <Circle size={24} className="text-rose-500" strokeWidth={4} />,
+    icon: <EndEventIcon />,
     category: 'Eventos'
   },
   {

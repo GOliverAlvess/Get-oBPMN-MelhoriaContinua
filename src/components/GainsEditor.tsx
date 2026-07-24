@@ -250,8 +250,8 @@ export default function GainsEditor({
                         >
                           <option value="">Selecione...</option>
                           {availableUnits.length > 0 ? (
-                            availableUnits.map(u => (
-                              <option key={u} value={u}>{u}</option>
+                            availableUnits.map((u, uIdx) => (
+                              <option key={`${u}-${uIdx}`} value={u}>{u}</option>
                             ))
                           ) : (
                             <>

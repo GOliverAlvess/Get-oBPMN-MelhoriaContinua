@@ -123,6 +123,13 @@ export interface ExecutionLog {
   sector?: string; // Setor ao qual pertence o executor do log
   observation: string; // Observações ou comentários sobre o avanço
   type: 'update' | 'completion' | 'start'; // Tipo estrutural do log de alteração
+  editedAt?: string; // Data da última edição do registro do histórico
+  editHistory?: Array<{
+    timestamp: string;
+    status: 'Pendente' | 'Em andamento' | 'Concluído';
+    sector?: string;
+    observation: string;
+  }>;
 }
 
 // Classificação conceitual do plano de ação elaborado
@@ -177,6 +184,8 @@ export type PDCAPriority = 'Baixa' | 'Média' | 'Alta' | 'Crítica';
 export interface PDCACycle {
   id: string; // ID único do ciclo PDCA
   taskId: string; // Vinculação com o elemento de tarefa ID dentro do processo BPMN correspondente
+  linkedTaskIds?: string[]; // IDs de tarefas/etapas adicionais vinculadas a este ciclo
+  linkedSubtaskIds?: string[]; // IDs das subtarefas do projeto vinculadas a este ciclo
   title: string; // Objetivo descritivo ou nome conceitual do ciclo de melhoria contínua
   nomePdca?: string; // Nome descritivo customizado pelo usuário para fins de relatório
   createdAt: string; // Timestamp de criação do registro de melhoria
@@ -357,4 +366,16 @@ export interface GlobalConfig {
   structuredTangibleGains?: TangibleGainType[]; // Estrutura avançada de validação de ganhos monetários e físicos
   structuredIntangibleGains?: IntangibleGainType[]; // Estrutura conceitual avançada dos ganhos intangíveis de melhoria
   structuredUnits?: UnitMeasure[]; // Lista parametrizada com controle de estado de unidade corporativa de medida
+}
+
+export interface NotificationItem {
+  id: string;
+  usuario_id: string; // ID do usuário que recebe a notificação
+  tipo: 'card' | 'acao' | 'tarefa';
+  mensagem: string;
+  referencia_id: string; // ID do item vinculado (projeto/card, ação operacional, ou subtarefa)
+  lida: boolean;
+  data: string; // ISO string timestamp
+  autor_id?: string; // ID de quem fez a alteração
+  subtask_id?: string; // ID opcional da subtarefa se for referente a um card
 }

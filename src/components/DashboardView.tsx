@@ -12,7 +12,8 @@ import {
   Cell,
   Legend,
   LabelList,
-  Label
+  Label,
+  ReferenceLine
 } from 'recharts';
 import { 
   TrendingUp, 
@@ -24,6 +25,7 @@ import {
   Activity,
   Filter,
   ChevronDown,
+  ChevronUp,
   X,
   Target,
   Briefcase,
@@ -57,6 +59,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
   const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<ProjectStatus[]>([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+  const [showAllSectors, setShowAllSectors] = useState(false);
 
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
@@ -99,50 +102,49 @@ export default function DashboardView({ projects, users, actions, onProjectClick
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    // Gain Impact
-    const projectGains = filteredProjects
-      .filter(p => p.status === 'Concluído')
-      .map(p => {
-        let totalGain = 0;
-        (p.subtasks || []).forEach(subtask => {
-          subtask.pdcaCycles.forEach(cycle => {
-            // Apenas PDCAs finalizados
-            if (cycle.status !== 'Concluído') return;
-            
-            const cycleGain = cycle.plan.actionPlan.reduce((s, action) => {
-              // Somar ganhos tangíveis de ações concluídas informados na aba CHECK
-              if (action.status !== 'Concluído' || action.ativo === false) return s;
+    // Gain Impact (Ganho Geral do Dashboard considera PDCAs concluídos de qualquer projeto)
+    let totalGainValue = 0; // Ganho Realizado (PDCAs concluídos)
+    let potentialGainValue = 0; // Ganho Potencial (PDCAs em andamento)
+    const projectGainsMap: Record<string, { name: string; gain: number }> = {};
+
+    filteredProjects.forEach(p => {
+      let pRealizedGain = 0;
+      const processedCycleIds = new Set<string>();
+
+      (p.subtasks || []).forEach(subtask => {
+        (subtask.pdcaCycles || []).forEach(cycle => {
+          if (processedCycleIds.has(cycle.id)) return;
+          processedCycleIds.add(cycle.id);
+
+          const isCycleCompleted = cycle.status === 'Concluído' || cycle.etapaAtual === 'REPORT';
+
+          if (isCycleCompleted) {
+            const cycleGain = (cycle.plan?.actionPlan || []).reduce((s, action) => {
+              if (action.ativo === false) return s;
               const tangibleSum = (action.realGains?.tangible || []).reduce((acc, t) => acc + (t.value || 0), 0);
               return s + tangibleSum;
             }, 0);
-            totalGain += cycleGain;
-          });
-        });
-        return { name: p.name, gain: totalGain };
-      })
-      .filter(g => g.gain > 0)
-      .sort((a, b) => b.gain - a.gain)
-      .slice(0, 5);
 
-    const totalGainValue = filteredProjects
-      .filter(p => p.status === 'Concluído')
-      .reduce((sum, p) => {
-        let pGain = 0;
-        (p.subtasks || []).forEach(subtask => {
-          subtask.pdcaCycles.forEach(cycle => {
-            // Considerar apenas PDCAs finalizados
-            if (cycle.status !== 'Concluído') return;
-            
-            pGain += cycle.plan.actionPlan.reduce((acc, action) => {
-              // Somar ganhos tangíveis de ações concluídas informados na aba CHECK
-              if (action.status !== 'Concluído' || action.ativo === false) return acc;
-              const tangibleSum = (action.realGains?.tangible || []).reduce((tAcc, t) => tAcc + (t.value || 0), 0);
-              return acc + tangibleSum;
-            }, 0);
-          });
+            pRealizedGain += cycleGain;
+            totalGainValue += cycleGain;
+          } else if (cycle.status !== 'Cancelado') {
+            const cycleExpected = (cycle.plan?.impact?.expectedGains?.tangible || []).reduce(
+              (acc, t) => acc + (t.value || 0),
+              0
+            );
+            potentialGainValue += cycleExpected;
+          }
         });
-        return sum + pGain;
-      }, 0);
+      });
+
+      if (pRealizedGain !== 0) {
+        projectGainsMap[p.id] = { name: p.name, gain: pRealizedGain };
+      }
+    });
+
+    const projectGains = Object.values(projectGainsMap)
+      .sort((a, b) => b.gain - a.gain)
+      .slice(0, 10);
 
     // Project Progress
     const projectProgressList = filteredProjects.map(p => ({
@@ -206,12 +208,18 @@ export default function DashboardView({ projects, users, actions, onProjectClick
       collaboratorRanking,
       projectGains,
       totalGainValue,
+      potentialGainValue,
       projectProgressList,
       avgProgress,
       recentActivities,
       sectorDistribution
     };
   }, [filteredProjects, users]);
+
+  const displayedSectors = useMemo(() => {
+    if (showAllSectors) return stats.sectorDistribution;
+    return stats.sectorDistribution.slice(0, 10);
+  }, [showAllSectors, stats.sectorDistribution]);
 
   const toggleFilter = (list: any[], item: any, setter: (val: any[]) => void) => {
     if (list.includes(item)) {
@@ -330,7 +338,16 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                 value={stats.totalGainValue} 
                 isCurrency
                 icon={<DollarSign size={18} />} 
-                color="bg-emerald-600"
+                color={stats.totalGainValue < 0 ? "bg-rose-600" : "bg-emerald-600"}
+                subtext={
+                  stats.potentialGainValue > 0 ? (
+                    <div className="flex items-center gap-2 text-[10px] font-bold flex-wrap leading-tight mt-1">
+                      <span className="text-amber-600 dark:text-amber-400">
+                        📈 Potencial: {formatCurrency(stats.potentialGainValue)}
+                      </span>
+                    </div>
+                  ) : undefined
+                }
               />
               <StatCard 
                 title="Total Projetos" 
@@ -390,7 +407,14 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                         labelStyle={{ color: '#ffffff', fontWeight: 700 }}
                         formatter={(value: number) => [formatCurrency(value), 'Ganho']}
                       />
-                      <Bar dataKey="gain" fill="#3b82f6" radius={[0, 8, 8, 0]} barSize={20}>
+                      <ReferenceLine x={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="3 3" />
+                      <Bar dataKey="gain" radius={[0, 8, 8, 0]} barSize={20}>
+                        {stats.projectGains.map((entry, index) => (
+                          <Cell 
+                            key={`cell-gain-${index}`} 
+                            fill={entry.gain < 0 ? '#f43f5e' : '#10b981'} 
+                          />
+                        ))}
                         <LabelList 
                           dataKey="gain" 
                           position="right" 
@@ -448,7 +472,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
 
               {/* 4. Colaboradores */}
               <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
-                <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Ranking Colaboradores</h3>
+                <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">QTD de projetos por colaborador</h3>
                 <div className="space-y-4">
                   {stats.collaboratorRanking.map((collab, idx) => (
                     <div key={idx} className="flex items-center justify-between p-4 bg-theme-background rounded-2xl border border-theme-border">
@@ -472,54 +496,87 @@ export default function DashboardView({ projects, users, actions, onProjectClick
             </div>
 
             {/* 4.5 Análise por Setores Envolvidos */}
-            <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
-              <div className="flex items-center justify-between">
+            <div className="bg-theme-card p-6 md:p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="space-y-1">
-                  <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Setores Envolvidos</h3>
-                  <p className="text-xs text-slate-400 font-medium">Recorrência de setores nos escopos dos projetos ativos.</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Setores Envolvidos</h3>
+                    {stats.sectorDistribution.length > 10 && (
+                      <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-400">
+                        {showAllSectors ? `Todos (${stats.sectorDistribution.length})` : `Top 10 de ${stats.sectorDistribution.length}`}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 font-medium">Recorrência de setores nos escopos dos projetos ativos (ordenado por frequência).</p>
                 </div>
                 <div className="p-3 bg-theme-background rounded-2xl border border-theme-border">
                   <Users size={20} className="text-indigo-400" />
                 </div>
               </div>
-              <div className="h-[350px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={stats.sectorDistribution} layout="vertical" margin={{ left: 40, right: 30 }}>
-                    <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
-                    <XAxis type="number" hide />
-                    <YAxis 
-                      dataKey="name" 
-                      type="category" 
-                      width={120} 
-                      tick={{ fontSize: 11, fontWeight: 700, fill: '#94a3b8' }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <Tooltip 
-                      cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                      contentStyle={{ 
-                        backgroundColor: '#1e293b', 
-                        borderRadius: '12px', 
-                        border: '1px solid #334155',
-                        color: '#ffffff',
-                        boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)'
-                      }}
-                      itemStyle={{ color: '#ffffff' }}
-                      labelStyle={{ color: '#ffffff', fontWeight: 700 }}
-                      formatter={(value: number) => [`${value} projeto(s)`, 'Ocorrência']}
-                    />
-                    <Bar dataKey="count" fill="#EABE41" radius={[0, 8, 8, 0]} barSize={24}>
-                      <LabelList 
-                        dataKey="count" 
-                        position="right" 
-                        style={{ fontSize: 11, fontWeight: 900, fill: '#EABE41' }}
-                        offset={10}
-                      />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-              {stats.sectorDistribution.length === 0 && (
+
+              {displayedSectors.length > 0 ? (
+                <div className="space-y-4">
+                  <div className="max-h-[450px] overflow-y-auto custom-scrollbar pr-2 w-full">
+                    <div style={{ height: `${Math.max(260, displayedSectors.length * 38)}px`, width: '100%' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={displayedSectors} layout="vertical" margin={{ left: 10, right: 35, top: 10, bottom: 10 }}>
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
+                          <XAxis type="number" hide />
+                          <YAxis 
+                            dataKey="name" 
+                            type="category" 
+                            width={150} 
+                            tick={{ fontSize: 11, fontWeight: 700, fill: '#94a3b8' }}
+                            axisLine={false}
+                            tickLine={false}
+                          />
+                          <Tooltip 
+                            cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                            contentStyle={{ 
+                              backgroundColor: '#1e293b', 
+                              borderRadius: '12px', 
+                              border: '1px solid #334155',
+                              color: '#ffffff',
+                              boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)'
+                            }}
+                            itemStyle={{ color: '#ffffff' }}
+                            labelStyle={{ color: '#ffffff', fontWeight: 700 }}
+                            formatter={(value: number) => [`${value} projeto(s)`, 'Ocorrência']}
+                          />
+                          <Bar dataKey="count" fill="#EABE41" radius={[0, 8, 8, 0]} barSize={22}>
+                            <LabelList 
+                              dataKey="count" 
+                              position="right" 
+                              style={{ fontSize: 11, fontWeight: 900, fill: '#EABE41' }}
+                              offset={10}
+                            />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {stats.sectorDistribution.length > 10 && (
+                    <div className="flex justify-center pt-2 border-t border-theme-border">
+                      <button
+                        type="button"
+                        onClick={() => setShowAllSectors(!showAllSectors)}
+                        className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors flex items-center gap-2"
+                      >
+                        {showAllSectors ? (
+                          <>
+                            Ver apenas Top 10 <ChevronUp size={14} />
+                          </>
+                        ) : (
+                          <>
+                            Ver todos os {stats.sectorDistribution.length} setores <ChevronDown size={14} />
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
                 <div className="py-20 text-center space-y-4 bg-theme-background rounded-3xl border border-dashed border-theme-border mx-auto max-w-sm">
                   <p className="text-slate-400 text-sm font-medium">Nenhum setor informado nos escopos.</p>
                 </div>
@@ -655,9 +712,12 @@ function formatCompactValue(value: number, isCurrency: boolean = false) {
   const formattedNumber = new Intl.NumberFormat('pt-BR', {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2
-  }).format(value / divisor);
+  }).format(absValue / divisor);
 
-  return isCurrency ? `R$ ${formattedNumber}${suffix}` : `${formattedNumber}${suffix}`;
+  if (isCurrency) {
+    return value < 0 ? `-R$ ${formattedNumber}${suffix}` : `R$ ${formattedNumber}${suffix}`;
+  }
+  return value < 0 ? `-${formattedNumber}${suffix}` : `${formattedNumber}${suffix}`;
 }
 
 function StatCard({ 
@@ -666,14 +726,16 @@ function StatCard({
   icon, 
   color, 
   highlight,
-  isCurrency = false
+  isCurrency = false,
+  subtext
 }: { 
   title: string, 
   value: string | number, 
   icon: React.ReactNode, 
   color: string,
   highlight?: boolean,
-  isCurrency?: boolean
+  isCurrency?: boolean,
+  subtext?: React.ReactNode
 }) {
   const fullValue = typeof value === 'number' 
     ? (isCurrency ? formatCurrency(value) : value.toLocaleString('pt-BR'))
@@ -682,6 +744,8 @@ function StatCard({
   const displayValue = typeof value === 'number' 
     ? formatCompactValue(value, isCurrency)
     : value;
+
+  const isNegative = typeof value === 'number' && value < 0;
 
   return (
     <motion.div 
@@ -706,13 +770,17 @@ function StatCard({
             "text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400 truncate"
           )}>{title}</p>
           <h4 
-            className="font-black tracking-tight leading-none overflow-hidden text-ellipsis whitespace-nowrap"
+            className={cn(
+              "font-black tracking-tight leading-none overflow-hidden text-ellipsis whitespace-nowrap",
+              isCurrency && (isNegative ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")
+            )}
             style={{ 
               fontSize: 'clamp(1.1rem, 2.5vw, 1.75rem)'
             }}
           >
             {displayValue}
           </h4>
+          {subtext && <div className="mt-1">{subtext}</div>}
         </div>
       </div>
       {highlight && (

@@ -751,7 +751,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
               margin: [0, 10, 0, 15]
             },
             ...(() => {
-              const cycles = steps.flatMap(s => s.pdcaCycles || []) || [];
+              const cycles = Array.from(new Map((steps.flatMap(s => s.pdcaCycles || []) || []).map(c => [c.id, c])).values());
               if (cycles.length === 0) {
                 return [{ text: 'Nenhum ciclo PDCA registrado para este projeto.', style: 'bodyHighlight', italic: true, margin: [0, 10, 0, 20] }];
               }
@@ -1737,8 +1737,12 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                       </div>
 
                       <div className="space-y-12">
-                        {filteredSubtasks && filteredSubtasks.flatMap(s => s.pdcaCycles || []).length > 0 ? (
-                          filteredSubtasks.flatMap(s => s.pdcaCycles || []).map((cycle, cIdx) => (
+                        {(() => {
+                          const uniqueReportCycles = Array.from(new Map((filteredSubtasks || []).flatMap(s => s.pdcaCycles || []).map(c => [c.id, c])).values());
+                          if (uniqueReportCycles.length === 0) {
+                            return <p className="text-sm text-slate-400 italic">Nenhum ciclo PDCA registrado para este projeto.</p>;
+                          }
+                          return uniqueReportCycles.map((cycle, cIdx) => (
                             <div key={cycle.id} className="space-y-8 p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100">
                               <div className="flex justify-between items-center">
                                 <h3 className="text-xl font-black text-slate-900">CICLO {cIdx + 1}: {cycle.title}</h3>
@@ -1813,10 +1817,8 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                                 </div>
                               </div>
                             </div>
-                          ))
-                        ) : (
-                          <p className="text-sm text-slate-400 italic">Nenhum ciclo PDCA registrado para este projeto.</p>
-                        )}
+                          ));
+                        })()}
                       </div>
                     </div>
 
@@ -1890,11 +1892,15 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                         </div>
                         <div className="p-8 bg-slate-50 rounded-[2rem] space-y-2">
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ciclos Ativos</p>
-                          <p className="text-3xl font-black text-amber-600">{filteredSubtasks.flatMap(s => s.pdcaCycles || []).filter(c => c.status === 'Ativo').length}</p>
+                          <p className="text-3xl font-black text-amber-600">
+                            {Array.from(new Map((filteredSubtasks || []).flatMap(s => s.pdcaCycles || []).map(c => [c.id, c])).values()).filter(c => c.status === 'Ativo').length}
+                          </p>
                         </div>
                         <div className="p-8 bg-slate-50 rounded-[2rem] space-y-2">
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Concluídos</p>
-                          <p className="text-3xl font-black text-emerald-600">{filteredSubtasks.flatMap(s => s.pdcaCycles || []).filter(c => c.status === 'Concluído').length}</p>
+                          <p className="text-3xl font-black text-emerald-600">
+                            {Array.from(new Map((filteredSubtasks || []).flatMap(s => s.pdcaCycles || []).map(c => [c.id, c])).values()).filter(c => c.status === 'Concluído').length}
+                          </p>
                         </div>
                       </div>
 

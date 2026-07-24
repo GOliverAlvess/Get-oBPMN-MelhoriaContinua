@@ -33,9 +33,131 @@ import { Project, BPMNTaskData, SavedColor } from '../types';
 import { cn } from '../lib/utils';
 import BpmnGuide from './BpmnGuide';
 
+const translationsPT: Record<string, string> = {
+  // Tasks
+  'Task': 'Tarefa',
+  'User Task': 'Tarefa do Usuário',
+  'User task': 'Tarefa do usuário',
+  'Service Task': 'Tarefa de Serviço',
+  'Service task': 'Tarefa de serviço',
+  'Receive Task': 'Tarefa de Recebimento',
+  'Receive task': 'Tarefa de recebimento',
+  'Send Task': 'Tarefa de Envio',
+  'Send task': 'Tarefa de envio',
+  'Manual Task': 'Tarefa Manual',
+  'Manual task': 'Tarefa manual',
+  'Business Rule Task': 'Regra de Negócio',
+  'Business rule task': 'Regra de negócio',
+  'Script Task': 'Script',
+  'Script task': 'Script',
+  'Call Activity': 'Atividade de Chamada',
+  'Call activity': 'Atividade de chamada',
+  'Sub-Process (collapsed)': 'Subprocesso (colapsado)',
+  'Sub-process (collapsed)': 'Subprocesso (colapsado)',
+  'Sub-Process (expanded)': 'Subprocesso (expandido)',
+  'Sub-process (expanded)': 'Subprocesso (expandido)',
+  'Sub-Process': 'Subprocesso',
+  'Sub-process': 'Subprocesso',
+
+  // Gateways
+  'Exclusive Gateway': 'Gateway Exclusivo',
+  'Exclusive gateway': 'Gateway exclusivo',
+  'Parallel Gateway': 'Gateway Paralelo',
+  'Parallel gateway': 'Gateway paralelo',
+  'Inclusive Gateway': 'Gateway Inclusivo',
+  'Inclusive gateway': 'Gateway inclusivo',
+  'Complex Gateway': 'Gateway Complexo',
+  'Complex gateway': 'Gateway complexo',
+  'Event-based Gateway': 'Gateway baseado em Eventos',
+  'Event-based gateway': 'Gateway baseado em eventos',
+
+  // Events
+  'Start Event': 'Evento de Início',
+  'Start event': 'Evento de início',
+  'End Event': 'Evento de Fim',
+  'End event': 'Evento de fim',
+  'Intermediate Throw Event': 'Evento Intermediário de Envio',
+  'Intermediate throw event': 'Evento intermediário de envio',
+  'Intermediate Catch Event': 'Evento Intermediário de Captura',
+  'Intermediate catch event': 'Evento intermediário de captura',
+  'Message Start Event': 'Evento de Início de Mensagem',
+  'Message start event': 'Evento de início de mensagem',
+  'Timer Start Event': 'Evento de Início por Temporizador',
+  'Timer start event': 'Evento de início por temporizador',
+  'Conditional Start Event': 'Evento de Início Condicional',
+  'Conditional start event': 'Evento de início condicional',
+  'Signal Start Event': 'Evento de Início por Sinal',
+  'Signal start event': 'Evento de início por sinal',
+  'Error Start Event': 'Evento de Início de Erro',
+  'Error start event': 'Evento de início de erro',
+  'Escalation Start Event': 'Evento de Início de Escalação',
+  'Escalation start event': 'Evento de início de escalação',
+  'Compensation Start Event': 'Evento de Início de Compensação',
+  'Compensation start event': 'Evento de início de compensação',
+
+  // Popup headers / actions
+  'Change element': 'Alterar elemento',
+  'Change type': 'Alterar tipo',
+  'Append element': 'Anexar elemento',
+  'Append {type}': 'Anexar {type}',
+  'Add Lane above': 'Adicionar Raia acima',
+  'Divide (two Lanes)': 'Dividir (duas Raias)',
+  'Divide (three Lanes)': 'Dividir (três Raias)',
+  'Add Lane below': 'Adicionar Raia abaixo',
+  'Connect using DataInputAssociation': 'Conectar usando Associação de Entrada',
+  'Connect using Association': 'Conectar usando Associação',
+  'Connect using Sequence/MessageFlow or Association': 'Conectar usando Fluxo de Sequência/Mensagem ou Associação',
+  'Text Annotation': 'Anotação de Texto',
+  'Text annotation': 'Anotação de texto',
+  'Data Object Reference': 'Referência de Objeto de Dados',
+  'Data Store Reference': 'Referência de Depósito de Dados',
+  'Expanded Sub-Process': 'Subprocesso Expandido',
+  'Default Flow': 'Fluxo Padrão',
+  'Conditional Flow': 'Fluxo Condicional',
+  'Sequence Flow': 'Fluxo de Sequência',
+
+  // Tools & Palette
+  'Activate the hand tool': 'Ativar ferramenta de mão',
+  'Activate the lasso tool': 'Ativar ferramenta de laço',
+  'Activate the create/remove space tool': 'Ativar ferramenta de criar/remover espaço',
+  'Activate the global connect tool': 'Ativar ferramenta de conexão global',
+  'Create StartEvent': 'Criar Evento de Início',
+  'Create EndEvent': 'Criar Evento de Fim',
+  'Create Gateway': 'Criar Gateway',
+  'Create Task': 'Criar Tarefa',
+  'Create expanded SubProcess': 'Criar Subprocesso Expandido',
+  'Create DataObjectReference': 'Criar Referência de Objeto de Dados',
+  'Create DataStoreReference': 'Criar Referência de Depósito de Dados',
+  'Create Pool/Participant': 'Criar Pool/Participante',
+  'Create Group': 'Criar Grupo',
+  'Remove': 'Remover',
+
+  // Loop markers
+  'Parallel Multi Instance': 'Múltiplas Instâncias Paralelas',
+  'Sequential Multi Instance': 'Múltiplas Instâncias Sequenciais',
+  'Loop': 'Loop / Repetição',
+  'Empty': 'Vazio'
+};
+
+const bpmnLangRef = { current: 'pt' };
+
+function customTranslate(template: string, replacements?: Record<string, string>) {
+  replacements = replacements || {};
+  const currentLang = bpmnLangRef.current || 'pt';
+  const translated = currentLang === 'pt' ? (translationsPT[template] || template) : template;
+  return translated.replace(/\{([^}]+)\}/g, function(_, key) {
+    return replacements[key] || '{' + key + '}';
+  });
+}
+
+const customTranslateModule = {
+  translate: ['value', customTranslate]
+};
+
 interface BPMNModelerProps {
   mapping: any;
   onUpdateMapping: (mapping: any) => void;
+  onDeletePdcaCycleForTask?: (taskId: string, updatedCustomData?: any) => void;
   projectName: string;
   savedColors: SavedColor[];
   onSaveGlobalColor: (color: SavedColor) => void;
@@ -60,6 +182,7 @@ const INITIAL_XML = `<?xml version="1.0" encoding="UTF-8"?>
 export default function BPMNModeler({ 
   mapping, 
   onUpdateMapping, 
+  onDeletePdcaCycleForTask,
   projectName,
   savedColors,
   onSaveGlobalColor,
@@ -74,8 +197,48 @@ export default function BPMNModeler({
   const [newColorName, setNewColorName] = useState('');
   const [isDiagramReady, setIsDiagramReady] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [showRemoveProblemModal, setShowRemoveProblemModal] = useState(false);
   const isSyncingRef = useRef(false);
   const isLoadedRef = useRef(false);
+
+  const [bpmnLang, setBpmnLang] = useState<'pt' | 'en'>('pt');
+
+  const handleToggleLanguage = (lang: 'pt' | 'en') => {
+    setBpmnLang(lang);
+    bpmnLangRef.current = lang;
+    if (modelerRef.current) {
+      try {
+        const eventBus = modelerRef.current.get('eventBus') as any;
+        if (eventBus) {
+          eventBus.fire('elements.changed', { elements: [] });
+        }
+      } catch (e) {
+        console.warn('Could not refresh elements after language change', e);
+      }
+    }
+  };
+
+  const handleConfirmRemoveProblem = () => {
+    if (!selectedElement) return;
+    const elementId = selectedElement.id;
+    const newCustomData = {
+      ...customData,
+      [elementId]: {
+        ...(customData[elementId] || {}),
+        isProblemStep: false
+      }
+    };
+    setCustomData(newCustomData);
+    customDataRef.current = newCustomData;
+
+    if (onDeletePdcaCycleForTask) {
+      onDeletePdcaCycleForTask(elementId, newCustomData);
+    } else {
+      updateElementData(elementId, { isProblemStep: false });
+    }
+
+    setShowRemoveProblemModal(false);
+  };
 
   const [hasCopied, setHasCopied] = useState(false);
   const [hasPasted, setHasPasted] = useState(false);
@@ -134,10 +297,57 @@ export default function BPMNModeler({
     const ModelerClass = readOnly ? Viewer : Modeler;
     const modeler = new (ModelerClass as any)({
       container: container,
+      additionalModules: [
+        customTranslateModule
+      ],
       keyboard: readOnly ? undefined : {
         bindOn: window
       }
     });
+
+    // Intercept drawShape on bpmnRenderer to prevent text from overlapping top-left icons
+    try {
+      const bpmnRenderer = modeler.get('bpmnRenderer') as any;
+      const textRenderer = modeler.get('textRenderer') as any;
+
+      if (bpmnRenderer && textRenderer) {
+        const origDrawShape = bpmnRenderer.drawShape.bind(bpmnRenderer);
+        const typedTaskTypes = [
+          'bpmn:UserTask',
+          'bpmn:ServiceTask',
+          'bpmn:SendTask',
+          'bpmn:ReceiveTask',
+          'bpmn:ManualTask',
+          'bpmn:ScriptTask',
+          'bpmn:BusinessRuleTask',
+          'bpmn:CallActivity'
+        ];
+
+        bpmnRenderer.drawShape = function(parentGfx: any, element: any) {
+          if (element && typedTaskTypes.includes(element.type)) {
+            const origCreateText = textRenderer.createText;
+            textRenderer.createText = function(text: string, options: any) {
+              if (options && (options.align === 'center-middle' || !options.align)) {
+                options = {
+                  ...options,
+                  align: 'center-top',
+                  padding: { top: 26, left: 6, right: 6, bottom: 4 }
+                };
+              }
+              return origCreateText.call(textRenderer, text, options);
+            };
+            try {
+              return origDrawShape(parentGfx, element);
+            } finally {
+              textRenderer.createText = origCreateText;
+            }
+          }
+          return origDrawShape(parentGfx, element);
+        };
+      }
+    } catch (err) {
+      console.warn('Could not wrap bpmnRenderer drawShape', err);
+    }
 
     modelerRef.current = modeler;
 
@@ -694,6 +904,36 @@ export default function BPMNModeler({
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Language Toggle PT / EN */}
+          <div className="flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
+            <button 
+              type="button"
+              onClick={() => handleToggleLanguage('pt')}
+              className={cn(
+                "px-2.5 py-1 rounded text-xs font-bold transition-all",
+                bpmnLang === 'pt' 
+                  ? "bg-indigo-600 text-white shadow-sm" 
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+              )}
+              title="Português"
+            >
+              PT
+            </button>
+            <button 
+              type="button"
+              onClick={() => handleToggleLanguage('en')}
+              className={cn(
+                "px-2.5 py-1 rounded text-xs font-bold transition-all",
+                bpmnLang === 'en' 
+                  ? "bg-indigo-600 text-white shadow-sm" 
+                  : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+              )}
+              title="English"
+            >
+              EN
+            </button>
+          </div>
+
           <button 
             onClick={() => setIsGuideOpen(true)}
             className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm"
@@ -783,7 +1023,14 @@ export default function BPMNModeler({
                       <span className="text-[10px] text-slate-400 dark:text-white/60 font-medium">Marcar como gargalo</span>
                     </div>
                     <button 
-                      onClick={() => !readOnly && updateElementData(selectedElement.id, { isProblemStep: !currentElementData?.isProblemStep })}
+                      onClick={() => {
+                        if (readOnly || !selectedElement) return;
+                        if (currentElementData?.isProblemStep) {
+                          setShowRemoveProblemModal(true);
+                        } else {
+                          updateElementData(selectedElement.id, { isProblemStep: true });
+                        }
+                      }}
                       disabled={readOnly}
                       className={cn(
                         "w-10 h-5 rounded-full p-1 transition-all",
@@ -920,6 +1167,49 @@ export default function BPMNModeler({
         isOpen={isGuideOpen} 
         onClose={() => setIsGuideOpen(false)} 
       />
+
+      {/* Modal de confirmação ao remover flag de etapa problema */}
+      <AnimatePresence>
+        {showRemoveProblemModal && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 dark:border-slate-700 text-left"
+            >
+              <div className="flex items-center gap-3 text-rose-500 mb-3">
+                <div className="p-2.5 bg-rose-50 dark:bg-rose-950/50 rounded-xl">
+                  <AlertCircle size={22} />
+                </div>
+                <h3 className="text-base font-extrabold text-slate-800 dark:text-white">
+                  Remover Etapa Problema
+                </h3>
+              </div>
+              <p className="text-sm font-medium text-slate-600 dark:text-slate-300 whitespace-pre-line leading-relaxed mb-6">
+                Deseja realmente remover esta etapa como problema?{"\n\n"}
+                Isso fará com que o ciclo PDCA vinculado seja completamente removido.
+              </p>
+              <div className="flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowRemoveProblemModal(false)}
+                  className="px-4 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-xl text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-600 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmRemoveProblem}
+                  className="px-4 py-2 bg-rose-600 text-white rounded-xl text-xs font-bold hover:bg-rose-700 shadow-md transition-all"
+                >
+                  Confirmar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <style dangerouslySetInnerHTML={{ __html: `
         .bpmn-container {

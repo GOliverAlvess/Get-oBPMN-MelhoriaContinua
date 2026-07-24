@@ -86,7 +86,8 @@ import {
   GlobalConfig,
   TangibleGainType,
   IntangibleGainType,
-  UnitMeasure
+  UnitMeasure,
+  NotificationItem
 } from './types';
 import { cn, isValidUrl, formatUrl, cleanObject } from './lib/utils';
 import MappingTab from './components/MappingTab';
@@ -95,6 +96,8 @@ import DashboardView from './components/DashboardView';
 import OperationalActionsTab from './components/OperationalActionsTab';
 import ReportsTab from './components/ReportsTab';
 import ProjectFilesSection from './components/ProjectFilesSection';
+import NotificationBell from './components/NotificationBell';
+import { notifyProjectChanges, notifySubtaskChanges } from './lib/notificationService';
 import { calculateProjectProgress, calculateProjectStatus, calculateSubtaskStatus, getCardProgress, hasPendingSubtasksOrPDCA } from './lib/projectUtils';
 import { calculateActionAlert } from './utils/calculations';
 
@@ -218,6 +221,8 @@ export default function App() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [operationalActions, setOperationalActions] = useState<OperationalAction[]>([]);
   const [targetSubtaskId, setTargetSubtaskId] = useState<string | null>(null);
+  const [targetActionId, setTargetActionId] = useState<string | null>(null);
+  const [targetProjectId, setTargetProjectId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [globalConfig, setGlobalConfig] = useState<GlobalConfig>({ 
     sectors: [], 
@@ -227,6 +232,7 @@ export default function App() {
     units: ['R$ (Reais)', 'Horas', '% (Percentual)', 'Unidades']
   });
   const [bpmnSavedColors, setBpmnSavedColors] = useState<SavedColor[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   const [hasChanges, setHasChanges] = useState(false);
   const [showUnsavedModal, setShowUnsavedModal] = useState(false);
@@ -328,12 +334,28 @@ export default function App() {
       setBpmnSavedColors(colorsData);
     }, (error) => handleFirestoreError(error, OperationType.LIST, 'bpmnSavedColors'));
 
+    // Listen for Notifications
+    const notificationsUnsubscribe = onSnapshot(collection(db, 'notifications'), (snapshot) => {
+      const notifsData = snapshot.docs.map(doc => doc.data() as NotificationItem);
+      const currentUserId = user?.uid || auth.currentUser?.uid;
+      const currentUserEmail = user?.email || auth.currentUser?.email;
+      const loggedInUserObj = users.find(u => u.email?.toLowerCase() === currentUserEmail?.toLowerCase());
+      
+      const myNotifs = notifsData.filter(n => 
+        n.usuario_id === currentUserId || 
+        n.usuario_id === loggedInUserObj?.id ||
+        (currentUserEmail && n.usuario_id === currentUserEmail)
+      );
+      setNotifications(myNotifs);
+    }, (error) => handleFirestoreError(error, OperationType.LIST, 'notifications'));
+
     return () => {
       usersUnsubscribe();
       projectsUnsubscribe();
       configUnsubscribe();
       actionsUnsubscribe();
       colorsUnsubscribe();
+      notificationsUnsubscribe();
     };
   }, [user]);
 
@@ -437,10 +459,20 @@ export default function App() {
       };
 
       // Update local state immediately
+      const oldProject = projects.find(p => p.id === finalProject.id) || null;
       setProjects(prev => prev.map(p => p.id === finalProject.id ? finalProject : p));
       
       const projectRef = doc(db, 'projects', finalProject.id);
       await setDoc(projectRef, cleanObject(finalProject));
+
+      // Trigger notifications for card and subtasks
+      notifyProjectChanges(oldProject, finalProject, auth.currentUser?.uid);
+      const oldSubtasks = oldProject?.subtasks || [];
+      const newSubtasks = finalProject.subtasks || [];
+      for (const newSub of newSubtasks) {
+        const oldSub = oldSubtasks.find(s => s.id === newSub.id) || null;
+        notifySubtaskChanges(finalProject.id, finalProject.name, oldSub, newSub, auth.currentUser?.uid);
+      }
       
       setSaveStatus('success');
       if (isManual) {
@@ -520,6 +552,8 @@ export default function App() {
   const handleProjectClick = (id: string) => {
     setSelectedProjectId(id);
     setActiveTab('scope');
+    setTargetSubtaskId(null);
+    setTargetProjectId(null);
   };
 
   const handleCreateProject = async (data: { name: string, description: string, assignedTo: string, priority: ProjectPriority }) => {
@@ -565,6 +599,7 @@ export default function App() {
     try {
       console.log("⏳ Criando novo projeto no Firestore:", newId);
       await setDoc(doc(db, 'projects', newId), cleanObject(newProject));
+      notifyProjectChanges(null, newProject, auth.currentUser?.uid);
       
       // Atualização otimista do estado local para exibição imediata
       setProjects(prev => {
@@ -583,6 +618,28 @@ export default function App() {
   };
 
   const selectedProject = projects.find(p => p.id === selectedProjectId);
+
+  const handleSelectNotification = (item: NotificationItem) => {
+    if (item.tipo === 'card') {
+      setActiveView('kanban');
+      setSelectedProjectId(null);
+      if (item.referencia_id) {
+        setTargetProjectId(item.referencia_id);
+      }
+    } else if (item.tipo === 'acao') {
+      setTargetActionId(item.referencia_id);
+      setActiveView('actions');
+    } else if (item.tipo === 'tarefa') {
+      setActiveView('kanban');
+      setSelectedProjectId(item.referencia_id);
+      if (item.subtask_id) {
+        setTargetSubtaskId(item.subtask_id);
+      } else {
+        setTargetSubtaskId(null);
+      }
+      setActiveTab('scope');
+    }
+  };
 
   const handleBackToKanban = () => {
     handleNavigation(() => {
@@ -713,6 +770,11 @@ export default function App() {
       <div className="min-h-screen bg-theme-background text-theme-foreground font-sans transition-colors duration-300">
         {/* Theme Toggle Floating and Mobile Menu */}
         <div className="fixed top-4 right-4 z-[60] flex items-center gap-3">
+          <NotificationBell
+            notifications={notifications}
+            onSelectNotification={handleSelectNotification}
+          />
+
           <button 
             onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
             className="p-3 bg-theme-card border border-theme-border rounded-2xl shadow-xl text-slate-400 hover:text-indigo-600 transition-all active:scale-95 group"
@@ -917,6 +979,7 @@ export default function App() {
                 actions={operationalActions}
                 projects={projects}
                 users={users}
+                targetActionId={targetActionId || undefined}
               />
             ) : !selectedProjectId ? (
               <KanbanView 
@@ -926,6 +989,7 @@ export default function App() {
                 onProjectClick={handleProjectClick} 
                 onCreateProject={() => setIsCreateModalOpen(true)}
                 onDeleteProject={handleDeleteProject}
+                targetProjectId={targetProjectId}
               />
             ) : selectedProject ? (
               <ProjectDetailView 
@@ -1025,12 +1089,13 @@ export default function App() {
 
 // --- KANBAN VIEW ---
 
-function KanbanView({ projects, users, onProjectClick, onCreateProject, onDeleteProject }: { 
+function KanbanView({ projects, users, onProjectClick, onCreateProject, onDeleteProject, targetProjectId }: { 
   projects: Project[], 
   users: User[], 
   onProjectClick: (id: string) => void,
   onCreateProject: () => void,
   onDeleteProject: (id: string) => void,
+  targetProjectId?: string | null,
   key?: string
 }) {
   const [groupBy, setGroupBy] = useState<'status' | 'collaborator'>(() => {
@@ -1040,16 +1105,100 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
     }
     return 'status';
   });
-  const [visibleStatuses, setVisibleStatuses] = useState<ProjectStatus[]>([]);
-  const [visibleCollaborators, setVisibleCollaborators] = useState<string[]>([]);
-  const [visibleParticipants, setVisibleParticipants] = useState<string[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [visibleStatuses, setVisibleStatuses] = useState<ProjectStatus[]>(() => {
+    try {
+      const saved = sessionStorage.getItem('kanban_filter_statuses');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [visibleCollaborators, setVisibleCollaborators] = useState<string[]>(() => {
+    try {
+      const saved = sessionStorage.getItem('kanban_filter_collaborators');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [visibleParticipants, setVisibleParticipants] = useState<string[]>(() => {
+    try {
+      const saved = sessionStorage.getItem('kanban_filter_participants');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [searchTerm, setSearchTerm] = useState<string>(() => {
+    try {
+      return sessionStorage.getItem('kanban_filter_search') || '';
+    } catch {
+      return '';
+    }
+  });
   const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-  // Reset scroll to top upon returning to/entering the Projects View
+  // Sync filters with sessionStorage
   useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+    sessionStorage.setItem('kanban_filter_statuses', JSON.stringify(visibleStatuses));
+  }, [visibleStatuses]);
+
+  useEffect(() => {
+    sessionStorage.setItem('kanban_filter_collaborators', JSON.stringify(visibleCollaborators));
+  }, [visibleCollaborators]);
+
+  useEffect(() => {
+    sessionStorage.setItem('kanban_filter_participants', JSON.stringify(visibleParticipants));
+  }, [visibleParticipants]);
+
+  useEffect(() => {
+    sessionStorage.setItem('kanban_filter_search', searchTerm);
+  }, [searchTerm]);
+
+  // Scroll to targeted project card if arriving from a notification, or restore scroll position
+  useEffect(() => {
+    if (targetProjectId) {
+      setSearchTerm('');
+      setVisibleStatuses([]);
+      setVisibleCollaborators([]);
+      setVisibleParticipants([]);
+      sessionStorage.removeItem('kanban_filter_statuses');
+      sessionStorage.removeItem('kanban_filter_collaborators');
+      sessionStorage.removeItem('kanban_filter_participants');
+      sessionStorage.removeItem('kanban_filter_search');
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`project-card-${targetProjectId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    } else {
+      const savedScroll = sessionStorage.getItem('kanban_scroll_y');
+      if (savedScroll) {
+        const timer = setTimeout(() => {
+          window.scrollTo({ top: Number(savedScroll), behavior: 'instant' as ScrollBehavior });
+        }, 100);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [targetProjectId]);
+
+  const handleCardClick = (id: string) => {
+    sessionStorage.setItem('kanban_scroll_y', window.scrollY.toString());
+    onProjectClick(id);
+  };
+
+  const handleClearFilters = () => {
+    setVisibleStatuses([]);
+    setVisibleCollaborators([]);
+    setVisibleParticipants([]);
+    setSearchTerm('');
+    sessionStorage.removeItem('kanban_filter_statuses');
+    sessionStorage.removeItem('kanban_filter_collaborators');
+    sessionStorage.removeItem('kanban_filter_participants');
+    sessionStorage.removeItem('kanban_filter_search');
+  };
 
   // Sync tab changes to localStorage for persistence
   const handleTabChange = (tab: 'status' | 'collaborator') => {
@@ -1278,11 +1427,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
 
                   <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between">
                     <button 
-                      onClick={() => {
-                        setVisibleStatuses([]);
-                        setVisibleCollaborators([]);
-                        setVisibleParticipants([]);
-                      }}
+                      onClick={handleClearFilters}
                       className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline"
                     >
                       Limpar Filtros
@@ -1347,7 +1492,8 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
                     key={project.id} 
                     project={project} 
                     users={users}
-                    onClick={() => onProjectClick(project.id)} 
+                    isHighlighted={targetProjectId === project.id}
+                    onClick={() => handleCardClick(project.id)} 
                     onDelete={() => onDeleteProject(project.id)}
                   />
                 ))}
@@ -1367,7 +1513,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
   );
 }
 
-function ProjectCard({ project, users, onClick, onDelete }: { project: Project, users: User[], onClick: () => void, onDelete: () => void, key?: string }) {
+function ProjectCard({ project, users, onClick, onDelete, isHighlighted }: { project: Project, users: User[], onClick: () => void, onDelete: () => void, isHighlighted?: boolean, key?: string }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -1400,8 +1546,12 @@ function ProjectCard({ project, users, onClick, onDelete }: { project: Project, 
 
   return (
     <motion.div 
+      id={`project-card-${project.id}`}
       whileHover={{ y: -4, shadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1)' }}
-      className="bg-white p-5 rounded-xl border border-slate-200 cursor-pointer transition-all relative group"
+      className={cn(
+        "bg-white p-5 rounded-xl border border-slate-200 cursor-pointer transition-all relative group",
+        isHighlighted && "ring-2 ring-indigo-500 bg-indigo-50/20 font-bold shadow-xl"
+      )}
       onClick={onClick}
     >
       <div className="flex justify-between items-start mb-4">
@@ -1598,14 +1748,16 @@ function ProjectDetailView({
   key?: string,
   actions?: OperationalAction[]
 }) {
-  const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(initialSubtaskId || null);
+  const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(
+    activeTab !== 'scope' ? initialSubtaskId || null : null
+  );
 
   useEffect(() => {
-    if (initialSubtaskId) {
+    if (initialSubtaskId && activeTab !== 'scope') {
       setSelectedSubtaskId(initialSubtaskId);
       if (onClearInitialSubtask) onClearInitialSubtask();
     }
-  }, [initialSubtaskId, onClearInitialSubtask]);
+  }, [initialSubtaskId, activeTab, onClearInitialSubtask]);
 
   const selectedSubtask = project.subtasks?.find(s => s.id === selectedSubtaskId);
 
@@ -1615,7 +1767,50 @@ function ProjectDetailView({
       ...updatedSubtask,
       status: calculateSubtaskStatus(updatedSubtask)
     };
-    const updatedSubtasks = (project.subtasks || []).map(s => s.id === subtaskWithCalculatedStatus.id ? subtaskWithCalculatedStatus : s);
+
+    const updatedCycles = subtaskWithCalculatedStatus.pdcaCycles || [];
+
+    const updatedSubtasks = (project.subtasks || []).map(s => {
+      if (s.id === subtaskWithCalculatedStatus.id) {
+        return subtaskWithCalculatedStatus;
+      }
+
+      let sCycles = [...(s.pdcaCycles || [])];
+      let changed = false;
+
+      // Synchronize shared/linked PDCA cycles
+      updatedCycles.forEach(uCycle => {
+        const isExplicitlyLinked = uCycle.linkedSubtaskIds?.includes(s.id);
+        const existingIndex = sCycles.findIndex(c => c.id === uCycle.id);
+
+        if (existingIndex !== -1) {
+          // If explicitly unlinked via linkedSubtaskIds, remove it
+          if (uCycle.linkedSubtaskIds && !isExplicitlyLinked) {
+            sCycles.splice(existingIndex, 1);
+            changed = true;
+          } else {
+            // Otherwise sync updated cycle data
+            sCycles[existingIndex] = uCycle;
+            changed = true;
+          }
+        } else if (isExplicitlyLinked) {
+          // Add shared cycle to this subtask
+          sCycles = [uCycle, ...sCycles];
+          changed = true;
+        }
+      });
+
+      if (changed) {
+        const updatedS = { ...s, pdcaCycles: sCycles };
+        return {
+          ...updatedS,
+          status: calculateSubtaskStatus(updatedS)
+        };
+      }
+
+      return s;
+    });
+
     setProjects({ ...project, subtasks: updatedSubtasks });
   };
 
@@ -1704,6 +1899,7 @@ function ProjectDetailView({
               subtask={selectedSubtask}
               onUpdateSubtask={handleUpdateSubtask}
               globalConfig={globalConfig}
+              userProfile={users.find(u => u.id === auth.currentUser?.uid)?.profile || auth.currentUser?.profile}
               onBack={() => {
                 setSelectedSubtaskId(null);
                 setActiveTab('scope');
@@ -1826,6 +2022,7 @@ function ProjectDetailView({
             users={users} 
             globalConfig={globalConfig} 
             actions={actions}
+            targetSubtaskId={initialSubtaskId}
             onSelectSubtask={(taskId) => {
               setSelectedSubtaskId(taskId);
               setActiveTab('mapping');
@@ -2054,17 +2251,31 @@ function ScopeTab({
   users, 
   globalConfig,
   onSelectSubtask,
-  actions = []
+  actions = [],
+  targetSubtaskId
 }: { 
   project: Project, 
   setProjects: (p: Project) => void, 
   users: User[], 
   globalConfig: GlobalConfig,
   onSelectSubtask: (taskId: string) => void,
-  actions?: OperationalAction[]
+  actions?: OperationalAction[],
+  targetSubtaskId?: string | null
 }) {
   const currentUserProfile = users.find(u => u.id === auth.currentUser?.uid);
   const profile = currentUserProfile?.profile || 'Usuário Analista';
+
+  useEffect(() => {
+    if (targetSubtaskId) {
+      const timer = setTimeout(() => {
+        const el = document.getElementById(`subtask-row-${targetSubtaskId}`) || document.getElementById('subtasks-section');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [targetSubtaskId]);
 
   const [isSubtaskModalOpen, setIsSubtaskModalOpen] = useState(false);
   const [newSubtaskData, setNewSubtaskData] = useState({
@@ -2131,23 +2342,28 @@ function ScopeTab({
   };
 
   const handleReassign = (userId: string) => {
+    const oldProj = { ...project };
     if (userId === 'backlog') {
-      setProjects({
+      const updated = {
         ...project,
         assignedTo: 'backlog',
-        status: 'Backlog',
+        status: 'Backlog' as ProjectStatus,
         scope: { ...project.scope, responsible: 'Não atribuído' }
-      });
+      };
+      setProjects(updated);
+      notifyProjectChanges(oldProj, updated, auth.currentUser?.uid);
       return;
     }
     const selectedUser = users.find(u => u.id === userId);
     if (selectedUser) {
-      setProjects({ 
+      const updated = { 
         ...project, 
         assignedTo: userId,
-        status: project.status === 'Backlog' ? 'Planejamento' : project.status,
+        status: project.status === 'Backlog' ? 'Planejamento' as ProjectStatus : project.status,
         scope: { ...project.scope, responsible: selectedUser.name }
-      });
+      };
+      setProjects(updated);
+      notifyProjectChanges(oldProj, updated, auth.currentUser?.uid);
     }
   };
 
@@ -2172,6 +2388,11 @@ function ScopeTab({
       },
       pdcaCycles: []
     };
+
+    if (newSubtask.responsibleId) {
+      notifySubtaskChanges(project.id, project.name, null, newSubtask, auth.currentUser?.uid);
+    }
+
     setProjects({ ...project, subtasks: [...(project.subtasks || []), newSubtask] });
     setIsSubtaskModalOpen(false);
     setNewSubtaskData({
@@ -2183,9 +2404,14 @@ function ScopeTab({
   };
 
   const updateSubtask = (id: string, field: keyof Subtask, value: any) => {
+    const oldSubtask = (project.subtasks || []).find(s => s.id === id) || null;
     const updatedSubtasks = (project.subtasks || []).map(s => 
       s.id === id ? { ...s, [field]: value } : s
     );
+    const newSubtask = updatedSubtasks.find(s => s.id === id);
+    if (newSubtask && field === 'responsibleId' && value) {
+      notifySubtaskChanges(project.id, project.name, oldSubtask, newSubtask, auth.currentUser?.uid);
+    }
     setProjects({ ...project, subtasks: updatedSubtasks });
   };
 
@@ -2318,8 +2544,8 @@ function ScopeTab({
                 }}
               >
                 <option value="">+ Adicionar Setor</option>
-                {[...globalConfig.sectors].sort((a, b) => a.localeCompare(b)).map(s => (
-                  <option key={s} value={s}>{s}</option>
+                {[...globalConfig.sectors].sort((a, b) => a.localeCompare(b)).map((s, sIdx) => (
+                  <option key={`${s}-${sIdx}`} value={s}>{s}</option>
                 ))}
               </select>
             </div>
@@ -2349,8 +2575,8 @@ function ScopeTab({
                 }}
               >
                 <option value="">+ Adicionar Ferramenta</option>
-                {[...globalConfig.tools].sort((a, b) => a.localeCompare(b)).map(t => (
-                  <option key={t} value={t}>{t}</option>
+                {[...globalConfig.tools].sort((a, b) => a.localeCompare(b)).map((t, tIdx) => (
+                  <option key={`${t}-${tIdx}`} value={t}>{t}</option>
                 ))}
               </select>
             </div>
@@ -2663,7 +2889,7 @@ function ScopeTab({
       />
 
       {/* 7. SUBTAREFAS (LIST FORMAT) */}
-      <section className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
+      <section id="subtasks-section" className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-8">
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
             <div className="w-auto h-10 rounded-2xl bg-white border border-slate-100 p-1 flex items-center justify-center shadow-md">
@@ -2705,11 +2931,16 @@ function ScopeTab({
                 const currentStatus = calculateSubtaskStatus(subtask);
                 
                 return (
-                  <tr key={subtask.id} className={cn(
-                    "group transition-all duration-300",
-                    isEditing ? "bg-indigo-50/50" : "hover:bg-slate-50/50",
-                    isReadOnly && !isEditing && "bg-slate-50/30"
-                  )}>
+                  <tr 
+                    key={subtask.id} 
+                    id={`subtask-row-${subtask.id}`}
+                    className={cn(
+                      "group transition-all duration-300",
+                      isEditing ? "bg-indigo-50/50" : "hover:bg-slate-50/50",
+                      isReadOnly && !isEditing && "bg-slate-50/30",
+                      targetSubtaskId === subtask.id && "ring-2 ring-indigo-500 bg-indigo-50/80 font-bold shadow-md"
+                    )}
+                  >
                     <td className={cn(
                       "px-6 py-4 transition-all",
                       isEditing && "border-l-4 border-indigo-600"
@@ -2831,13 +3062,17 @@ function ScopeTab({
                             <button 
                               onClick={() => {
                                 if (tempSubtaskData) {
+                                  const updatedSub = { 
+                                    ...subtask, 
+                                    title: tempSubtaskData.title,
+                                    priority: tempSubtaskData.priority,
+                                    responsibleId: tempSubtaskData.responsibleId
+                                  };
+                                  if (tempSubtaskData.responsibleId && tempSubtaskData.responsibleId !== subtask.responsibleId) {
+                                    notifySubtaskChanges(project.id, project.name, subtask, updatedSub, auth.currentUser?.uid);
+                                  }
                                   const updatedSubtasks = (project.subtasks || []).map(s => 
-                                    s.id === subtask.id ? { 
-                                      ...s, 
-                                      title: tempSubtaskData.title,
-                                      priority: tempSubtaskData.priority,
-                                      responsibleId: tempSubtaskData.responsibleId
-                                    } : s
+                                    s.id === subtask.id ? updatedSub : s
                                   );
                                   setProjects({ ...project, subtasks: updatedSubtasks });
                                 }
@@ -4651,6 +4886,7 @@ function PDCATab({
           onBack={() => setIsEditorOpen(false)} 
           defaultTaskId={selectedTaskId || undefined}
           globalConfig={globalConfig}
+          userProfile={auth.currentUser?.profile}
         />
       </div>
     );

@@ -37,8 +37,15 @@ class MockAuth {
   public currentUser: FirebaseUser | null = null;
 
   constructor() {
-    // Restore session from localStorage if available
-    const saved = localStorage.getItem('pdca_auth_user');
+    // Clear any obsolete persistent auth session in localStorage
+    try {
+      localStorage.removeItem('pdca_auth_user');
+    } catch (e) {
+      // ignore
+    }
+
+    // Restore session from sessionStorage if available (tab-scoped)
+    const saved = sessionStorage.getItem('pdca_auth_user');
     if (saved) {
       try {
         this.currentUser = JSON.parse(saved);
@@ -63,6 +70,7 @@ class MockAuth {
 
   public signOut() {
     this.currentUser = null;
+    sessionStorage.removeItem('pdca_auth_user');
     localStorage.removeItem('pdca_auth_user');
     this.emitChange();
     return Promise.resolve();
@@ -152,7 +160,7 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
             };
             
             authInstance.currentUser = mockUser;
-            localStorage.setItem('pdca_auth_user', JSON.stringify(mockUser));
+            sessionStorage.setItem('pdca_auth_user', JSON.stringify(mockUser));
             authInstance.emitChange();
             resolve({ user: mockUser });
           } catch (err: any) {
@@ -413,7 +421,7 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
             };
 
             authInstance.currentUser = mockUser;
-            localStorage.setItem('pdca_auth_user', JSON.stringify(mockUser));
+            sessionStorage.setItem('pdca_auth_user', JSON.stringify(mockUser));
             authInstance.emitChange();
             cleanup();
             resolve({ user: mockUser });
@@ -474,7 +482,7 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
             };
 
             authInstance.currentUser = mockUser;
-            localStorage.setItem('pdca_auth_user', JSON.stringify(mockUser));
+            sessionStorage.setItem('pdca_auth_user', JSON.stringify(mockUser));
             authInstance.emitChange();
             cleanup();
             resolve({ user: mockUser });

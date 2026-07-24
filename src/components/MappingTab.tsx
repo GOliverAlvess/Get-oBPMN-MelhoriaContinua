@@ -27,11 +27,33 @@ export default function MappingTab({
     });
   };
 
+  const handleDeletePdcaCycleForTask = (taskId: string, updatedCustomData?: any) => {
+    if (readOnly) return;
+    const newCycles = (subtask.pdcaCycles || []).filter((c) => c.taskId !== taskId);
+    if (updatedCustomData) {
+      onUpdateSubtask({
+        ...subtask,
+        mapping: {
+          ...subtask.mapping,
+          customData: updatedCustomData,
+          lastEdited: new Date().toISOString()
+        },
+        pdcaCycles: newCycles
+      });
+    } else {
+      onUpdateSubtask({
+        ...subtask,
+        pdcaCycles: newCycles
+      });
+    }
+  };
+
   return (
     <div className="h-full flex flex-col bg-theme-background">
       <BPMNModeler 
         mapping={subtask.mapping} 
         onUpdateMapping={handleUpdateMapping} 
+        onDeletePdcaCycleForTask={handleDeletePdcaCycleForTask}
         projectName={project.scope.title}
         savedColors={savedColors}
         onSaveGlobalColor={onSaveGlobalColor}

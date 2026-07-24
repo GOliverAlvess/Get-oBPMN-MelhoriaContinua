@@ -221,6 +221,82 @@ export default function DashboardView({ projects, users, actions, onProjectClick
     return stats.sectorDistribution.slice(0, 10);
   }, [showAllSectors, stats.sectorDistribution]);
 
+  const gainsXDomain = useMemo(() => {
+    if (!stats.projectGains || stats.projectGains.length === 0) return [0, 100];
+    const vals = stats.projectGains.map(g => g.gain);
+    const minVal = Math.min(...vals);
+    const maxVal = Math.max(...vals);
+
+    let min = minVal < 0 ? minVal * 1.35 : 0;
+    let max = maxVal > 0 ? maxVal * 1.25 : (minVal < 0 ? 0 : 100);
+
+    if (min === 0 && max === 0) {
+      min = -100;
+      max = 100;
+    }
+    return [min, max];
+  }, [stats.projectGains]);
+
+  const renderGainBarLabel = (props: any) => {
+    const { x, y, width, height, value } = props;
+    if (value === undefined || value === null) return null;
+
+    const isNegative = value < 0;
+    const formattedValue = formatCurrency(value);
+    const color = isNegative ? '#f43f5e' : '#10b981';
+    const textY = y + height / 2 + 3;
+
+    if (isNegative) {
+      return (
+        <text
+          x={x - 6}
+          y={textY}
+          fill={color}
+          fontSize={10}
+          fontWeight={800}
+          textAnchor="end"
+        >
+          {formattedValue}
+        </text>
+      );
+    } else {
+      return (
+        <text
+          x={x + width + 6}
+          y={textY}
+          fill={color}
+          fontSize={10}
+          fontWeight={800}
+          textAnchor="start"
+        >
+          {formattedValue}
+        </text>
+      );
+    }
+  };
+
+  const renderYAxisGainTick = (props: any) => {
+    const { x, y, payload } = props;
+    const name = payload.value || '';
+    const displayName = name.length > 20 ? name.substring(0, 18) + '...' : name;
+    return (
+      <g transform={`translate(${x},${y})`}>
+        <text
+          x={-8}
+          y={0}
+          dy={4}
+          textAnchor="end"
+          fill="#94a3b8"
+          fontSize={10}
+          fontWeight={700}
+        >
+          <title>{name}</title>
+          {displayName}
+        </text>
+      </g>
+    );
+  };
+
   const toggleFilter = (list: any[], item: any, setter: (val: any[]) => void) => {
     if (list.includes(item)) {
       setter(list.filter(i => i !== item));
@@ -339,15 +415,6 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                 isCurrency
                 icon={<DollarSign size={18} />} 
                 color={stats.totalGainValue < 0 ? "bg-rose-600" : "bg-emerald-600"}
-                subtext={
-                  stats.potentialGainValue > 0 ? (
-                    <div className="flex items-center gap-2 text-[10px] font-bold flex-wrap leading-tight mt-1">
-                      <span className="text-amber-600 dark:text-amber-400">
-                        📈 Potencial: {formatCurrency(stats.potentialGainValue)}
-                      </span>
-                    </div>
-                  ) : undefined
-                }
               />
               <StatCard 
                 title="Total Projetos" 
@@ -384,14 +451,20 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                 </div>
                 <div className="h-[250px] md:h-[300px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={stats.projectGains} layout="vertical">
+                    <BarChart
+                      data={stats.projectGains}
+                      layout="vertical"
+                      margin={{ left: 10, right: 75, top: 10, bottom: 10 }}
+                    >
                       <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
-                      <XAxis type="number" hide />
+                      <XAxis type="number" hide domain={gainsXDomain} />
                       <YAxis 
                         dataKey="name" 
                         type="category" 
-                        width={100} 
-                        tick={{ fontSize: 10, fontWeight: 700, fill: '#94a3b8' }}
+                        width={120} 
+                        tick={renderYAxisGainTick}
+                        axisLine={false}
+                        tickLine={false}
                       />
                       <Tooltip 
                         cursor={{ fill: 'rgba(255,255,255,0.05)' }}
@@ -407,7 +480,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                         labelStyle={{ color: '#ffffff', fontWeight: 700 }}
                         formatter={(value: number) => [formatCurrency(value), 'Ganho']}
                       />
-                      <ReferenceLine x={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="3 3" />
+                      <ReferenceLine x={0} stroke="#64748b" strokeWidth={1.5} strokeDasharray="3 3" />
                       <Bar dataKey="gain" radius={[0, 8, 8, 0]} barSize={20}>
                         {stats.projectGains.map((entry, index) => (
                           <Cell 
@@ -417,10 +490,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                         ))}
                         <LabelList 
                           dataKey="gain" 
-                          position="right" 
-                          formatter={(value: number) => formatCurrency(value)}
-                          style={{ fontSize: 9, fontWeight: 800, fill: '#94a3b8' }}
-                          offset={10}
+                          content={renderGainBarLabel}
                         />
                       </Bar>
                     </BarChart>

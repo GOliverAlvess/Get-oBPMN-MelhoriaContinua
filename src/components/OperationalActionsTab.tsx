@@ -22,6 +22,7 @@ import { Project, User, OperationalAction, ProjectPriority } from '../types';
 import { cn, exportarCSVPadrao, cleanObject } from '../lib/utils';
 import { db, setDoc, doc, deleteDoc, handleFirestoreError, OperationType, auth } from '../firebase';
 import { calculateActionAlert } from '../utils/calculations';
+import { logFeature, logMelhoria } from '../lib/changelogService';
 
 interface OperationalActionsTabProps {
   actions: OperationalAction[];
@@ -346,6 +347,11 @@ export default function OperationalActionsTab({ actions, projects, users, target
         const finalAction = cleanObject({ ...action, ...finalUpdates });
         await setDoc(actionRef, finalAction);
         notifyActionChanges(action, finalAction, auth.currentUser?.uid);
+        if (updatedHistory.length > (action.historicoTratativas?.length || 0)) {
+          logFeature('Inclusão do histórico de interações nas ações', 'Ações', '💬');
+        } else {
+          logMelhoria('Atualização do status e detalhes da ação operacional', 'Ações', '⚡');
+        }
         setEditingActionId(null);
         setTempUpdates({});
       }

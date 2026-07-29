@@ -31,6 +31,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { Project, BPMNTaskData, SavedColor } from '../types';
 import { cn } from '../lib/utils';
+import { logFeature, logAjuste } from '../lib/changelogService';
 import BpmnGuide from './BpmnGuide';
 
 const translationsPT: Record<string, string> = {
@@ -206,6 +207,7 @@ export default function BPMNModeler({
   const handleToggleLanguage = (lang: 'pt' | 'en') => {
     setBpmnLang(lang);
     bpmnLangRef.current = lang;
+    logFeature(`Tradução dos elementos de alteração do BPMN (${lang === 'pt' ? 'Português' : 'Inglês'})`, 'BPMN', '🌐');
     if (modelerRef.current) {
       try {
         const eventBus = modelerRef.current.get('eventBus') as any;
@@ -443,6 +445,7 @@ export default function BPMNModeler({
         customData: customDataRef.current,
         lastEdited: new Date().toISOString()
       });
+      logAjuste('Ajustes e correções dos símbolos da guia BPMN', 'BPMN', '🎨');
       setTimeout(() => {
         isSyncingRef.current = false;
       }, 100);

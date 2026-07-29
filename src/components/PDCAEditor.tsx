@@ -56,6 +56,7 @@ import {
 import ParetoDiagram from "./ParetoDiagram";
 import GainsEditor from "./GainsEditor";
 import { cn, isValidUrl, formatUrl, exportarCSVPadrao } from "../lib/utils";
+import { logFeature, logFix, logMelhoria, logAjuste } from "../lib/changelogService";
 
 import { SYSTEM_LOGO_PATH } from "../constants/pdfLogo";
 import { getBase64ImageFromUrl } from "../lib/utils";
@@ -545,6 +546,8 @@ export default function PDCAEditor({
       pdcaCycles: newCurrentCycles,
     });
 
+    logFeature("Vínculo de ciclo PDCA compartilhado entre múltiplas subtarefas", "PDCA", "🔗");
+
     setActiveCycleId(updatedCycle.id);
     setActivePhase(updatedCycle.etapaAtual || "PLAN");
     setShowDashboard(false);
@@ -619,6 +622,7 @@ export default function PDCAEditor({
       ...subtask,
       pdcaCycles: [newCycle, ...subtask.pdcaCycles],
     });
+    logFeature("Novo ciclo PDCA iniciado para a etapa", "PDCA", "🔄");
     setActiveCycleId(newCycle.id);
     setActivePhase("PLAN");
     setShowDashboard(false);
@@ -634,6 +638,7 @@ export default function PDCAEditor({
   };
 
   const handleSave = () => {
+    logAjuste("Ajustes salvos no ciclo PDCA ativo", "PDCA", "💾");
     setSaveFeedback("Dados salvos com sucesso!");
     setTimeout(() => setSaveFeedback(null), 3000);
   };
@@ -5101,6 +5106,7 @@ export default function PDCAEditor({
                                                                 }
 
                                                                 updateActionPlan(item.id, updates);
+                                                                logFeature("Permissão de edição no histórico da etapa DO do PDCA", "PDCA", "✏️");
                                                                 setEditingLogId(null);
                                                                 setEditingLogData(null);
                                                               }}

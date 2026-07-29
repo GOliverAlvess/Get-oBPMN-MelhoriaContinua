@@ -46,6 +46,7 @@ const formatGains = (gains: GainsStructure | undefined): string => {
   return [tangible, intangible].filter(Boolean).join(' || ');
 };
 import { cn, exportarCSVPadrao } from '../lib/utils';
+import { logFeature } from '../lib/changelogService';
 import FilterDropdown from './FilterDropdown';
 
 const STATUS_MAP: Record<string, string> = {
@@ -1397,6 +1398,7 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
       const csvRows = data.map(item => headers.map(header => item[header] || ''));
 
       exportarCSVPadrao(headers, csvRows, fileName);
+      logFeature('Filtros avançados na exportação de relatórios gerenciais', 'Relatórios', '📄');
 
       // Log the generation
       const logId = uuidv4();

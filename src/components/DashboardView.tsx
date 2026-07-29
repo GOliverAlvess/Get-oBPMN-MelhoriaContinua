@@ -29,7 +29,8 @@ import {
   X,
   Target,
   Briefcase,
-  Search
+  Search,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';

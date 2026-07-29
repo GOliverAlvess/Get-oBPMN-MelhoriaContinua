@@ -29,6 +29,7 @@ import {
 import { motion } from 'motion/react';
 import { OperationalAction, User, Project } from '../types';
 import { cn } from '../lib/utils';
+import { logMelhoria } from '../lib/changelogService';
 import FilterDropdown from './FilterDropdown';
 import { calculateActionAlert } from '../utils/calculations';
 
@@ -42,6 +43,12 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
   const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
+
+  React.useEffect(() => {
+    if (selectedCollaborators.length > 0 || selectedStatuses.length > 0 || selectedProjectIds.length > 0) {
+      logMelhoria('Filtros dinâmicos no dashboard de ações operacionais', 'Dashboard', '📊');
+    }
+  }, [selectedCollaborators, selectedStatuses, selectedProjectIds]);
 
   const filteredActions = useMemo(() => {
     return actions.filter(a => {

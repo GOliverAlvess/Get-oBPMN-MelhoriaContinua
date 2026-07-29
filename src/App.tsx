@@ -937,7 +937,7 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 1.05 }}
-                className="flex-1 flex flex-col items-center justify-center p-4 w-full"
+                className="flex-1 flex flex-col items-center justify-center p-4 w-full my-auto"
               >
                  <div className="flex flex-col items-center gap-6 md:gap-8 text-center animate-in fade-in zoom-in duration-700 w-full max-w-sm md:max-w-none">
                     <div className="bg-white p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] shadow-2xl shadow-indigo-100/40 border border-slate-100 w-full max-w-[300px] md:max-w-none">

@@ -1,6 +1,7 @@
 import { doc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, where } from '../firebase';
 import { db } from '../firebase';
 import { NotificationItem, Project, OperationalAction, Subtask } from '../types';
+import { logFeature } from './changelogService';
 
 export async function createNotification(params: {
   usuario_id: string;
@@ -33,6 +34,9 @@ export async function createNotification(params: {
 
     // Save to Firestore 'notifications' collection
     await setDoc(doc(db, 'notifications', notifId), notification);
+
+    // Auto-record to changelog_events
+    logFeature(`Notificação enviada: "${mensagem.substring(0, 50)}${mensagem.length > 50 ? '...' : ''}"`, 'Notificações', '🔔');
   } catch (error) {
     console.error('Erro ao criar notificação:', error);
   }

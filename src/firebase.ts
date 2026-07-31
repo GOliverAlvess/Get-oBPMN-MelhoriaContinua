@@ -219,7 +219,7 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
               
               <div class="space-y-1">
                 <div class="relative">
-                  <input type="email" id="auth-email" required placeholder="E-mail" value="${emailVal || 'ga.oliveira@ativalog.com.br'}"
+                  <input type="email" id="auth-email" required placeholder="E-mail" value="${emailVal}" autoComplete="off" autofocus
                     class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium placeholder:text-slate-400" />
                 </div>
               </div>

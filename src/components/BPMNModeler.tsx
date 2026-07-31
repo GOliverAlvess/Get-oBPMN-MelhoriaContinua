@@ -180,6 +180,230 @@ const INITIAL_XML = `<?xml version="1.0" encoding="UTF-8"?>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
+let measureCanvas: HTMLCanvasElement | null = null;
+let measureCtx: CanvasRenderingContext2D | null = null;
+
+function getTextWidth(text: string, fontSize: number, fontWeight: string = '600'): number {
+  if (typeof document === 'undefined') return text.length * fontSize * 0.58;
+  if (!measureCanvas) {
+    measureCanvas = document.createElement('canvas');
+    measureCtx = measureCanvas.getContext('2d');
+  }
+  if (measureCtx) {
+    const safeSize = Math.round(fontSize * 10) / 10;
+    measureCtx.font = `${fontWeight} ${safeSize}px sans-serif`;
+    return measureCtx.measureText(text).width * 1.03;
+  }
+  return text.length * fontSize * 0.58;
+}
+
+function createAutoFitText(text: string, options: any, fallbackCreateText?: Function): SVGElement {
+  options = options || {};
+  const box = options.box || { x: 0, y: 0, width: 100, height: 80 };
+  const element = options.element;
+  const style = options.style || {};
+
+  const elementType = element ? element.type : '';
+  const typedTaskTypes = [
+    'bpmn:UserTask',
+    'bpmn:ServiceTask',
+    'bpmn:SendTask',
+    'bpmn:ReceiveTask',
+    'bpmn:ManualTask',
+    'bpmn:ScriptTask',
+    'bpmn:BusinessRuleTask',
+    'bpmn:CallActivity'
+  ];
+
+  const isTypedTask = typedTaskTypes.includes(elementType);
+  const isSubProcess = elementType === 'bpmn:SubProcess';
+  const isTaskLike = isTypedTask || isSubProcess || elementType === 'bpmn:Task' || elementType === 'bpmn:Activity' || !elementType;
+
+  const trimmedText = (text || '').trim();
+  if (!trimmedText) {
+    const emptySvg = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    emptySvg.setAttribute('x', '0');
+    emptySvg.setAttribute('y', '0');
+    return emptySvg as unknown as SVGElement;
+  }
+
+  if (!isTaskLike && fallbackCreateText) {
+    return fallbackCreateText(text, options);
+  }
+
+  // 1. Calculate Padding to respect icon areas and internal box boundaries
+  let topPadding = 6;
+  let bottomPadding = 6;
+  let leftPadding = 6;
+  let rightPadding = 6;
+
+  if (isTypedTask) {
+    topPadding = 24; // Space below top-left task type icon (x=15, y=12, 18x18)
+    bottomPadding = 6;
+    leftPadding = 6;
+    rightPadding = 6;
+  } else if (isSubProcess) {
+    bottomPadding = 18; // Space above bottom subprocess marker icon
+    topPadding = 8;
+    leftPadding = 6;
+    rightPadding = 6;
+  } else if (typeof options.padding === 'number') {
+    topPadding = bottomPadding = leftPadding = rightPadding = options.padding;
+  } else if (options.padding && typeof options.padding === 'object') {
+    topPadding = options.padding.top ?? 6;
+    bottomPadding = options.padding.bottom ?? 6;
+    leftPadding = options.padding.left ?? 6;
+    rightPadding = options.padding.right ?? 6;
+  }
+
+  const boxWidth = box.width || 100;
+  const boxHeight = box.height || 80;
+
+  const availableWidth = Math.max(20, boxWidth - leftPadding - rightPadding);
+  const availableHeight = Math.max(16, boxHeight - topPadding - bottomPadding);
+
+  // 2. Multi-line Word Wrapping and Font Auto-Fit
+  const fontFamily = style.fontFamily || 'Inter, Outfit, system-ui, sans-serif';
+  const fontWeight = style.fontWeight || '600';
+  const maxFontSize = isTypedTask ? 12 : (boxWidth > 120 ? 13.5 : 12.5);
+  const minFontSize = 10;
+  const lineRatio = 1.25;
+
+  const words = trimmedText.split(/\s+/);
+  let bestFontSize = minFontSize;
+  let bestLines: string[] = [];
+
+  for (let fs = maxFontSize; fs >= minFontSize; fs -= 0.5) {
+    const lineHeight = fs * lineRatio;
+    const maxLinesAllowed = Math.max(1, Math.floor(availableHeight / lineHeight));
+    
+    let singleWordTooWide = false;
+    const lines: string[] = [];
+    let currentLine: string[] = [];
+    let currentLineWidth = 0;
+
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      const wordW = getTextWidth(word, fs, fontWeight);
+
+      // Single word exceeds available width at this font size
+      if (wordW > availableWidth) {
+        singleWordTooWide = true;
+        break;
+      }
+
+      if (currentLine.length === 0) {
+        currentLine.push(word);
+        currentLineWidth = wordW;
+      } else {
+        const spaceW = getTextWidth(' ', fs, fontWeight);
+        if (currentLineWidth + spaceW + wordW <= availableWidth) {
+          currentLine.push(word);
+          currentLineWidth += spaceW + wordW;
+        } else {
+          lines.push(currentLine.join(' '));
+          currentLine = [word];
+          currentLineWidth = wordW;
+        }
+      }
+    }
+
+    if (singleWordTooWide) {
+      continue; // Try smaller font size so single word fits horizontally
+    }
+
+    if (currentLine.length > 0) {
+      lines.push(currentLine.join(' '));
+    }
+
+    const totalHeight = lines.length * lineHeight;
+    
+    // Check both vertical height and max line count
+    if (totalHeight <= availableHeight && lines.length <= maxLinesAllowed) {
+      bestFontSize = fs;
+      bestLines = lines;
+      break; // Found largest font size that wraps nicely into multiple lines!
+    }
+  }
+
+  // 3. Fallback for Extremely Long Text at minFontSize (10px) with Ellipsis
+  if (bestLines.length === 0) {
+    bestFontSize = minFontSize;
+    const lineHeight = minFontSize * lineRatio;
+    const maxLinesAllowed = Math.max(1, Math.floor(availableHeight / lineHeight));
+    
+    const lines: string[] = [];
+    let currentLine: string[] = [];
+    let currentLineWidth = 0;
+
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      const wordW = Math.min(getTextWidth(word, minFontSize, fontWeight), availableWidth);
+      if (currentLine.length === 0) {
+        currentLine.push(word);
+        currentLineWidth = wordW;
+      } else {
+        const spaceW = getTextWidth(' ', minFontSize, fontWeight);
+        if (currentLineWidth + spaceW + wordW <= availableWidth) {
+          currentLine.push(word);
+          currentLineWidth += spaceW + wordW;
+        } else {
+          lines.push(currentLine.join(' '));
+          currentLine = [word];
+          currentLineWidth = wordW;
+        }
+      }
+    }
+    if (currentLine.length > 0) lines.push(currentLine.join(' '));
+
+    if (lines.length > maxLinesAllowed) {
+      bestLines = lines.slice(0, maxLinesAllowed);
+      let lastLine = bestLines[maxLinesAllowed - 1] || '';
+      while (lastLine.length > 0 && getTextWidth(lastLine + '…', minFontSize, fontWeight) > availableWidth) {
+        lastLine = lastLine.slice(0, -1).trim();
+      }
+      bestLines[maxLinesAllowed - 1] = (lastLine ? lastLine : words[0].slice(0, 4)) + '…';
+    } else {
+      bestLines = lines;
+    }
+  }
+
+  // 4. Construct SVG Text Element
+  const textElement = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  textElement.setAttribute('class', 'djs-label');
+
+  const lineHeight = bestFontSize * lineRatio;
+  const totalBlockHeight = bestLines.length * lineHeight;
+
+  // Vertical center inside available box space (below topPadding)
+  const startY = topPadding + ((availableHeight - totalBlockHeight) / 2) + (lineHeight / 2);
+  const centerX = leftPadding + (availableWidth / 2);
+
+  textElement.style.fontFamily = fontFamily;
+  textElement.style.fontSize = `${bestFontSize}px`;
+  textElement.style.fontWeight = fontWeight;
+  textElement.style.whiteSpace = 'normal';
+  textElement.style.wordBreak = 'normal';
+  textElement.style.overflowWrap = 'break-word';
+  textElement.style.textAnchor = 'middle';
+
+  if (style.fill) {
+    textElement.style.fill = style.fill;
+  }
+
+  for (let l = 0; l < bestLines.length; l++) {
+    const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+    tspan.setAttribute('x', String(centerX));
+    tspan.setAttribute('y', String(startY + (l * lineHeight)));
+    tspan.setAttribute('text-anchor', 'middle');
+    tspan.setAttribute('dominant-baseline', 'central');
+    tspan.textContent = bestLines[l];
+    textElement.appendChild(tspan);
+  }
+
+  return textElement as unknown as SVGElement;
+}
+
 export default function BPMNModeler({ 
   mapping, 
   onUpdateMapping, 
@@ -307,44 +531,78 @@ export default function BPMNModeler({
       }
     });
 
-    // Intercept drawShape on bpmnRenderer to prevent text from overlapping top-left icons
+    // Intercept drawShape on bpmnRenderer for Auto-Fit Text rendering
     try {
       const bpmnRenderer = modeler.get('bpmnRenderer') as any;
       const textRenderer = modeler.get('textRenderer') as any;
+      const eventBus = modeler.get('eventBus') as any;
+
+      if (eventBus) {
+        eventBus.on('directEditing.activate', (e: any) => {
+          const active = e && e.active;
+          if (!active) return;
+          const element = active.element;
+          const typedTaskTypes = [
+            'bpmn:UserTask',
+            'bpmn:ServiceTask',
+            'bpmn:SendTask',
+            'bpmn:ReceiveTask',
+            'bpmn:ManualTask',
+            'bpmn:ScriptTask',
+            'bpmn:BusinessRuleTask',
+            'bpmn:CallActivity'
+          ];
+          const isTypedTask = element && typedTaskTypes.includes(element.type);
+
+          setTimeout(() => {
+            const contentEl = document.querySelector('.djs-direct-editing-content') as HTMLElement;
+            const parentEl = document.querySelector('.djs-direct-editing-parent') as HTMLElement;
+            if (parentEl) {
+              parentEl.style.boxSizing = 'border-box';
+              parentEl.style.overflow = 'hidden';
+              parentEl.style.borderRadius = '8px';
+              parentEl.style.backgroundColor = 'transparent';
+            }
+            if (contentEl) {
+              contentEl.style.boxSizing = 'border-box';
+              contentEl.style.width = '100%';
+              contentEl.style.maxWidth = '100%';
+              contentEl.style.height = '100%';
+              contentEl.style.maxHeight = '100%';
+              contentEl.style.paddingTop = isTypedTask ? '24px' : '6px';
+              contentEl.style.paddingBottom = '6px';
+              contentEl.style.paddingLeft = '6px';
+              contentEl.style.paddingRight = '6px';
+              contentEl.style.textAlign = 'center';
+              contentEl.style.whiteSpace = 'pre-wrap';
+              contentEl.style.wordBreak = 'normal';
+              contentEl.style.overflowWrap = 'break-word';
+              contentEl.style.hyphens = 'none';
+              contentEl.style.overflow = 'hidden';
+              contentEl.style.outline = 'none';
+              contentEl.style.lineHeight = '1.25';
+            }
+          }, 0);
+        });
+      }
 
       if (bpmnRenderer && textRenderer) {
         const origDrawShape = bpmnRenderer.drawShape.bind(bpmnRenderer);
-        const typedTaskTypes = [
-          'bpmn:UserTask',
-          'bpmn:ServiceTask',
-          'bpmn:SendTask',
-          'bpmn:ReceiveTask',
-          'bpmn:ManualTask',
-          'bpmn:ScriptTask',
-          'bpmn:BusinessRuleTask',
-          'bpmn:CallActivity'
-        ];
 
-        bpmnRenderer.drawShape = function(parentGfx: any, element: any) {
-          if (element && typedTaskTypes.includes(element.type)) {
-            const origCreateText = textRenderer.createText;
-            textRenderer.createText = function(text: string, options: any) {
-              if (options && (options.align === 'center-middle' || !options.align)) {
-                options = {
-                  ...options,
-                  align: 'center-top',
-                  padding: { top: 26, left: 6, right: 6, bottom: 4 }
-                };
-              }
-              return origCreateText.call(textRenderer, text, options);
+        bpmnRenderer.drawShape = function(parentGfx: any, element: any, attrs: any) {
+          const origCreateText = textRenderer.createText;
+          textRenderer.createText = function(text: string, options: any) {
+            options = {
+              ...options,
+              element: element
             };
-            try {
-              return origDrawShape(parentGfx, element);
-            } finally {
-              textRenderer.createText = origCreateText;
-            }
+            return createAutoFitText(text, options, origCreateText.bind(textRenderer));
+          };
+          try {
+            return origDrawShape(parentGfx, element, attrs);
+          } finally {
+            textRenderer.createText = origCreateText;
           }
-          return origDrawShape(parentGfx, element);
         };
       }
     } catch (err) {
@@ -1296,7 +1554,50 @@ export default function BPMNModeler({
            Actually, if the user sets a color, it's usually applied to the 'rect' or 'circle' inside the 'djs-visual'.
         */
 
-        [data-theme="dark"] .djs-label {
+        .djs-label, .djs-label tspan {
+          font-family: 'Inter', 'Outfit', system-ui, -apple-system, sans-serif !important;
+          white-space: normal !important;
+          word-break: normal !important;
+          overflow-wrap: break-word !important;
+          hyphens: none !important;
+        }
+
+        /* Direct editing contenteditable container */
+        .djs-direct-editing-parent {
+          box-sizing: border-box !important;
+          overflow: hidden !important;
+          border-radius: 8px !important;
+          background-color: transparent !important;
+        }
+
+        .djs-direct-editing-content {
+          box-sizing: border-box !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          height: 100% !important;
+          max-height: 100% !important;
+          text-align: center !important;
+          white-space: pre-wrap !important;
+          word-break: normal !important;
+          overflow-wrap: break-word !important;
+          hyphens: none !important;
+          overflow: hidden !important;
+          outline: none !important;
+          line-height: 1.25 !important;
+          display: block !important;
+        }
+
+        [data-theme="dark"] .djs-direct-editing-content {
+          color: #f8fafc !important;
+        }
+
+        [data-theme="light"] .djs-direct-editing-content,
+        :root:not([data-theme="dark"]) .djs-direct-editing-content {
+          color: #0f172a !important;
+        }
+
+        [data-theme="dark"] .djs-label,
+        [data-theme="dark"] .djs-label tspan {
           fill: #e2e8f0 !important;
         }
         [data-theme="dark"] .djs-connection path {

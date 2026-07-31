@@ -249,6 +249,14 @@ export default function App() {
     selectedProjectIdRef.current = selectedProjectId;
   }, [selectedProjectId]);
 
+  // Garantir que ao trocar de tela ou selecionar um projeto, o scroll resete sempre para o topo
+  useEffect(() => {
+    if ('scrollRestoration' in window.history) {
+      window.history.scrollRestoration = 'manual';
+    }
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
+  }, [activeView, selectedProjectId]);
+
   const handleNavigation = (action: () => void) => {
     if (hasChanges) {
       setPendingNavigationAction(() => action);
@@ -1155,7 +1163,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
     sessionStorage.setItem('kanban_filter_search', searchTerm);
   }, [searchTerm]);
 
-  // Scroll to targeted project card if arriving from a notification, or restore scroll position
+  // Scroll to targeted project card if arriving from a notification, or reset scroll position to top
   useEffect(() => {
     if (targetProjectId) {
       setSearchTerm('');
@@ -1174,18 +1182,11 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
       }, 300);
       return () => clearTimeout(timer);
     } else {
-      const savedScroll = sessionStorage.getItem('kanban_scroll_y');
-      if (savedScroll) {
-        const timer = setTimeout(() => {
-          window.scrollTo({ top: Number(savedScroll), behavior: 'instant' as ScrollBehavior });
-        }, 100);
-        return () => clearTimeout(timer);
-      }
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' as ScrollBehavior });
     }
   }, [targetProjectId]);
 
   const handleCardClick = (id: string) => {
-    sessionStorage.setItem('kanban_scroll_y', window.scrollY.toString());
     onProjectClick(id);
   };
 

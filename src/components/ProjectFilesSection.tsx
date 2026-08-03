@@ -14,6 +14,7 @@ import { format } from 'date-fns';
 import { Project, ProjectFile } from '../types';
 import { db, collection, query, where, onSnapshot, addDoc, doc, updateDoc, deleteDoc, handleFirestoreError, OperationType, auth } from '../firebase';
 import { cn } from '../lib/utils';
+import { logUserActivity } from '../lib/activityLogger';
 
 // Propriedades recebidas pelo componente de lista de anexos do projeto (ProjectFilesSection)
 interface ProjectFilesSectionProps {
@@ -134,6 +135,18 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
 
         // Grava histórico de anexo na tabela projectFiles
         await addDoc(collection(db, 'projectFiles'), fileMetadata);
+        
+        logUserActivity({
+          userId: auth.currentUser?.uid || '',
+          userName: auth.currentUser?.displayName || 'Usuário',
+          userEmail: auth.currentUser?.email || '',
+          actionType: 'file_upload',
+          actionName: 'Upload de Anexo',
+          details: `Enviou o anexo '${fileMetadata.fileName}' para o card`,
+          entityId: fileMetadata.fileId,
+          entityName: fileMetadata.fileName
+        });
+
         successCount++;
       } catch (error: any) {
         console.error(`Falha ao salvar anexo ${selectedFile.name} no Drive:`, error);

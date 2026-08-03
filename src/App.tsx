@@ -97,6 +97,8 @@ import OperationalActionsTab from './components/OperationalActionsTab';
 import ReportsTab from './components/ReportsTab';
 import ProjectFilesSection from './components/ProjectFilesSection';
 import NotificationBell from './components/NotificationBell';
+import UserActivityMonitoringTab from './components/UserActivityMonitoringTab';
+import { logUserActivity } from './lib/activityLogger';
 import { notifyProjectChanges, notifySubtaskChanges } from './lib/notificationService';
 import { calculateProjectProgress, calculateProjectStatus, calculateSubtaskStatus, getCardProgress, hasPendingSubtasksOrPDCA } from './lib/projectUtils';
 import { calculateActionAlert } from './utils/calculations';
@@ -292,6 +294,16 @@ export default function App() {
         // Reset view when logging in but respect mode if already selected
         setActiveView('home');
         setSelectedProjectId(null);
+
+        // Registra o log de acesso/login do usuário
+        logUserActivity({
+          userId: firebaseUser.uid,
+          userName: firebaseUser.displayName || firebaseUser.email || 'Usuário',
+          userEmail: firebaseUser.email || '',
+          actionType: 'login',
+          actionName: 'Acesso ao sistema',
+          details: 'Sessão iniciada na plataforma'
+        });
       }
     });
     return () => unsubscribe();
@@ -473,6 +485,19 @@ export default function App() {
       const projectRef = doc(db, 'projects', finalProject.id);
       await setDoc(projectRef, cleanObject(finalProject));
 
+      if (isManual) {
+        logUserActivity({
+          userId: auth.currentUser?.uid || 'user',
+          userName: auth.currentUser?.displayName || currentUserProfile?.name || 'Usuário',
+          userEmail: auth.currentUser?.email || currentUserProfile?.email || '',
+          actionType: 'project_update',
+          actionName: 'Salvar Alterações do Card',
+          details: `Salvou as alterações no card '${finalProject.name}'`,
+          entityId: finalProject.id,
+          entityName: finalProject.name
+        });
+      }
+
       // Trigger notifications for card and subtasks
       notifyProjectChanges(oldProject, finalProject, auth.currentUser?.uid);
       const oldSubtasks = oldProject?.subtasks || [];
@@ -608,6 +633,17 @@ export default function App() {
       console.log("⏳ Criando novo projeto no Firestore:", newId);
       await setDoc(doc(db, 'projects', newId), cleanObject(newProject));
       notifyProjectChanges(null, newProject, auth.currentUser?.uid);
+
+      logUserActivity({
+        userId: auth.currentUser?.uid || user.uid,
+        userName: auth.currentUser?.displayName || user.displayName || user.name || 'Usuário',
+        userEmail: auth.currentUser?.email || user.email || '',
+        actionType: 'project_create',
+        actionName: 'Criação de projeto',
+        details: `Criou o projeto '${data.name}'`,
+        entityId: newId,
+        entityName: data.name
+      });
       
       // Atualização otimista do estado local para exibição imediata
       setProjects(prev => {
@@ -3495,7 +3531,10 @@ function SettingsView({ users, globalConfig, projects, actions }: {
 
   // Determine permitted menu items
   const menuItems = [
-    ...(profile === 'Usuário Master' ? [{ id: 'cadastros', label: 'Cadastros', icon: <Users size={18} /> }] : []),
+    ...(profile === 'Usuário Master' ? [
+      { id: 'cadastros', label: 'Cadastros', icon: <Users size={18} /> },
+      { id: 'monitoramento', label: 'Monitoramento de Usuários', icon: <Activity size={18} /> }
+    ] : []),
     ...(profile !== 'Usuário Visualizador' ? [
       { 
         id: 'setores-ferramentas', 
@@ -3506,13 +3545,13 @@ function SettingsView({ users, globalConfig, projects, actions }: {
     ] : []),
     { id: 'relatorios', label: 'Relatórios', icon: <FileText size={18} /> },
     { id: 'alterar-senha', label: 'Alterar Senha', icon: <Lock size={18} /> }
-  ] as const;
+  ];
 
   const defaultSubTab = profile === 'Usuário Visualizador' 
     ? 'relatorios' 
     : (profile === 'Usuário Analista' ? 'setores-ferramentas' : 'cadastros');
 
-  const [activeSubTab, setActiveSubTab] = useState<'cadastros' | 'setores-ferramentas' | 'relatorios' | 'ganhos' | 'alterar-senha'>(defaultSubTab);
+  const [activeSubTab, setActiveSubTab] = useState<string>(defaultSubTab);
 
   useEffect(() => {
     setActiveSubTab(defaultSubTab);
@@ -3568,6 +3607,9 @@ function SettingsView({ users, globalConfig, projects, actions }: {
             className="flex-1 flex flex-col"
           >
             {activeSubTab === 'cadastros' && <UserRegistrationTab users={users} currentUser={users.find(u => u.id === auth.currentUser?.uid)} />}
+            {activeSubTab === 'monitoramento' && profile === 'Usuário Master' && (
+              <UserActivityMonitoringTab users={users} currentUser={currentUserProfile} />
+            )}
             {activeSubTab === 'setores-ferramentas' && <GlobalConfigTab config={globalConfig} />}
             {activeSubTab === 'ganhos' && <GainTypesTab config={globalConfig} />}
             {activeSubTab === 'relatorios' && (

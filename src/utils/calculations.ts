@@ -282,14 +282,15 @@ export function computeProjectItems(
 }
 
 /**
- * Filter computed items based on search query, selected statuses, selected responsibles, and selected sectors.
+ * Filter computed items based on search query, selected statuses, selected responsibles, selected sectors, and selected alert levels (criticality).
  */
 export function filterComputedData(
   items: ComputedProjectItem[],
   searchQuery: string,
   selectedStatuses: string[],
   selectedResponsibles: string[],
-  selectedSectors: string[]
+  selectedSectors: string[],
+  selectedAlerts: string[] = []
 ): ComputedProjectItem[] {
   return items.filter(item => {
     const matchSearch =
@@ -300,8 +301,20 @@ export function filterComputedData(
     const matchStatus = selectedStatuses.length === 0 || selectedStatuses.includes(item.status_visao_geral);
     const matchResponsible = selectedResponsibles.length === 0 || selectedResponsibles.includes(item.responsavel_atual);
     const matchSector = selectedSectors.length === 0 || selectedSectors.includes(item.setor_atual);
+    const matchAlert = selectedAlerts.length === 0 || selectedAlerts.some(alertFilter => {
+      if (alertFilter === 'Críticos' || alertFilter === 'Alto') {
+        return item.nivel_alerta === 'Crítico' || item.nivel_alerta === 'Muito crítico';
+      }
+      if (alertFilter === 'Médio') {
+        return item.nivel_alerta === 'Parado';
+      }
+      if (alertFilter === 'Baixo') {
+        return item.nivel_alerta === 'Normal';
+      }
+      return item.nivel_alerta === alertFilter;
+    });
 
-    return matchSearch && matchStatus && matchResponsible && matchSector;
+    return matchSearch && matchStatus && matchResponsible && matchSector && matchAlert;
   });
 }
 

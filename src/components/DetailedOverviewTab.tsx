@@ -63,6 +63,7 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedResponsibles, setSelectedResponsibles] = useState<string[]>([]);
   const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
+  const [selectedAlerts, setSelectedAlerts] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
   // Ordenação da tabela
@@ -92,24 +93,25 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
 
   // Aplicar filtros e busca
   const filteredData = useMemo(() => {
-    return filterComputedData(computedData, searchQuery, selectedStatuses, selectedResponsibles, selectedSectors);
-  }, [computedData, searchQuery, selectedStatuses, selectedResponsibles, selectedSectors]);
+    return filterComputedData(computedData, searchQuery, selectedStatuses, selectedResponsibles, selectedSectors, selectedAlerts);
+  }, [computedData, searchQuery, selectedStatuses, selectedResponsibles, selectedSectors, selectedAlerts]);
 
   // Aplicar ordenação
   const sortedData = useMemo(() => {
     return sortComputedData(filteredData, sortField, sortDirection);
   }, [filteredData, sortField, sortDirection]);
 
-  // 7.1 Indicadores detalhados do topo (Calculados sobre os dados gerais ativos)
+  // 7.1 Indicadores detalhados do topo (Calculados sobre os dados filtrados para consistência)
   const stats = useMemo(() => {
-    const total = computedData.length;
-    const emAndamento = computedData.filter(d => d.status_visao_geral !== 'Concluído' && d.status_visao_geral !== 'Planejamento').length;
-    const concluidos = computedData.filter(d => d.status_visao_geral === 'Concluído').length;
-    const parados = computedData.filter(d => d.nivel_alerta === 'Parado').length;
-    const criticos = computedData.filter(d => d.nivel_alerta === 'Crítico' || d.nivel_alerta === 'Muito crítico').length;
+    // TOTAL DE PROJETOS deve exibir exclusivamente a quantidade de projetos únicos (cards)
+    const totalProjetos = new Set(filteredData.map(d => d.projectId)).size;
+    const emAndamento = filteredData.filter(d => d.status_visao_geral !== 'Concluído' && d.status_visao_geral !== 'Planejamento').length;
+    const concluidos = filteredData.filter(d => d.status_visao_geral === 'Concluído').length;
+    const parados = filteredData.filter(d => d.nivel_alerta === 'Parado').length;
+    const criticos = filteredData.filter(d => d.nivel_alerta === 'Crítico' || d.nivel_alerta === 'Muito crítico').length;
 
-    return { total, emAndamento, concluidos, parados, criticos };
-  }, [computedData]);
+    return { totalProjetos, emAndamento, concluidos, parados, criticos };
+  }, [filteredData]);
 
   // Dados para gráficos (Agregados da base filtrada para refletir dinamismo visual ao usar os filtros)
   const chartsData = useMemo(() => {
@@ -210,7 +212,7 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
       const dataToExport = sortedData; 
 
       // metrics data
-      const total = dataToExport.length;
+      const totalProjetos = new Set(dataToExport.map(d => d.projectId)).size;
       const emAndamento = dataToExport.filter(d => d.status_visao_geral !== 'Concluído' && d.status_visao_geral !== 'Planejamento').length;
       const concluidos = dataToExport.filter(d => d.status_visao_geral === 'Concluído').length;
       const parados = dataToExport.filter(d => d.nivel_alerta === 'Parado').length;
@@ -273,13 +275,13 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
               body: [
                 [
                   { text: 'TOTAL PROJETOS', style: 'cardHeader', fillColor: '#4f46e5' },
-                  { text: 'EM ANDAMENTO', style: 'cardHeader', fillColor: '#3b82f6' },
-                  { text: 'CONCLUÍDOS', style: 'cardHeader', fillColor: '#10b981' },
-                  { text: 'PARADOS', style: 'cardHeader', fillColor: '#f59e0b' },
-                  { text: 'CRÍTICOS', style: 'cardHeader', fillColor: '#ef4444' }
+                  { text: 'ETAPAS EM ANDAMENTO', style: 'cardHeader', fillColor: '#3b82f6' },
+                  { text: 'ETAPAS CONCLUÍDAS', style: 'cardHeader', fillColor: '#10b981' },
+                  { text: 'ETAPAS PARADAS', style: 'cardHeader', fillColor: '#f59e0b' },
+                  { text: 'ETAPAS SEM ANDAMENTO (CRÍTICOS)', style: 'cardHeader', fillColor: '#ef4444' }
                 ],
                 [
-                  { text: total.toString(), style: 'cardVal' },
+                  { text: totalProjetos.toString(), style: 'cardVal' },
                   { text: emAndamento.toString(), style: 'cardVal' },
                   { text: concluidos.toString(), style: 'cardVal' },
                   { text: parados.toString(), style: 'cardVal' },
@@ -439,8 +441,8 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
               <Briefcase size={20} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">Total Projetos</p>
-              <h4 className="text-2xl font-black text-theme-foreground leading-none mt-1">{stats.total}</h4>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">Total de Projetos</p>
+              <h4 className="text-2xl font-black text-theme-foreground leading-none mt-1">{stats.totalProjetos}</h4>
             </div>
           </div>
         </div>
@@ -451,7 +453,7 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
               <Clock size={20} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">Em Andamento</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">Etapas em andamento</p>
               <h4 className="text-2xl font-black text-theme-foreground leading-none mt-1">{stats.emAndamento}</h4>
             </div>
           </div>
@@ -463,7 +465,7 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
               <CheckCircle2 size={20} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">Concluídos</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">Etapas concluídas</p>
               <h4 className="text-2xl font-black text-theme-foreground leading-none mt-1">{stats.concluidos}</h4>
             </div>
           </div>
@@ -475,7 +477,7 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
               <AlertTriangle size={20} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">Projetos Parados</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">Etapas paradas</p>
               <h4 className="text-2xl font-black text-amber-500 leading-none mt-1">{stats.parados}</h4>
             </div>
           </div>
@@ -487,7 +489,7 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
               <AlertTriangle size={20} />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">Projetos Críticos</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">Etapas sem andamento (Críticos)</p>
               <h4 className="text-2xl font-black text-rose-500 leading-none mt-1">{stats.criticos}</h4>
             </div>
           </div>
@@ -502,18 +504,19 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
             <span className="text-xs font-black uppercase tracking-widest">Painel de filtros</span>
           </div>
           <div className="flex items-center gap-3">
-            {(selectedStatuses.length > 0 || selectedResponsibles.length > 0 || selectedSectors.length > 0 || searchQuery !== '') && (
+            {(selectedStatuses.length > 0 || selectedResponsibles.length > 0 || selectedSectors.length > 0 || selectedAlerts.length > 0 || searchQuery !== '') && (
               <button 
                 onClick={() => {
                   setSelectedStatuses([]);
                   setSelectedResponsibles([]);
                   setSelectedSectors([]);
+                  setSelectedAlerts([]);
                   setSearchQuery('');
                 }}
                 className="text-xs text-rose-500 hover:text-rose-400 font-bold flex items-center gap-1 transition-colors self-start animate-in fade-in"
               >
                 <X size={14} />
-                Limpar Filtros ({selectedStatuses.length + selectedResponsibles.length + selectedSectors.length + (searchQuery ? 1 : 0)})
+                Limpar Filtros ({selectedStatuses.length + selectedResponsibles.length + selectedSectors.length + selectedAlerts.length + (searchQuery ? 1 : 0)})
               </button>
             )}
             <button
@@ -527,7 +530,7 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {/* Busca por texto */}
           <div className="space-y-1.5 relative">
             <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Pesquisar</label>
@@ -542,6 +545,23 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
               />
             </div>
           </div>
+
+          {/* Filtro Criticidade (Alertas) */}
+          <FilterDropdown
+            label="Criticidade (Alerta)"
+            placeholder="Escolher criticidade"
+            options={[
+              { id: 'Muito crítico', label: 'Muito crítico (Crítico)' },
+              { id: 'Crítico', label: 'Crítico (Alto)' },
+              { id: 'Parado', label: 'Parado (Médio)' },
+              { id: 'Normal', label: 'Normal (Baixo)' },
+              { id: 'Finalizado', label: 'Finalizado' }
+            ]}
+            selected={selectedAlerts}
+            onToggle={(id) => toggleFilter(selectedAlerts, id, setSelectedAlerts)}
+            onClear={() => setSelectedAlerts([])}
+            icon={<AlertTriangle size={16} />}
+          />
 
           {/* Filtro Status */}
           <FilterDropdown

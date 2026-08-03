@@ -235,12 +235,11 @@ export default function PDCAEditor({
     if (!activeCycle) return false;
     return activeCycle.plan.actionPlan.some((item) => {
       const hasMonitoring = !!item.monitoringTool?.trim();
-      const hasEvidence = !!item.evidence?.trim();
       const hasWorked = !!item.worked;
       const hasFailureReason =
         item.worked === "Sim" || !item.worked || !!item.failureReason?.trim();
 
-      return hasMonitoring && hasEvidence && hasWorked && hasFailureReason;
+      return hasMonitoring && hasWorked && hasFailureReason;
     });
   }, [activeCycle]);
 
@@ -278,7 +277,6 @@ export default function PDCAEditor({
         // CHECK progress
         const isCheckDone =
           !!item.monitoringTool?.trim() &&
-          !!item.evidence?.trim() &&
           !!item.worked &&
           (item.worked === "Sim" || !!item.failureReason?.trim());
         if (isCheckDone) {
@@ -733,9 +731,8 @@ export default function PDCAEditor({
       "DO - Data de Conclusão",
       "CHECK - Modo Acompanhamento",
       "CHECK - Período",
-      "CHECK - Como Acompanha",
+      "CHECK - Observações do período de acompanhamento",
       "CHECK - Funcionou",
-      "CHECK - Link evidência do acompanhamento",
       "CHECK - Ganho real obtido",
       "ACT - Status Final",
       "ACT - Ação Final",
@@ -781,7 +778,6 @@ export default function PDCAEditor({
             item.monitoringPeriod || "",
             item.monitoringTool || "",
             item.worked || "",
-            item.evidence || "",
             formatRealGainsStr(item.realGains),
             item.finalProblemStatus || "",
             item.finalAction || "",
@@ -5713,14 +5709,13 @@ export default function PDCAEditor({
                                               />
                                             </div>
 
-                                            {/* Linha 2 */}
-                                            <div className="space-y-1">
+                                            {/* Linha 2 - Observações do acompanhamento (Texto livre) */}
+                                            <div className="space-y-1 md:col-span-2">
                                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
-                                                Como está sendo feito o
-                                                acompanhamento?
+                                                Observações do período de acompanhamento
                                               </label>
-                                              <input
-                                                type="text"
+                                              <textarea
+                                                rows={3}
                                                 value={
                                                   item.monitoringTool || ""
                                                 }
@@ -5730,41 +5725,9 @@ export default function PDCAEditor({
                                                       e.target.value,
                                                   })
                                                 }
-                                                placeholder="Ex: Power BI, Excel, E-mail, WhatsApp..."
-                                                className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                                placeholder="Descreva livremente como está sendo feito o acompanhamento, observações ou notas do período..."
+                                                className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all resize-y"
                                               />
-                                            </div>
-                                            <div className="space-y-1">
-                                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
-                                                Link evidência do acompanhamento
-                                              </label>
-                                              <div className="space-y-2">
-                                                <input
-                                                  type="text"
-                                                  value={item.evidence || ""}
-                                                  onChange={(e) =>
-                                                    updateActionPlan(item.id, {
-                                                      evidence: e.target.value,
-                                                    })
-                                                  }
-                                                  placeholder="Link das evidências..."
-                                                  className="w-full bg-slate-100 px-4 py-3 rounded-xl text-xs font-bold outline-none border-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                                                />
-                                                {item.evidence &&
-                                                  isValidUrl(item.evidence) && (
-                                                    <a
-                                                      href={formatUrl(
-                                                        item.evidence,
-                                                      )}
-                                                      target="_blank"
-                                                      rel="noopener noreferrer"
-                                                      className="inline-flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-700 transition-colors ml-1"
-                                                    >
-                                                      <ExternalLink size={14} />
-                                                      Abrir link
-                                                    </a>
-                                                  )}
-                                              </div>
                                             </div>
 
                                             {/* Linha 3 */}
@@ -5896,7 +5859,6 @@ export default function PDCAEditor({
                                             {(() => {
                                               const isItemValid =
                                                 !!item.monitoringTool?.trim() &&
-                                                !!item.evidence?.trim() &&
                                                 !!item.worked &&
                                                 (item.worked === "Sim" ||
                                                   !!item.failureReason?.trim());
@@ -5906,7 +5868,7 @@ export default function PDCAEditor({
                                                     e.stopPropagation();
                                                     if (!isItemValid) {
                                                       setSaveFeedback(
-                                                        "Preencha todos os campos obrigatórios (Verificação, Evidência e Resultado) antes de avançar.",
+                                                        "Preencha todos os campos obrigatórios (Observações do Acompanhamento e Resultado) antes de avançar.",
                                                       );
                                                       setShowValidationErrors(
                                                         true,
@@ -6002,7 +5964,6 @@ export default function PDCAEditor({
                               const isExpanded = expandedActionId === item.id;
                               const isCheckDone =
                                 !!item.monitoringTool?.trim() &&
-                                !!item.evidence?.trim() &&
                                 !!item.worked &&
                                 (item.worked === "Sim" ||
                                   !!item.failureReason?.trim());
@@ -6724,12 +6685,11 @@ export default function PDCAEditor({
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-[10px]">
                                       <div>
                                         <p className="font-black text-slate-400 uppercase">
-                                          Acompanhamento
+                                          Observações do Acompanhamento
                                         </p>
-                                        <p className="font-bold text-slate-600">
-                                          {item.monitoringPeriod}{" "}
-                                          {item.monitoringMode} via{" "}
-                                          {item.monitoringTool}
+                                        <p className="font-bold text-slate-600 whitespace-pre-wrap">
+                                          {item.monitoringPeriod && item.monitoringMode ? `${item.monitoringPeriod} ${item.monitoringMode}` : ''}
+                                          {item.monitoringTool ? (item.monitoringPeriod ? ` – ${item.monitoringTool}` : item.monitoringTool) : '---'}
                                         </p>
                                       </div>
                                       <div>
@@ -6787,10 +6747,6 @@ export default function PDCAEditor({
                                         })()}
                                       </div>
                                     </div>
-                                    <ReportField
-                                      label="Link evidência do acompanhamento"
-                                      value={item.evidence || "N/A"}
-                                    />
                                   </div>
                                 ))}
                             </div>
@@ -7005,7 +6961,6 @@ export default function PDCAEditor({
       if (item) {
         const isCheckDone =
           !!item.monitoringTool?.trim() &&
-          !!item.evidence?.trim() &&
           !!item.worked &&
           (item.worked === "Sim" || !!item.failureReason?.trim());
         if (!isCheckDone) {
@@ -7033,7 +6988,6 @@ export default function PDCAEditor({
     // Auto-transition from CHECK to ACT when all check fields are filled
     const isCheckDone =
       !!newItem.monitoringTool?.trim() &&
-      !!newItem.evidence?.trim() &&
       !!newItem.worked &&
       (newItem.worked === "Sim" || !!newItem.failureReason?.trim());
     if (isCheckDone && newItem.currentPhase === "CHECK") {
@@ -7102,7 +7056,6 @@ export default function PDCAEditor({
         p += 25;
         const isCheckDone =
           !!item.monitoringTool?.trim() &&
-          !!item.evidence?.trim() &&
           !!item.worked &&
           (item.worked === "Sim" || !!item.failureReason?.trim());
         if (isCheckDone) {

@@ -761,11 +761,16 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
+    
+    // Serve static files for root, /pdca and any configured public subpath
     if (publicSubpath) {
       app.use(publicSubpath, express.static(distPath));
     }
+    app.use("/pdca", express.static(distPath));
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
+
+    // Handle SPA fallback for subpaths and root
+    app.get(["/pdca", "/pdca/*", "*"], (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

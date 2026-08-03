@@ -1,5 +1,6 @@
 // NoSQL & Local Auth Compatibility Layer (Replaces Firebase)
 import { cn } from './lib/utils';
+import { getApiUrl } from './utils/apiUrl';
 
 // Check if this window was opened as a Google OAuth callback popup
 if (typeof window !== 'undefined' && window.location.hash && window.opener) {
@@ -358,15 +359,22 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
           submitBtn.textContent = 'Verificando...';
 
           try {
-            const res = await fetch('/api/auth/check-user', {
+            const res = await fetch(getApiUrl('/api/auth/check-user'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email: emailVal })
             });
 
             if (!res.ok) {
-              const errBody = await res.json();
-              throw new Error(errBody.error || 'Erro ao conectar com o servidor.');
+              let errMsg = 'Erro ao conectar com o servidor.';
+              try {
+                const contentType = res.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                  const errBody = await res.json();
+                  if (errBody?.error) errMsg = errBody.error;
+                }
+              } catch (e) {}
+              throw new Error(errMsg);
             }
 
             const data = await res.json();
@@ -394,15 +402,22 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
           submitBtn.textContent = 'Autenticando...';
 
           try {
-            const res = await fetch('/api/auth/login', {
+            const res = await fetch(getApiUrl('/api/auth/login'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email: emailVal, password: passwordVal })
             });
 
             if (!res.ok) {
-              const errBody = await res.json();
-              throw new Error(errBody.error || 'Senha incorreta ou erro no login.');
+              let errMsg = 'Senha incorreta ou erro no login.';
+              try {
+                const contentType = res.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                  const errBody = await res.json();
+                  if (errBody?.error) errMsg = errBody.error;
+                }
+              } catch (e) {}
+              throw new Error(errMsg);
             }
 
             const data = await res.json();
@@ -455,15 +470,22 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
           submitBtn.textContent = 'Registrando senha...';
 
           try {
-            const res = await fetch('/api/auth/register-password', {
+            const res = await fetch(getApiUrl('/api/auth/register-password'), {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ userId: userIdVal, password: newPassword })
             });
 
             if (!res.ok) {
-              const errBody = await res.json();
-              throw new Error(errBody.error || 'Erro ao registrar senha.');
+              let errMsg = 'Erro ao registrar senha.';
+              try {
+                const contentType = res.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                  const errBody = await res.json();
+                  if (errBody?.error) errMsg = errBody.error;
+                }
+              } catch (e) {}
+              throw new Error(errMsg);
             }
 
             const data = await res.json();
@@ -571,7 +593,7 @@ export function orderBy(field: string, direction: 'asc' | 'desc' = 'asc') {
 
 // --- API FETCH & OPERATIONS ---
 
-const API_BASE = '/api/db';
+const API_BASE = getApiUrl('/api/db');
 
 function getAuthHeaders(extra: Record<string, string> = {}) {
   const headers: Record<string, string> = { ...extra };
@@ -587,12 +609,15 @@ function getAuthHeaders(extra: Record<string, string> = {}) {
 async function handleResponse(response: Response, defaultMessage: string) {
   if (!response.ok) {
     try {
-      const errBody = await response.json();
-      if (errBody?.error) {
-        throw new Error(errBody.error);
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const errBody = await response.json();
+        if (errBody?.error) {
+          throw new Error(errBody.error);
+        }
       }
     } catch (e: any) {
-      if (e.message && e.message !== 'Unexpected token < in JSON at position 0') {
+      if (e.message && !e.message.toLowerCase().includes('unexpected token')) {
         throw e;
       }
     }
@@ -850,7 +875,7 @@ function connectSync() {
     eventSource.close();
   }
 
-  const es = new EventSource('/api/db-sync');
+  const es = new EventSource(getApiUrl('/api/db-sync'));
   eventSource = es;
 
   es.onopen = () => {

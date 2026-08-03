@@ -24,6 +24,17 @@ async function startServer() {
 
   app.use(express.json());
 
+  // URL normalization middleware for subpath deployments (e.g., /pdca)
+  const configuredSubpath = (process.env.PUBLIC_URL || process.env.BASE_URL || "/pdca").replace(/\/$/, "");
+  app.use((req, res, next) => {
+    if (configuredSubpath && configuredSubpath !== "/" && req.url.startsWith(configuredSubpath)) {
+      req.url = req.url.substring(configuredSubpath.length) || "/";
+    } else if (req.url.startsWith("/pdca")) {
+      req.url = req.url.substring(5) || "/";
+    }
+    next();
+  });
+
   // MongoDB Connection Setup & In-Memory Fallback
   const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/pdca_system";
   let db: any = null;
@@ -750,9 +761,12 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development vs static production serving
-  const publicSubpath = (process.env.PUBLIC_URL || process.env.BASE_URL || "").replace(/\/$/, "");
+  // API 404 fallback - ensures unhandled API routes return JSON error instead of SPA HTML
+  app.use("/api", (req, res) => {
+    res.status(404).json({ error: "Endpoint de API não encontrado." });
+  });
 
+  // Vite middleware for development vs static production serving
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -762,15 +776,9 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     
-    // Serve static files for root, /pdca and any configured public subpath
-    if (publicSubpath) {
-      app.use(publicSubpath, express.static(distPath));
-    }
-    app.use("/pdca", express.static(distPath));
     app.use(express.static(distPath));
 
-    // Handle SPA fallback for subpaths and root
-    app.get(["/pdca", "/pdca/*", "*"], (req, res) => {
+    app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

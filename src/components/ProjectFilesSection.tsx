@@ -15,6 +15,7 @@ import { Project, ProjectFile } from '../types';
 import { db, collection, query, where, onSnapshot, addDoc, doc, updateDoc, deleteDoc, handleFirestoreError, OperationType, auth } from '../firebase';
 import { cn } from '../lib/utils';
 import { logUserActivity } from '../lib/activityLogger';
+import { getApiUrl } from '../utils/apiUrl';
 
 // Propriedades recebidas pelo componente de lista de anexos do projeto (ProjectFilesSection)
 interface ProjectFilesSectionProps {
@@ -100,7 +101,7 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
           headers['x-user-uid'] = auth.currentUser.uid;
         }
 
-        const response = await fetch('/api/drive/upload', {
+        const response = await fetch(getApiUrl('/api/drive/upload'), {
           method: 'POST',
           headers,
           body: formData,

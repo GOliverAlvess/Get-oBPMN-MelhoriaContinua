@@ -750,7 +750,9 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
+  // Vite middleware for development vs static production serving
+  const publicSubpath = (process.env.PUBLIC_URL || process.env.BASE_URL || "").replace(/\/$/, "");
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -759,6 +761,9 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
+    if (publicSubpath) {
+      app.use(publicSubpath, express.static(distPath));
+    }
     app.use(express.static(distPath));
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));

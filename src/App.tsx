@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, Component, useRef } from 'react';
-import { getApiUrl } from './utils/apiUrl';
+import { getApiUrl, getAssetUrl } from './utils/apiUrl';
 import { 
   LayoutDashboard, 
   Plus, 
@@ -749,7 +749,7 @@ export default function App() {
             <div className="flex justify-center">
               <div className="p-4 bg-white rounded-2xl shadow-sm border border-slate-100/80">
                 <img 
-                  src="/assets/logo-gipflow.svg" 
+                  src={getAssetUrl('/assets/logo-gipflow.svg')} 
                   alt="GIP Flow" 
                   className="h-10 w-auto object-contain"
                   referrerPolicy="no-referrer"
@@ -865,7 +865,7 @@ export default function App() {
               <div className={cn("flex items-center overflow-hidden transition-all duration-300", isSidebarCollapsed ? "w-0 opacity-0" : "w-auto opacity-100 min-w-0 flex-1")}>
                 <div className="w-auto h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-slate-100 p-1 flex-shrink-0 dark:bg-slate-100">
                   <img 
-                    src="/assets/logo-gipflow.svg" 
+                    src={getAssetUrl('/assets/logo-gipflow.svg')} 
                     alt="Logo" 
                     style={{ height: '36px', width: 'auto', objectFit: 'contain' }}
                     referrerPolicy="no-referrer"
@@ -884,7 +884,7 @@ export default function App() {
             {isSidebarCollapsed && (
               <div className="w-auto h-10 bg-white rounded-xl flex items-center justify-center shadow-md border border-slate-100 p-1 shrink-0 dark:bg-slate-100">
                 <img 
-                  src="/assets/logo-gipflow.svg" 
+                  src={getAssetUrl('/assets/logo-gipflow.svg')} 
                   alt="Logo" 
                   style={{ height: '36px', width: 'auto', objectFit: 'contain' }}
                   referrerPolicy="no-referrer"
@@ -987,7 +987,7 @@ export default function App() {
                  <div className="flex flex-col items-center gap-6 md:gap-8 text-center animate-in fade-in zoom-in duration-700 w-full max-w-sm md:max-w-none">
                     <div className="bg-white p-6 md:p-10 rounded-[2rem] md:rounded-[2.5rem] shadow-2xl shadow-indigo-100/40 border border-slate-100 w-full max-w-[300px] md:max-w-none">
                        <img 
-                         src="/assets/logo-gipflow.svg" 
+                         src={getAssetUrl('/assets/logo-gipflow.svg')} 
                          alt="Logo" 
                          className="h-20 md:h-32 w-auto mx-auto object-contain"
                          referrerPolicy="no-referrer"
@@ -2932,7 +2932,7 @@ function ScopeTab({
           <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
             <div className="w-auto h-10 rounded-2xl bg-white border border-slate-100 p-1 flex items-center justify-center shadow-md">
               <img 
-                src="/assets/logo-gipflow.svg" 
+                src={getAssetUrl('/assets/logo-gipflow.svg')} 
                 alt="Logo" 
                 style={{ height: '36px', width: 'auto', objectFit: 'contain' }}
                 referrerPolicy="no-referrer"
@@ -3181,7 +3181,7 @@ function ScopeTab({
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-auto h-12 rounded-2xl bg-white border border-slate-100 p-2 flex items-center justify-center text-slate-300 shadow-sm">
                         <img 
-                          src="/assets/logo-gipflow.svg" 
+                          src={getAssetUrl('/assets/logo-gipflow.svg')} 
                           alt="Logo" 
                           style={{ height: '36px', width: 'auto', objectFit: 'contain', opacity: 0.5 }}
                           referrerPolicy="no-referrer"

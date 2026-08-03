@@ -16,3 +16,7 @@ export function getApiUrl(path: string): string {
   }
   return `${baseUrl}${cleanPath}`;
 }
+
+export function getAssetUrl(path: string): string {
+  return getApiUrl(path);
+}

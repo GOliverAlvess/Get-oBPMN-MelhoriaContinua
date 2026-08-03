@@ -1,5 +1,5 @@
 /**
- * Helper function to ensure API URLs properly include subpath prefix (e.g., /pdca/)
+ * Helper function to ensure API URLs properly include subpath prefix (e.g., /GIP/)
  * when deployed behind a reverse proxy in Docker/VPS.
  */
 export function getApiUrl(path: string): string {
@@ -8,12 +8,17 @@ export function getApiUrl(path: string): string {
   }
   const cleanPath = path.replace(/^\//, '');
   
-  // Check if current location has a subpath like /pdca
+  // Check if current location has a subpath like /GIP or /pdca
   let subpath = '';
   if (typeof window !== 'undefined') {
     const pathname = window.location.pathname;
-    if (pathname.startsWith('/pdca/') || pathname === '/pdca') {
-      subpath = '/pdca/';
+    const lowerPath = pathname.toLowerCase();
+    if (lowerPath.startsWith('/gip/') || lowerPath === '/gip') {
+      const match = pathname.match(/^\/([^/]+)/);
+      subpath = match ? `/${match[1]}/` : '/GIP/';
+    } else if (lowerPath.startsWith('/pdca/') || lowerPath === '/pdca') {
+      const match = pathname.match(/^\/([^/]+)/);
+      subpath = match ? `/${match[1]}/` : '/pdca/';
     }
   }
 

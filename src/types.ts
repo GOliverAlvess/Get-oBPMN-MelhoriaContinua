@@ -162,10 +162,10 @@ export interface ActionPlanItem {
   // -- CHECK (Monitoramento e Medição de Resultados) --
   monitoringMode?: 'Dias' | 'Semanas' | 'Meses'; // Periodicidade das verificações periódicas pós-entrega
   monitoringPeriod?: number; // Duração total do período do acompanhamento
-  monitoringTool?: string; // Ferramenta, painel ou indicador de verificação
+  monitoringTool?: string; // Observações do período de acompanhamento (texto livre)
   worked?: 'Sim' | 'Não' | 'Parcial'; // Resposta rápida indicando se a hipótese solucionou o desvio original
   failureReason?: string; // Justificativa de resultados parciais ou por que a ação não gerou o impacto esperado
-  evidence?: string; // Apontamento de evidências ou relatórios gerados
+  evidence?: string; // Obsoleto - antigo link de evidência
   realGains?: GainsStructure; // Estrutura contendo o levantamento quantitativo/qualitativo dos impactos aferidos
   
   // -- ACT (Ações Corretivas e Padronização de Processos) --
@@ -275,6 +275,35 @@ export interface User {
   password?: string; // Senha em texto puro (usada temporariamente no formulário)
   passwordHash?: string; // Hash seguro da senha de acesso
   lastPasswordChange?: string; // Data da última alteração de senha
+  lastAccess?: string; // Data e hora do último acesso ao sistema
+  loginCount?: number; // Total de acessos (logins) realizados
+  actionCount?: number; // Quantidade de ações/operações realizadas
+  totalUsageMinutes?: number; // Tempo total estimado de uso do sistema em minutos
+  status?: 'Ativo' | 'Inativo'; // Status de atividade recente do usuário
+}
+
+// Registro de log de auditoria e atividade de usuários
+export interface UserActivityLog {
+  id: string;
+  userId: string;
+  userName: string;
+  userEmail?: string;
+  actionType: 
+    | 'login' 
+    | 'project_create' 
+    | 'project_update' 
+    | 'project_move' 
+    | 'subtask_update' 
+    | 'pdca_update' 
+    | 'operational_action' 
+    | 'file_upload' 
+    | 'report_download' 
+    | 'settings_change';
+  actionName: string; // Nome descritivo (ex: "Login no sistema", "Criação de projeto")
+  details?: string; // Detalhes específicos (ex: "Criou o projeto 'Otimização de Linha A'")
+  entityId?: string; // ID da entidade associada (projeto, ação, arquivo)
+  entityName?: string; // Nome da entidade afetada
+  timestamp: string; // Data/hora do evento em formato ISO
 }
 
 export interface ActionFollowUpLog {

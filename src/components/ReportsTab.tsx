@@ -47,6 +47,7 @@ const formatGains = (gains: GainsStructure | undefined): string => {
 };
 import { cn, exportarCSVPadrao } from '../lib/utils';
 import { logFeature } from '../lib/changelogService';
+import { logUserActivity } from '../lib/activityLogger';
 import FilterDropdown from './FilterDropdown';
 
 const STATUS_MAP: Record<string, string> = {
@@ -300,9 +301,8 @@ const HEADERS_PDCA = [
   "DO - Data de Conclusão",
   "CHECK - Modo Acompanhamento",
   "CHECK - Período",
-  "CHECK - Como Acompanha",
+  "CHECK - Observações do período de acompanhamento",
   "CHECK - Funcionou",
-  "CHECK - Link evidência do acompanhamento",
   "CHECK - Ganho real obtido",
   "ACT - Status Final",
   "ACT - Ação Final",
@@ -1060,21 +1060,19 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                 checkItems.push({
                   table: {
                     headerRows: 1,
-                    widths: ['25%', '25%', '25%', '13%', '12%'],
+                    widths: ['30%', '35%', '20%', '15%'],
                     body: [
                       [
                         { text: 'AÇÃO', style: 'tableHeaderTiny' },
-                        { text: 'FERRAMENTA / COMO MONITORAR', style: 'tableHeaderTiny' },
+                        { text: 'OBSERVAÇÕES DO ACOMPANHAMENTO', style: 'tableHeaderTiny' },
                         { text: 'PERÍODO DE MONITORAMENTO', style: 'tableHeaderTiny' },
-                        { text: 'FUNCIONOU?', style: 'tableHeaderTiny' },
-                        { text: 'EVIDÊNCIA', style: 'tableHeaderTiny' }
+                        { text: 'FUNCIONOU?', style: 'tableHeaderTiny' }
                       ],
                       ...mappedActions.map((action: any) => [
                         { text: action.what || '---', style: 'tableCellTiny' },
                         { text: action.monitoringTool || '---', style: 'tableCellTiny' },
                         { text: action.monitoringMode && action.monitoringPeriod ? `${action.monitoringPeriod} ${translateMonitoringMode(action.monitoringMode)}` : '---', style: 'tableCellTiny' },
-                        { text: action.worked || 'Em análise', style: 'tableCellTiny', bold: true, color: action.worked === 'Sim' ? '#059669' : action.worked === 'Não' ? '#dc2626' : '#d97706' },
-                        { text: action.evidence || 'N/A', style: 'tableCellTiny' }
+                        { text: action.worked || 'Em análise', style: 'tableCellTiny', bold: true, color: action.worked === 'Sim' ? '#059669' : action.worked === 'Não' ? '#dc2626' : '#d97706' }
                       ])
                     ]
                   },
@@ -1280,6 +1278,15 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
             timestamp: new Date().toISOString(),
             reportType: 'Relatório Completo'
           });
+
+          logUserActivity({
+            userId: user.uid,
+            userName: user.displayName || user.email || 'Usuário',
+            userEmail: user.email || '',
+            actionType: 'report_download',
+            actionName: 'Geração de Relatório PDF',
+            details: 'Gerou o Relatório Completo em PDF'
+          });
         }
         
         setTimeout(() => setIsGenerating(false), 1000);
@@ -1355,9 +1362,8 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                       "DO - Data de Conclusão": formatCsvDate(action.endDate),
                       "CHECK - Modo Acompanhamento": action.monitoringMode || '',
                       "CHECK - Período": action.monitoringPeriod || '',
-                      "CHECK - Como Acompanha": action.monitoringTool || '',
+                      "CHECK - Observações do período de acompanhamento": action.monitoringTool || '',
                       "CHECK - Funcionou": action.worked || '',
-                      "CHECK - Link evidência do acompanhamento": action.evidence || '',
                       "CHECK - Ganho real obtido": formatRealGainsStr(action.realGains),
                       "ACT - Status Final": action.finalProblemStatus || '',
                       "ACT - Ação Final": action.finalAction || '',

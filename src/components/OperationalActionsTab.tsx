@@ -23,6 +23,7 @@ import { cn, exportarCSVPadrao, cleanObject } from '../lib/utils';
 import { db, setDoc, doc, deleteDoc, handleFirestoreError, OperationType, auth } from '../firebase';
 import { calculateActionAlert } from '../utils/calculations';
 import { logFeature, logMelhoria } from '../lib/changelogService';
+import { logUserActivity } from '../lib/activityLogger';
 
 interface OperationalActionsTabProps {
   actions: OperationalAction[];
@@ -347,6 +348,17 @@ export default function OperationalActionsTab({ actions, projects, users, target
         const finalAction = cleanObject({ ...action, ...finalUpdates });
         await setDoc(actionRef, finalAction);
         notifyActionChanges(action, finalAction, auth.currentUser?.uid);
+
+        logUserActivity({
+          userId: auth.currentUser?.uid || '',
+          userName: auth.currentUser?.displayName || auth.currentUser?.email || 'Usuário',
+          userEmail: auth.currentUser?.email || '',
+          actionType: 'operational_action',
+          actionName: 'Atualização de Ação Operacional',
+          details: `Atualizou a ação operacional '${finalAction.action}'`,
+          entityId: finalAction.id,
+          entityName: finalAction.action
+        });
         if (updatedHistory.length > (action.historicoTratativas?.length || 0)) {
           logFeature('Inclusão do histórico de interações nas ações', 'Ações', '💬');
         } else {
@@ -1033,6 +1045,17 @@ function CreateActionModal({ isOpen, onClose, projects, users }: { isOpen: boole
     try {
       await setDoc(doc(db, 'operationalActions', newAction.id), newAction);
       notifyActionChanges(null, newAction, auth.currentUser?.uid);
+
+      logUserActivity({
+        userId: auth.currentUser?.uid || '',
+        userName: auth.currentUser?.displayName || 'Usuário',
+        userEmail: auth.currentUser?.email || '',
+        actionType: 'operational_action',
+        actionName: 'Criação de Ação Operacional',
+        details: `Criou a ação operacional '${newAction.action}'`,
+        entityId: newAction.id,
+        entityName: newAction.action
+      });
       onClose();
       // Reset form
       setProjectId('');

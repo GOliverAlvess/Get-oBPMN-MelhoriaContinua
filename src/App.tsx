@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, Component, useRef } from 'react';
+import { getApiUrl } from './utils/apiUrl';
 import { 
   LayoutDashboard, 
   Plus, 
@@ -4797,7 +4798,7 @@ function ChangePasswordTab() {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/auth/change-password', {
+      const res = await fetch(getApiUrl('/api/auth/change-password'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -4808,8 +4809,15 @@ function ChangePasswordTab() {
       });
 
       if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Erro ao alterar a senha.');
+        let errMsg = 'Erro ao alterar a senha.';
+        try {
+          const contentType = res.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const errData = await res.json();
+            if (errData?.error) errMsg = errData.error;
+          }
+        } catch (e) {}
+        throw new Error(errMsg);
       }
 
       setSuccessMsg('Senha alterada com sucesso!');

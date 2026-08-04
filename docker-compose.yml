@@ -6,7 +6,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: gip-system-app
+    container_name: pdca-system-app
     restart: unless-stopped
     ports:
       - "3004:3004"

@@ -24,12 +24,14 @@ async function startServer() {
 
   app.use(express.json());
 
-  // URL normalization middleware for subpath deployments (e.g., /pdca)
-  const configuredSubpath = (process.env.PUBLIC_URL || process.env.BASE_URL || "/pdca").replace(/\/$/, "");
+  // URL normalization middleware for subpath deployments (e.g., /gip or /pdca)
+  const configuredSubpath = (process.env.PUBLIC_URL || process.env.BASE_URL || "/gip").replace(/\/$/, "");
   app.use((req, res, next) => {
     if (configuredSubpath && configuredSubpath !== "/" && req.url.startsWith(configuredSubpath)) {
       req.url = req.url.substring(configuredSubpath.length) || "/";
-    } else if (req.url.startsWith("/pdca")) {
+    } else if (req.url.toLowerCase().startsWith("/gip")) {
+      req.url = req.url.substring(4) || "/";
+    } else if (req.url.toLowerCase().startsWith("/pdca")) {
       req.url = req.url.substring(5) || "/";
     }
     next();

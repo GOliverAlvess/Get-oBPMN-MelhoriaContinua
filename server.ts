@@ -24,8 +24,8 @@ async function startServer() {
 
   app.use(express.json());
 
-  // URL normalization middleware for subpath deployments (e.g., /GIP or /pdca)
-  const configuredSubpath = (process.env.PUBLIC_URL || process.env.BASE_URL || "/GIP").replace(/\/$/, "");
+  // URL normalization middleware for subpath deployments (e.g., /gip or /pdca)
+  const configuredSubpath = (process.env.PUBLIC_URL || process.env.BASE_URL || "/gip").replace(/\/$/, "");
   app.use((req, res, next) => {
     if (configuredSubpath && configuredSubpath !== "/" && req.url.startsWith(configuredSubpath)) {
       req.url = req.url.substring(configuredSubpath.length) || "/";

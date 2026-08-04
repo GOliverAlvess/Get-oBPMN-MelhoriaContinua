@@ -25,14 +25,19 @@ async function startServer() {
   app.use(express.json());
 
   // URL normalization middleware for subpath deployments (e.g., /gip or /pdca)
-  const configuredSubpath = (process.env.PUBLIC_URL || process.env.BASE_URL || "/gip").replace(/\/$/, "");
+  const configuredSubpath = (process.env.PUBLIC_URL || process.env.BASE_URL || "/gip").replace(/\/$/, "").toLowerCase();
   app.use((req, res, next) => {
-    if (configuredSubpath && configuredSubpath !== "/" && req.url.startsWith(configuredSubpath)) {
-      req.url = req.url.substring(configuredSubpath.length) || "/";
-    } else if (req.url.toLowerCase().startsWith("/gip")) {
-      req.url = req.url.substring(4) || "/";
-    } else if (req.url.toLowerCase().startsWith("/pdca")) {
-      req.url = req.url.substring(5) || "/";
+    const lowerUrl = req.url.toLowerCase();
+    const prefixes = Array.from(new Set([configuredSubpath, "/gip", "/pdca"])).filter(p => p && p !== "/");
+
+    for (const prefix of prefixes) {
+      if (lowerUrl === prefix) {
+        req.url = "/";
+        break;
+      } else if (lowerUrl.startsWith(prefix + "/")) {
+        req.url = req.url.substring(prefix.length);
+        break;
+      }
     }
     next();
   });
@@ -779,6 +784,11 @@ async function startServer() {
     const distPath = path.join(process.cwd(), "dist");
     
     app.use(express.static(distPath));
+
+    // Prevent missing static asset requests (e.g. /assets/*) from returning index.html
+    app.use(["/assets", "/*.js", "/*.css", "/*.svg", "/*.png", "/*.ico"], (req, res) => {
+      res.status(404).send("Arquivo não encontrado");
+    });
 
     app.get("*", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));

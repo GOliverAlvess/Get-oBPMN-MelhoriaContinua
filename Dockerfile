@@ -4,8 +4,8 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Accept build arguments and set environment variables for subpath configuration
-ARG PUBLIC_URL=/pdca
-ARG BASE_URL=/pdca
+ARG PUBLIC_URL=/gip
+ARG BASE_URL=/gip
 ENV PUBLIC_URL=${PUBLIC_URL}
 ENV BASE_URL=${BASE_URL}
 
@@ -29,8 +29,8 @@ WORKDIR /app
 # Set production environment
 ENV NODE_ENV=production
 ENV PORT=3004
-ENV PUBLIC_URL=/pdca
-ENV BASE_URL=/pdca
+ENV PUBLIC_URL=/gip
+ENV BASE_URL=/gip
 
 # Copy necessary package configurations
 COPY --from=builder /app/package.json ./package.json

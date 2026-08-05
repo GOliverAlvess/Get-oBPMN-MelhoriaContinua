@@ -22,7 +22,8 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3004;
 
-  app.use(express.json());
+  app.use(express.json({ limit: "100mb" }));
+  app.use(express.urlencoded({ limit: "100mb", extended: true }));
 
   // URL normalization middleware for subpath deployments (e.g., /gip or /pdca)
   const configuredSubpath = (process.env.PUBLIC_URL || process.env.BASE_URL || "/gip").replace(/\/$/, "").toLowerCase();
@@ -678,7 +679,41 @@ async function startServer() {
     return google.drive({ version: "v3", auth });
   };
 
-  const upload = multer({ storage: multer.memoryStorage() });
+  // Helper to determine correct MIME type based on file extension and fallback
+  const getMimeType = (fileName: string, defaultMime?: string): string => {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    const mimeMap: Record<string, string> = {
+      pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+      ppt: 'application/vnd.ms-powerpoint',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      doc: 'application/msword',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      xls: 'application/vnd.ms-excel',
+      pdf: 'application/pdf',
+      png: 'image/png',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      gif: 'image/gif',
+      svg: 'image/svg+xml',
+      txt: 'text/plain',
+      csv: 'text/csv',
+      zip: 'application/zip',
+      rar: 'application/x-rar-compressed',
+      '7z': 'application/x-7z-compressed',
+    };
+
+    if (ext && mimeMap[ext]) {
+      return mimeMap[ext];
+    }
+    return defaultMime && defaultMime !== 'application/octet-stream' && defaultMime !== 'application/x-zip-compressed'
+      ? defaultMime
+      : 'application/octet-stream';
+  };
+
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
+  });
 
   // API Routes
   app.post("/api/drive/upload", upload.single("file"), async (req: MulterRequest, res: Response) => {
@@ -695,8 +730,18 @@ async function startServer() {
       }
 
       if (!file || !projectId || !projectName) {
-        return res.status(400).json({ error: "Missing required fields" });
+        return res.status(400).json({ error: "Campos obrigatórios ausentes no upload de arquivo." });
       }
+
+      // Decode filename if received in latin1
+      let originalName = file.originalname;
+      try {
+        originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+      } catch (e) {
+        originalName = file.originalname;
+      }
+
+      const fileMimeType = getMimeType(originalName, file.mimetype);
 
       const drive = getDriveClient();
       const parentFolderId = process.env.GOOGLE_DRIVE_PARENT_FOLDER_ID || "0AFf6OFctpR_7Uk9PVA";
@@ -706,8 +751,9 @@ async function startServer() {
       // If no folder ID provided, search or create
       if (!currentFolderId || currentFolderId === "undefined" || currentFolderId === "null") {
         console.log(`Searching for folder for project: ${projectName}`);
+        const escapedProjectName = projectName.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
         const response = await drive.files.list({
-          q: `mimeType='application/vnd.google-apps.folder' and name='${projectName}' and '${parentFolderId}' in parents and trashed=false`,
+          q: `mimeType='application/vnd.google-apps.folder' and name='${escapedProjectName}' and '${parentFolderId}' in parents and trashed=false`,
           fields: "files(id, name)",
           spaces: "drive",
           supportsAllDrives: true,
@@ -738,12 +784,13 @@ async function startServer() {
 
       // Upload file to the folder
       const fileMetadata = {
-        name: file.originalname,
+        name: originalName,
         parents: [currentFolderId!],
+        mimeType: fileMimeType,
       };
 
       const media = {
-        mimeType: file.mimetype,
+        mimeType: fileMimeType,
         body: Readable.from(file.buffer),
       };
 
@@ -764,7 +811,8 @@ async function startServer() {
       });
     } catch (error: any) {
       console.error("Error in /api/drive/upload:", error);
-      res.status(500).json({ error: error.message });
+      const errorMessage = error?.response?.data?.error?.message || error.message || "Erro desconhecido durante upload no Google Drive.";
+      res.status(500).json({ error: errorMessage });
     }
   });
 

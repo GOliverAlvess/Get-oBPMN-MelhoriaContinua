@@ -108,8 +108,18 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
         });
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(errorData.error || `Falha ao processar o upload do arquivo ${selectedFile.name}`);
+          let errorMsg = `Falha ao processar o upload do arquivo ${selectedFile.name} (HTTP ${response.status})`;
+          try {
+            const errorData = await response.json();
+            if (errorData && errorData.error) {
+              errorMsg = errorData.error;
+            }
+          } catch (e) {
+            if (response.status === 413) {
+              errorMsg = `O arquivo ${selectedFile.name} excede o limite máximo permitido para upload (100 MB).`;
+            }
+          }
+          throw new Error(errorMsg);
         }
 
         const data = await response.json();

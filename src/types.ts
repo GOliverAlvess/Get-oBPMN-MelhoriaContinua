@@ -207,8 +207,32 @@ export interface PDCACycle {
       goal: number; // Meta quantitativa percentual de redução ou otimização focada
       expectedGains?: GainsStructure; // Benefícios colaterais diretos esperados pós-piloto
       improvementPercentage?: number; // Retorno estimado consolidado das métricas de melhoria
+
+      // Melhores estruturais aditivas na análise de Impacto
+      impactType?: 'Tangível' | 'Intangível' | 'Ambos';
+      tangibleFinancialLoss?: number; // Perda financeira estimada (R$)
+      tangibleWastedTime?: number; // Tempo desperdiçado (horas/mês)
+      tangibleRework?: number | string; // Retrabalho (horas ou %)
+      tangibleOtherCosts?: string; // Outros custos
+      intangibleCustomerImpact?: string; // Impacto no cliente
+      intangibleQualityImpact?: string; // Impacto na qualidade
+      intangibleRiskImpact?: string; // Impacto em risco
+      intangibleTeamImpact?: string; // Impacto na equipe
+      expectedCostReduction?: number; // Redução de custo estimada (R$)
+      expectedTimeGain?: number; // Ganho de tempo (horas/mês)
+      expectedIndicatorImprovement?: number; // Melhoria percentual de indicador (%)
+      expectedOtherGains?: string; // Outros ganhos
     };
     actionPlan: ActionPlanItem[]; // Listagem de ações formuladas para o combate das causas (Plano de Ação)
+  };
+  check?: { // Avaliação de vínculo e resultados consolidados na etapa CHECK
+    realResultType?: 'Tangível' | 'Intangível' | 'Ambos'; // Tipo de resultado obtido na prática
+    expectedGainAchieved?: 'Sim' | 'Parcial' | 'Não'; // Se o ganho esperado foi atingido
+    realCostReduction?: number; // Redução de custo real obtida (R$)
+    realTimeGain?: number; // Ganho de tempo real obtido (horas/mês)
+    realIndicatorResult?: number; // Resultado percentual obtido (%)
+    realIntangibleNotes?: string; // Detalhamento dos resultados intangíveis obtidos
+    realResultNotes?: string; // Observações e notas sobre os resultados
   };
 }
 

@@ -101,7 +101,7 @@ import ProjectFilesSection from './components/ProjectFilesSection';
 import NotificationBell from './components/NotificationBell';
 import UserActivityMonitoringTab from './components/UserActivityMonitoringTab';
 import { logUserActivity } from './lib/activityLogger';
-import { notifyProjectChanges, notifySubtaskChanges } from './lib/notificationService';
+import { notifyProjectChanges, notifySubtaskChanges, checkAndNotifyActionDeadlines } from './lib/notificationService';
 import { calculateProjectProgress, calculateProjectStatus, calculateSubtaskStatus, getCardProgress, hasPendingSubtasksOrPDCA } from './lib/projectUtils';
 import { calculateActionAlert } from './utils/calculations';
 
@@ -386,6 +386,26 @@ export default function App() {
     // Access validation and control is handled strictly during the login popup flow.
     // This blocks automatic creation of new user profiles on login.
   }, [user]);
+
+  // Daily alert notification for operational actions near deadline
+  useEffect(() => {
+    if (user && operationalActions.length > 0) {
+      const currentUserId = user.uid || auth.currentUser?.uid;
+      const currentUserEmail = user.email || auth.currentUser?.email;
+      const loggedInUserObj = users.find(u => u.email?.toLowerCase() === currentUserEmail?.toLowerCase());
+      const effectiveUserId = currentUserId || loggedInUserObj?.id || currentUserEmail;
+
+      if (effectiveUserId) {
+        checkAndNotifyActionDeadlines(
+          effectiveUserId,
+          currentUserEmail,
+          user.displayName || loggedInUserObj?.name,
+          operationalActions,
+          notifications
+        );
+      }
+    }
+  }, [user, operationalActions, notifications, users]);
 
   const handleLogin = async () => {
     try {

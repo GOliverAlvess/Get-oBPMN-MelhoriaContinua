@@ -30,7 +30,10 @@ import {
   Target,
   Briefcase,
   Search,
-  Sparkles
+  Sparkles,
+  Zap,
+  Award,
+  HelpCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format } from 'date-fns';
@@ -57,6 +60,7 @@ interface DashboardViewProps {
 
 export default function DashboardView({ projects, users, actions, onProjectClick }: DashboardViewProps) {
   const [activeTab, setActiveTab] = useState<'projects' | 'actions' | 'overview'>('projects');
+  const [projectSubTab, setProjectSubTab] = useState<'geral' | 'ganhos'>('geral');
   const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<ProjectStatus[]>([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
@@ -70,6 +74,155 @@ export default function DashboardView({ projects, users, actions, onProjectClick
       return matchCollab && matchStatus && matchProject;
     });
   }, [projects, selectedCollaborators, selectedStatuses, selectedProjectIds]);
+
+  const gainsStats = useMemo(() => {
+    let totalEstimatedGain = 0;
+    let totalRealizedGain = 0;
+    let totalEstimatedHours = 0;
+    let totalRealizedHours = 0;
+    let tangibleProjectsCount = 0;
+    let intangibleProjectsCount = 0;
+
+    const projectRanking: Array<{
+      id: string;
+      name: string;
+      assignedToName: string;
+      status: string;
+      impactType: string;
+      estimatedFinancialGain: number;
+      realizedFinancialGain: number;
+      estimatedHours: number;
+      realizedHours: number;
+      gainAchievedStatus?: string;
+    }> = [];
+
+    filteredProjects.forEach(p => {
+      const user = users.find(u => u.id === p.assignedTo);
+      let pEstGain = p.scope?.financial?.gainProjection?.value || 0;
+      let pRealGain = 0;
+      let pEstHours = 0;
+      let pRealHours = 0;
+      let hasTangible = false;
+      let hasIntangible = false;
+      let achievedStatuses: string[] = [];
+
+      if (p.scope?.financial?.currentImpact?.value) {
+        hasTangible = true;
+      }
+
+      (p.subtasks || []).forEach(st => {
+        (st.pdcaCycles || []).forEach(c => {
+          const impact = c.plan?.impact;
+          if (impact) {
+            if (impact.impactType === 'Tangível' || impact.impactType === 'Ambos') {
+              hasTangible = true;
+            }
+            if (impact.impactType === 'Intangível' || impact.impactType === 'Ambos') {
+              hasIntangible = true;
+            }
+            if (impact.tangibleFinancialLoss || (impact.value && impact.value > 0)) {
+              hasTangible = true;
+            }
+            if (
+              impact.intangibleCustomerImpact ||
+              impact.intangibleQualityImpact ||
+              impact.intangibleRiskImpact ||
+              impact.intangibleTeamImpact
+            ) {
+              hasIntangible = true;
+            }
+
+            const estCost = impact.expectedCostReduction || impact.value || 0;
+            pEstGain += estCost;
+
+            const estHours = impact.expectedTimeGain || impact.tangibleWastedTime || 0;
+            pEstHours += estHours;
+
+            (impact.expectedGains?.tangible || []).forEach(t => {
+              if (t.value) pEstGain += t.value;
+              if (t.unit && (t.unit.toLowerCase().includes('hora') || t.unit.toLowerCase() === 'h')) {
+                pEstHours += t.value || 0;
+              }
+            });
+          }
+
+          if (c.check) {
+            if (c.check.realCostReduction) {
+              pRealGain += c.check.realCostReduction;
+            }
+            if (c.check.realTimeGain) {
+              pRealHours += c.check.realTimeGain;
+            }
+            if (c.check.expectedGainAchieved) {
+              achievedStatuses.push(c.check.expectedGainAchieved);
+            }
+          }
+
+          (c.plan?.actionPlan || []).forEach(action => {
+            if (action.ativo !== false && action.realGains?.tangible) {
+              action.realGains.tangible.forEach(t => {
+                if (t.value) pRealGain += t.value;
+                if (t.unit && (t.unit.toLowerCase().includes('hora') || t.unit.toLowerCase() === 'h')) {
+                  pRealHours += t.value || 0;
+                }
+              });
+            }
+          });
+        });
+      });
+
+      if (hasTangible) tangibleProjectsCount++;
+      if (hasIntangible) intangibleProjectsCount++;
+
+      totalEstimatedGain += pEstGain;
+      totalRealizedGain += pRealGain;
+      totalEstimatedHours += pEstHours;
+      totalRealizedHours += pRealHours;
+
+      let impactTypeStr = 'Não definido';
+      if (hasTangible && hasIntangible) impactTypeStr = 'Ambos';
+      else if (hasTangible) impactTypeStr = 'Tangível';
+      else if (hasIntangible) impactTypeStr = 'Intangível';
+
+      let mainAchievedStatus = achievedStatuses.includes('Sim')
+        ? 'Sim'
+        : achievedStatuses.includes('Parcial')
+        ? 'Parcial'
+        : achievedStatuses.includes('Não')
+        ? 'Não'
+        : 'Em andamento';
+
+      projectRanking.push({
+        id: p.id,
+        name: p.name,
+        assignedToName: user?.name || 'Não atribuído',
+        status: p.status,
+        impactType: impactTypeStr,
+        estimatedFinancialGain: pEstGain,
+        realizedFinancialGain: pRealGain,
+        estimatedHours: pEstHours,
+        realizedHours: pRealHours,
+        gainAchievedStatus: mainAchievedStatus,
+      });
+    });
+
+    projectRanking.sort((a, b) => {
+      if (b.realizedFinancialGain !== a.realizedFinancialGain) {
+        return b.realizedFinancialGain - a.realizedFinancialGain;
+      }
+      return b.estimatedFinancialGain - a.estimatedFinancialGain;
+    });
+
+    return {
+      totalEstimatedGain,
+      totalRealizedGain,
+      totalEstimatedHours,
+      totalRealizedHours,
+      tangibleProjectsCount,
+      intangibleProjectsCount,
+      projectRanking,
+    };
+  }, [filteredProjects, users]);
 
   const stats = useMemo(() => {
     const total = filteredProjects.length;
@@ -365,6 +518,34 @@ export default function DashboardView({ projects, users, actions, onProjectClick
             exit={{ opacity: 0, x: 20 }}
             className="space-y-8"
           >
+            {/* Sub-Abas de Projetos */}
+            <div className="flex items-center gap-2 border-b border-theme-border pb-3">
+              <button
+                onClick={() => setProjectSubTab('geral')}
+                className={cn(
+                  "px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer",
+                  projectSubTab === 'geral'
+                    ? "bg-indigo-600 text-white shadow-md"
+                    : "bg-theme-card border border-theme-border text-slate-400 hover:text-theme-foreground"
+                )}
+              >
+                <Activity size={16} />
+                Visão Geral
+              </button>
+              <button
+                onClick={() => setProjectSubTab('ganhos')}
+                className={cn(
+                  "px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer",
+                  projectSubTab === 'ganhos'
+                    ? "bg-indigo-600 text-white shadow-md"
+                    : "bg-theme-card border border-theme-border text-slate-400 hover:text-theme-foreground"
+                )}
+              >
+                <TrendingUp size={16} />
+                Ganhos & Impacto
+              </button>
+            </div>
+
             {/* Filtros Dropdown */}
             <div className="bg-theme-card p-6 rounded-3xl border border-theme-border shadow-sm">
               <div className="flex items-center gap-2 text-slate-400 mb-4">
@@ -408,7 +589,158 @@ export default function DashboardView({ projects, users, actions, onProjectClick
               </div>
             </div>
 
-            {/* 1. Visão Geral e Impacto Financeiro */}
+            {projectSubTab === 'ganhos' ? (
+              /* Visão de Ganhos e Impacto */
+              <div className="space-y-8">
+                {/* 5 Indicadores Agregados */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
+                  <StatCard 
+                    title="Ganho Estimado" 
+                    value={gainsStats.totalEstimatedGain} 
+                    isCurrency
+                    icon={<DollarSign size={18} />} 
+                    color="bg-blue-600" 
+                    subtext={<span className="text-[10px] text-slate-400 font-bold">Total previsto (R$)</span>}
+                  />
+                  <StatCard 
+                    title="Ganho Realizado" 
+                    value={gainsStats.totalRealizedGain} 
+                    isCurrency
+                    icon={<DollarSign size={18} />} 
+                    color="bg-emerald-600" 
+                    subtext={<span className="text-[10px] text-slate-400 font-bold">Total obtido (R$)</span>}
+                  />
+                  <StatCard 
+                    title="Horas Economizadas" 
+                    value={`${gainsStats.totalRealizedHours}h`} 
+                    icon={<Clock size={18} />} 
+                    color="bg-amber-500" 
+                    subtext={<span className="text-[10px] text-slate-400 font-bold">Previsto: {gainsStats.totalEstimatedHours}h</span>}
+                  />
+                  <StatCard 
+                    title="Impacto Tangível" 
+                    value={gainsStats.tangibleProjectsCount} 
+                    icon={<Zap size={18} />} 
+                    color="bg-indigo-600" 
+                    subtext={<span className="text-[10px] text-slate-400 font-bold">Qtd. Projetos</span>}
+                  />
+                  <StatCard 
+                    title="Impacto Intangível" 
+                    value={gainsStats.intangibleProjectsCount} 
+                    icon={<Award size={18} />} 
+                    color="bg-purple-600" 
+                    subtext={<span className="text-[10px] text-slate-400 font-bold">Qtd. Projetos</span>}
+                  />
+                </div>
+
+                {/* Ranking de Projetos por Impacto */}
+                <div className="bg-theme-card p-6 md:p-8 rounded-[2rem] border border-theme-border shadow-sm space-y-6">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                      <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight flex items-center gap-2">
+                        <TrendingUp size={20} className="text-emerald-500" />
+                        Ranking de Projetos por Impacto e Ganhos
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Projetos ordenados pelo maior impacto financeiro obtido e estimado.
+                      </p>
+                    </div>
+                    <span className="text-xs font-bold text-slate-400 bg-theme-background px-3 py-1.5 rounded-xl border border-theme-border self-start sm:self-auto">
+                      {gainsStats.projectRanking.length} Projetos Mapeados
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="border-b border-theme-border text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                          <th className="py-4 px-4"># / Projeto</th>
+                          <th className="py-4 px-4">Responsável</th>
+                          <th className="py-4 px-4">Tipo de Impacto</th>
+                          <th className="py-4 px-4 text-right">Ganho Estimado (R$)</th>
+                          <th className="py-4 px-4 text-right">Ganho Realizado (R$)</th>
+                          <th className="py-4 px-4 text-right">Horas Economizadas</th>
+                          <th className="py-4 px-4 text-center">Status Ganho</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-theme-border text-xs font-medium">
+                        {gainsStats.projectRanking.map((item, idx) => (
+                          <tr 
+                            key={item.id} 
+                            onClick={() => onProjectClick(item.id)}
+                            className="hover:bg-slate-50/5 dark:hover:bg-slate-800/20 transition-all cursor-pointer group"
+                          >
+                            <td className="py-4 px-4">
+                              <div className="flex items-center gap-3">
+                                <span className="w-6 h-6 rounded-lg bg-theme-background border border-theme-border flex items-center justify-center font-black text-[10px] text-slate-400">
+                                  {idx + 1}
+                                </span>
+                                <div>
+                                  <p className="font-bold text-theme-foreground group-hover:text-indigo-500 transition-colors">
+                                    {item.name}
+                                  </p>
+                                  <span className="text-[10px] text-slate-400">{item.status}</span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-4 px-4 font-semibold text-slate-400">
+                              {item.assignedToName}
+                            </td>
+                            <td className="py-4 px-4">
+                              <span className={cn(
+                                "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-block",
+                                item.impactType === 'Ambos'
+                                  ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
+                                  : item.impactType === 'Tangível'
+                                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                  : item.impactType === 'Intangível'
+                                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
+                                  : "bg-slate-500/10 text-slate-400"
+                              )}>
+                                {item.impactType}
+                              </span>
+                            </td>
+                            <td className="py-4 px-4 text-right font-black text-slate-400">
+                              R$ {item.estimatedFinancialGain.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-4 px-4 text-right font-black text-emerald-600 dark:text-emerald-400">
+                              R$ {item.realizedFinancialGain.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </td>
+                            <td className="py-4 px-4 text-right font-bold text-slate-400">
+                              {item.realizedHours}h <span className="text-[10px] text-slate-500">({item.estimatedHours}h est)</span>
+                            </td>
+                            <td className="py-4 px-4 text-center">
+                              <span className={cn(
+                                "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-block",
+                                item.gainAchievedStatus === 'Sim'
+                                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                  : item.gainAchievedStatus === 'Parcial'
+                                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                                  : item.gainAchievedStatus === 'Não'
+                                  ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
+                                  : "bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                              )}>
+                                {item.gainAchievedStatus || 'Em andamento'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                        {gainsStats.projectRanking.length === 0 && (
+                          <tr>
+                            <td colSpan={7} className="py-12 text-center text-slate-400 italic">
+                              Nenhum projeto encontrado com os filtros selecionados.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Visão Geral Atual */
+              <>
+                {/* 1. Visão Geral e Impacto Financeiro */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
               <StatCard 
                 title="Ganho Geral" 
@@ -727,6 +1059,8 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                 </div>
               </div>
             </div>
+            </>
+            )}
           </motion.div>
         ) : activeTab === 'actions' ? (
           <motion.div

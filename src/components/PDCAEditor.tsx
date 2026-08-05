@@ -79,6 +79,158 @@ if (pdfFonts && (pdfFonts as any).pdfMake) {
   (pdfMake as any).vfs = (pdfFonts as any).vfs;
 }
 
+const SectionHeader = ({
+  number,
+  title,
+  subtitle,
+}: {
+  number?: string;
+  title: string;
+  subtitle?: string;
+}) => (
+  <div className="flex items-start gap-4 pb-6 border-b border-slate-200">
+    {number && (
+      <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white font-black text-sm flex items-center justify-center shrink-0 shadow-lg shadow-indigo-200">
+        {number}
+      </div>
+    )}
+    <div>
+      <h3 className="text-lg font-black text-slate-800 tracking-tight">{title}</h3>
+      {subtitle && <p className="text-xs text-slate-500 font-medium mt-0.5">{subtitle}</p>}
+    </div>
+  </div>
+);
+
+const StatCard = ({
+  title,
+  value,
+  icon,
+  color = "indigo",
+}: {
+  title: string;
+  value: string | number;
+  icon: any;
+  color?: string;
+}) => {
+  const renderIcon = () => {
+    if (!icon) return null;
+    if (React.isValidElement(icon)) {
+      return icon;
+    }
+    if (typeof icon === "function" || (typeof icon === "object" && icon !== null)) {
+      const IconComp = icon;
+      return <IconComp size={22} />;
+    }
+    return null;
+  };
+
+  const colors: Record<string, string> = {
+    indigo: "bg-indigo-50 text-indigo-600",
+    amber: "bg-amber-50 text-amber-600",
+    emerald: "bg-emerald-50 text-emerald-600",
+    rose: "bg-rose-50 text-rose-600",
+    slate: "bg-slate-50 text-slate-600",
+  };
+
+  return (
+    <div className="p-6 bg-white rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+      <div
+        className={cn(
+          "w-12 h-12 rounded-2xl flex items-center justify-center shrink-0",
+          colors[color] || "bg-indigo-50 text-indigo-600"
+        )}
+      >
+        {renderIcon()}
+      </div>
+      <div>
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{title}</p>
+        <p className="text-lg font-black text-slate-800">{value}</p>
+      </div>
+    </div>
+  );
+};
+
+const StatusBadge = ({ status }: { status: string }) => {
+  const isDone = status === "Concluído" || status === "Concluido";
+  const isInProg = status === "Em andamento" || status === "Em Andamento";
+  return (
+    <span
+      className={cn(
+        "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-flex items-center gap-1.5",
+        isDone
+          ? "bg-emerald-50 text-emerald-600 border border-emerald-200"
+          : isInProg
+          ? "bg-amber-50 text-amber-600 border border-amber-200"
+          : "bg-slate-100 text-slate-600 border border-slate-200"
+      )}
+    >
+      <span className={cn("w-1.5 h-1.5 rounded-full", isDone ? "bg-emerald-500" : isInProg ? "bg-amber-500" : "bg-slate-400")} />
+      {status}
+    </span>
+  );
+};
+
+const PhaseTab = ({
+  phase,
+  label,
+  active,
+  onClick,
+  disabled,
+  color,
+  icon,
+  lockTooltip,
+}: {
+  phase?: string;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  disabled?: boolean;
+  color?: string;
+  icon?: any;
+  lockTooltip?: string;
+}) => {
+  const renderIcon = () => {
+    if (!icon) return null;
+    if (React.isValidElement(icon)) return icon;
+    if (typeof icon === "function") {
+      const IconComp = icon;
+      return <IconComp size={12} />;
+    }
+    return null;
+  };
+
+  return (
+    <div className="relative group/tab">
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        className={cn(
+          "px-5 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer",
+          active
+            ? "bg-indigo-600 text-white shadow-lg shadow-indigo-100"
+            : disabled
+            ? "text-slate-300 cursor-not-allowed"
+            : "text-slate-600 hover:bg-slate-100"
+        )}
+      >
+        {renderIcon()}
+        {label}
+      </button>
+      {disabled && lockTooltip && (
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 text-white text-[10px] font-bold rounded-lg opacity-0 group-hover/tab:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-xl">
+          <div className="relative">
+            {lockTooltip}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const getProgress = (cycle: PDCACycle) => cycle.progress || 0;
+
 export default function PDCAEditor({
   project,
   subtask,
@@ -215,14 +367,45 @@ export default function PDCAEditor({
 
   const activeCycle = subtask.pdcaCycles.find((c) => c.id === activeCycleId);
 
+  const isPlanStep3Valid = useMemo(() => {
+    if (!activeCycle) return false;
+    const impact = activeCycle.plan.impact;
+    if (!impact || !impact.impactType) return false;
+
+    const hasTangibleDetail =
+      (impact.tangibleFinancialLoss ?? 0) > 0 ||
+      (impact.tangibleWastedTime ?? 0) > 0 ||
+      !!(impact.tangibleRework && String(impact.tangibleRework).trim()) ||
+      !!impact.tangibleOtherCosts?.trim();
+
+    const hasIntangibleDetail =
+      !!impact.intangibleCustomerImpact?.trim() ||
+      !!impact.intangibleQualityImpact?.trim() ||
+      !!impact.intangibleRiskImpact?.trim() ||
+      !!impact.intangibleTeamImpact?.trim();
+
+    if (impact.impactType === "Tangível" && !hasTangibleDetail) return false;
+    if (impact.impactType === "Intangível" && !hasIntangibleDetail) return false;
+    if (impact.impactType === "Ambos" && (!hasTangibleDetail || !hasIntangibleDetail)) return false;
+
+    if (!impact.description?.trim()) return false;
+
+    return true;
+  }, [activeCycle]);
+
   const isPlanPhaseValid = useMemo(() => {
     if (!activeCycle) return false;
     const { rootCauseAnalysis } = activeCycle.plan;
-    if (rootCauseAnalysis.type === "ishikawa") {
-      return (rootCauseAnalysis.priorityCauses || []).length > 0;
-    }
-    return !!rootCauseAnalysis.identifiedRootCause?.trim();
-  }, [activeCycle]);
+    const isCauseValid = rootCauseAnalysis.type === "ishikawa"
+      ? (rootCauseAnalysis.priorityCauses || []).length > 0
+      : !!rootCauseAnalysis.identifiedRootCause?.trim();
+
+    const hasActionItems = (activeCycle.plan.actionPlan || []).some(
+      (item) => item.status !== "Cancelado" && item.ativo !== false && !!item.what?.trim()
+    );
+
+    return isCauseValid && isPlanStep3Valid && hasActionItems;
+  }, [activeCycle, isPlanStep3Valid]);
 
   const isDoPhaseValid = useMemo(() => {
     if (!activeCycle || activeCycle.plan.actionPlan.length === 0) return false;
@@ -233,14 +416,26 @@ export default function PDCAEditor({
 
   const isCheckPhaseValid = useMemo(() => {
     if (!activeCycle) return false;
-    return activeCycle.plan.actionPlan.some((item) => {
+
+    const hasConclusao = !!activeCycle.check?.expectedGainAchieved;
+
+    const activeItems = (activeCycle.plan.actionPlan || []).filter(
+      (item) => item.status !== "Cancelado" && item.ativo !== false
+    );
+
+    if (activeItems.length === 0) return false;
+
+    const allItemsChecked = activeItems.every((item) => {
+      const isDoDone = item.status === "Concluído";
       const hasMonitoring = !!item.monitoringTool?.trim();
       const hasWorked = !!item.worked;
       const hasFailureReason =
         item.worked === "Sim" || !item.worked || !!item.failureReason?.trim();
 
-      return hasMonitoring && hasWorked && hasFailureReason;
+      return isDoDone && hasMonitoring && hasWorked && hasFailureReason;
     });
+
+    return hasConclusao && allItemsChecked;
   }, [activeCycle]);
 
   const isActPhaseValid = useMemo(() => {
@@ -633,6 +828,58 @@ export default function PDCAEditor({
       c.id === activeCycleId ? { ...c, ...newData } : c,
     );
     onUpdateSubtask({ ...subtask, pdcaCycles: newCycles });
+  };
+
+  const updatePlan = (newPlanData: Partial<NonNullable<PDCACycle["plan"]>>) => {
+    if (!activeCycle) return;
+    updateCycle({
+      plan: {
+        ...activeCycle.plan,
+        ...newPlanData,
+      },
+    });
+  };
+
+  const handleAddActionPlanItem = () => {
+    if (!activeCycle) return;
+    const newItem: ActionPlanItem = {
+      id: uuidv4(),
+      what: "",
+      why: "",
+      where: "",
+      when: "",
+      who: "",
+      how: "",
+      howMuch: "0",
+      status: "Pendente",
+      currentPhase: "DO",
+      executionLogs: [],
+    };
+    const updatedPlan = [...(activeCycle.plan.actionPlan || []), newItem];
+    updatePlan({ actionPlan: updatedPlan });
+  };
+
+  const handleDeleteActionPlanItem = (id: string) => {
+    if (!activeCycle) return;
+    const updatedPlan = (activeCycle.plan.actionPlan || []).filter((item) => item.id !== id);
+    updatePlan({ actionPlan: updatedPlan });
+  };
+
+  const removeActionPlanItem = handleDeleteActionPlanItem;
+  const addActionPlanItem = handleAddActionPlanItem;
+
+  const handleUpdateActionPlanItem = (id: string, updates: Partial<ActionPlanItem>, isDebounced = false) => {
+    if (!activeCycle) return;
+    const updatedPlan = (activeCycle.plan.actionPlan || []).map((item) =>
+      item.id === id ? { ...item, ...updates } : item
+    );
+    updatePlan({ actionPlan: updatedPlan });
+  };
+
+  const updateActionPlan = handleUpdateActionPlanItem;
+
+  const handleStepChange = (step: number) => {
+    setActivePlanStep(step);
   };
 
   const handleSave = () => {
@@ -1905,11 +2152,6 @@ export default function PDCAEditor({
     }
   };
 
-  const updatePlan = (newPlan: any) => {
-    if (!activeCycle) return;
-    updateCycle({ plan: { ...activeCycle.plan, ...newPlan } });
-  };
-
   const renderIshikawa = () => {
     if (!activeCycle) return null;
     return (
@@ -2536,13 +2778,13 @@ export default function PDCAEditor({
                     <div className="space-y-2">
                       <div className="flex justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
                         <span>Progresso</span>
-                        <span>{getProgress(cycle.status, cycle)}%</span>
+                        <span>{getProgress(cycle)}%</span>
                       </div>
                       <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
                         <div
                           className="h-full bg-indigo-500 transition-all duration-500"
                           style={{
-                            width: `${getProgress(cycle.status, cycle)}%`,
+                            width: `${getProgress(cycle)}%`,
                           }}
                         />
                       </div>
@@ -3932,6 +4174,13 @@ export default function PDCAEditor({
 
                             {/* 1. Impacto Atual */}
                             <div className="space-y-8">
+                              <div className="p-5 bg-indigo-50/80 border border-indigo-100/80 rounded-2xl flex items-start gap-3">
+                                <HelpCircle className="text-indigo-600 shrink-0 mt-0.5" size={18} />
+                                <p className="text-xs text-indigo-950 font-medium leading-relaxed">
+                                  <strong>Orientação:</strong> Se não for possível mensurar em R$, utilize tempo ou impacto operacional. Projetos com impacto claro geram mais valor.
+                                </p>
+                              </div>
+
                               <div className="flex items-center gap-3 pb-2 border-b border-theme-border">
                                 <div className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500">
                                   <RefreshCw size={18} />
@@ -3942,13 +4191,318 @@ export default function PDCAEditor({
                               </div>
 
                               <div className="space-y-6">
-                                <div className="space-y-4">
+                                {/* Tipo de Impacto */}
+                                <div className="space-y-3">
+                                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                    <Target size={14} className="text-indigo-500" />
+                                    Tipo de Impacto <span className="text-rose-500 font-bold">* (Obrigatório)</span>
+                                  </label>
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-lg">
+                                    {(['Tangível', 'Intangível', 'Ambos'] as const).map((type) => {
+                                      const isSelected = activeCycle.plan.impact.impactType === type;
+                                      return (
+                                        <button
+                                          key={type}
+                                          type="button"
+                                          onClick={() =>
+                                            updatePlan({
+                                              impact: {
+                                                ...activeCycle.plan.impact,
+                                                impactType: type,
+                                              },
+                                            })
+                                          }
+                                          className={cn(
+                                            "p-4 rounded-2xl border text-xs font-black uppercase tracking-wider transition-all text-center cursor-pointer",
+                                            isSelected
+                                              ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
+                                              : "bg-theme-background border-theme-border text-slate-500 hover:bg-slate-50",
+                                            showValidationErrors && !activeCycle.plan.impact.impactType && "border-rose-500 ring-1 ring-rose-500"
+                                          )}
+                                        >
+                                          {type}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  {showValidationErrors && !activeCycle.plan.impact.impactType && (
+                                    <p className="text-xs text-rose-500 font-bold">A seleção do Tipo de Impacto é obrigatória.</p>
+                                  )}
+                                </div>
+
+                                {/* Bloco Impacto Tangível */}
+                                {(activeCycle.plan.impact.impactType === 'Tangível' || activeCycle.plan.impact.impactType === 'Ambos') && (
+                                  <div className={cn(
+                                    "p-6 bg-slate-50/80 rounded-3xl border space-y-4 animate-in fade-in duration-300",
+                                    showValidationErrors &&
+                                      !((activeCycle.plan.impact.tangibleFinancialLoss ?? 0) > 0 ||
+                                        (activeCycle.plan.impact.tangibleWastedTime ?? 0) > 0 ||
+                                        !!(activeCycle.plan.impact.tangibleRework && String(activeCycle.plan.impact.tangibleRework).trim()) ||
+                                        !!activeCycle.plan.impact.tangibleOtherCosts?.trim())
+                                      ? "border-rose-400 bg-rose-50/20"
+                                      : "border-slate-200/80"
+                                  )}>
+                                    <div className="flex items-center justify-between flex-wrap gap-2 text-slate-700">
+                                      <div className="flex items-center gap-2">
+                                        <Zap size={16} className="text-amber-500" />
+                                        <span className="text-xs font-black uppercase tracking-widest">
+                                          Detalhamento do Impacto Tangível <span className="text-rose-500 font-bold">* (Pelo menos 1 campo)</span>
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Perda financeira estimada (R$)</label>
+                                        <input
+                                          type="number"
+                                          placeholder="0.00"
+                                          value={activeCycle.plan.impact.tangibleFinancialLoss ?? ''}
+                                          onChange={(e) => updatePlan({
+                                            impact: {
+                                              ...activeCycle.plan.impact,
+                                              tangibleFinancialLoss: parseFloat(e.target.value) || 0,
+                                              value: parseFloat(e.target.value) || activeCycle.plan.impact.value || 0
+                                            }
+                                          })}
+                                          className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tempo desperdiçado (horas/mês)</label>
+                                        <input
+                                          type="number"
+                                          placeholder="0"
+                                          value={activeCycle.plan.impact.tangibleWastedTime ?? ''}
+                                          onChange={(e) => updatePlan({
+                                            impact: {
+                                              ...activeCycle.plan.impact,
+                                              tangibleWastedTime: parseFloat(e.target.value) || 0
+                                            }
+                                          })}
+                                          className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Retrabalho (horas ou %)</label>
+                                        <input
+                                          type="text"
+                                          placeholder="Ex: 15 horas ou 20%"
+                                          value={activeCycle.plan.impact.tangibleRework ?? ''}
+                                          onChange={(e) => updatePlan({
+                                            impact: {
+                                              ...activeCycle.plan.impact,
+                                              tangibleRework: e.target.value
+                                            }
+                                          })}
+                                          className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Outros custos</label>
+                                        <input
+                                          type="text"
+                                          placeholder="Ex: Desperdício de insumos, multas"
+                                          value={activeCycle.plan.impact.tangibleOtherCosts ?? ''}
+                                          onChange={(e) => updatePlan({
+                                            impact: {
+                                              ...activeCycle.plan.impact,
+                                              tangibleOtherCosts: e.target.value
+                                            }
+                                          })}
+                                          className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                      </div>
+                                    </div>
+                                    {showValidationErrors &&
+                                      !((activeCycle.plan.impact.tangibleFinancialLoss ?? 0) > 0 ||
+                                        (activeCycle.plan.impact.tangibleWastedTime ?? 0) > 0 ||
+                                        !!(activeCycle.plan.impact.tangibleRework && String(activeCycle.plan.impact.tangibleRework).trim()) ||
+                                        !!activeCycle.plan.impact.tangibleOtherCosts?.trim()) && (
+                                      <p className="text-xs text-rose-500 font-bold">Preencha ao menos um campo de detalhamento do impacto tangível.</p>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Bloco Impacto Intangível */}
+                                {(activeCycle.plan.impact.impactType === 'Intangível' || activeCycle.plan.impact.impactType === 'Ambos') && (
+                                  <div className={cn(
+                                    "p-6 bg-slate-50/80 rounded-3xl border space-y-4 animate-in fade-in duration-300",
+                                    showValidationErrors &&
+                                      !(!!activeCycle.plan.impact.intangibleCustomerImpact?.trim() ||
+                                        !!activeCycle.plan.impact.intangibleQualityImpact?.trim() ||
+                                        !!activeCycle.plan.impact.intangibleRiskImpact?.trim() ||
+                                        !!activeCycle.plan.impact.intangibleTeamImpact?.trim())
+                                      ? "border-rose-400 bg-rose-50/20"
+                                      : "border-slate-200/80"
+                                  )}>
+                                    <div className="flex items-center justify-between flex-wrap gap-2 text-slate-700">
+                                      <div className="flex items-center gap-2">
+                                        <Award size={16} className="text-indigo-500" />
+                                        <span className="text-xs font-black uppercase tracking-widest">
+                                          Detalhamento do Impacto Intangível <span className="text-rose-500 font-bold">* (Pelo menos 1 campo)</span>
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Impacto no cliente</label>
+                                        <input
+                                          type="text"
+                                          placeholder="Ex: Reclamações frequentes, insatisfação"
+                                          value={activeCycle.plan.impact.intangibleCustomerImpact ?? ''}
+                                          onChange={(e) => updatePlan({
+                                            impact: {
+                                              ...activeCycle.plan.impact,
+                                              intangibleCustomerImpact: e.target.value
+                                            }
+                                          })}
+                                          className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Impacto na qualidade</label>
+                                        <input
+                                          type="text"
+                                          placeholder="Ex: Riscos de desvio de padrão"
+                                          value={activeCycle.plan.impact.intangibleQualityImpact ?? ''}
+                                          onChange={(e) => updatePlan({
+                                            impact: {
+                                              ...activeCycle.plan.impact,
+                                              intangibleQualityImpact: e.target.value
+                                            }
+                                          })}
+                                          className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Impacto em risco</label>
+                                        <input
+                                          type="text"
+                                          placeholder="Ex: Risco de não conformidade ou segurança"
+                                          value={activeCycle.plan.impact.intangibleRiskImpact ?? ''}
+                                          onChange={(e) => updatePlan({
+                                            impact: {
+                                              ...activeCycle.plan.impact,
+                                              intangibleRiskImpact: e.target.value
+                                            }
+                                          })}
+                                          className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Impacto na equipe</label>
+                                        <input
+                                          type="text"
+                                          placeholder="Ex: Desmotivação, sobrecarga"
+                                          value={activeCycle.plan.impact.intangibleTeamImpact ?? ''}
+                                          onChange={(e) => updatePlan({
+                                            impact: {
+                                              ...activeCycle.plan.impact,
+                                              intangibleTeamImpact: e.target.value
+                                            }
+                                          })}
+                                          className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                        />
+                                      </div>
+                                    </div>
+                                    {showValidationErrors &&
+                                      !(!!activeCycle.plan.impact.intangibleCustomerImpact?.trim() ||
+                                        !!activeCycle.plan.impact.intangibleQualityImpact?.trim() ||
+                                        !!activeCycle.plan.impact.intangibleRiskImpact?.trim() ||
+                                        !!activeCycle.plan.impact.intangibleTeamImpact?.trim()) && (
+                                      <p className="text-xs text-rose-500 font-bold">Preencha ao menos um campo de detalhamento do impacto intangível.</p>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Bloco Ganho Esperado (Estruturado) - OPCIONAL */}
+                                <div className="p-6 bg-emerald-50/50 rounded-3xl border border-emerald-100 space-y-4">
+                                  <div className="flex items-center justify-between flex-wrap gap-2">
+                                    <div className="flex items-center gap-2 text-emerald-800">
+                                      <TrendingUp size={16} className="text-emerald-600" />
+                                      <span className="text-xs font-black uppercase tracking-widest">Ganho Esperado (Metas Estruturadas)</span>
+                                    </div>
+                                    <span className="text-[10px] font-bold text-slate-600 bg-white/80 px-3 py-1 rounded-full border border-slate-200 shadow-xs">
+                                      Preenchimento Opcional
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    {activeCycle.plan.impact.impactType !== 'Intangível' && (
+                                      <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Redução de custo estimada (R$)</label>
+                                        <input
+                                          type="number"
+                                          placeholder="0.00"
+                                          value={activeCycle.plan.impact.expectedCostReduction ?? ''}
+                                          onChange={(e) => updatePlan({
+                                            impact: {
+                                              ...activeCycle.plan.impact,
+                                              expectedCostReduction: parseFloat(e.target.value) || 0
+                                            }
+                                          })}
+                                          className="w-full p-4 bg-white border border-emerald-200/80 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                                        />
+                                      </div>
+                                    )}
+                                    <div className="space-y-2">
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ganho de tempo (horas/mês)</label>
+                                      <input
+                                        type="number"
+                                        placeholder="0"
+                                        value={activeCycle.plan.impact.expectedTimeGain ?? ''}
+                                        onChange={(e) => updatePlan({
+                                          impact: {
+                                            ...activeCycle.plan.impact,
+                                            expectedTimeGain: parseFloat(e.target.value) || 0
+                                          }
+                                        })}
+                                        className="w-full p-4 bg-white border border-emerald-200/80 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Melhoria percentual de indicador (%)</label>
+                                      <input
+                                        type="number"
+                                        placeholder="0"
+                                        value={activeCycle.plan.impact.expectedIndicatorImprovement ?? ''}
+                                        onChange={(e) => {
+                                          const val = parseFloat(e.target.value) || 0;
+                                          updatePlan({
+                                            impact: {
+                                              ...activeCycle.plan.impact,
+                                              expectedIndicatorImprovement: val,
+                                              improvementPercentage: val || activeCycle.plan.impact.improvementPercentage
+                                            }
+                                          });
+                                        }}
+                                        className="w-full p-4 bg-white border border-emerald-200/80 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                                      />
+                                    </div>
+                                    <div className="space-y-2">
+                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Outros ganhos</label>
+                                      <input
+                                        type="text"
+                                        placeholder="Ex: Melhoria do clima, padronização do processo"
+                                        value={activeCycle.plan.impact.expectedOtherGains ?? ''}
+                                        onChange={(e) => updatePlan({
+                                          impact: {
+                                            ...activeCycle.plan.impact,
+                                            expectedOtherGains: e.target.value
+                                          }
+                                        })}
+                                        className="w-full p-4 bg-white border border-emerald-200/80 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="space-y-4 pt-4 border-t border-theme-border">
                                   <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                     <FileText
                                       size={14}
                                       className="text-indigo-500"
                                     />
-                                    Descrição do Impacto
+                                    Descrição Geral do Impacto <span className="text-rose-500 font-bold">* (Obrigatório)</span>
                                   </label>
                                   <textarea
                                     placeholder="Descreva detalhadamente o prejuízo ou problema atual..."
@@ -3963,569 +4517,15 @@ export default function PDCAEditor({
                                         },
                                       })
                                     }
-                                    className="w-full p-6 bg-theme-background border border-theme-border rounded-[2rem] outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-theme-foreground min-h-[150px] transition-all"
+                                    className={cn(
+                                      "w-full p-6 bg-theme-background border rounded-[2rem] outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-theme-foreground min-h-[120px] transition-all",
+                                      showValidationErrors && !activeCycle.plan.impact.description?.trim()
+                                        ? "border-rose-500 bg-rose-50/30 ring-1 ring-rose-500"
+                                        : "border-theme-border"
+                                    )}
                                   />
-                                </div>
-
-                                <div className="max-w-md space-y-4">
-                                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                    <TrendingUp
-                                      size={14}
-                                      className="text-emerald-500"
-                                    />
-                                    Valor do Impacto
-                                  </label>
-                                  <div className="relative">
-                                    <input
-                                      type="number"
-                                      placeholder="0.00"
-                                      value={
-                                        activeCycle.plan.impact.value || ""
-                                      }
-                                      onChange={(e) =>
-                                        updatePlan({
-                                          impact: {
-                                            ...activeCycle.plan.impact,
-                                            value:
-                                              parseFloat(e.target.value) || 0,
-                                          },
-                                        })
-                                      }
-                                      className="w-full p-6 bg-theme-background border border-theme-border rounded-3xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground pl-12"
-                                    />
-                                    <span className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-slate-300">
-                                      R$
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <div className="max-w-md space-y-4">
-                                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                    <Percent
-                                      size={14}
-                                      className="text-indigo-500"
-                                    />
-                                    % de melhoria esperada
-                                  </label>
-                                  <div className="relative">
-                                    <input
-                                      type="number"
-                                      min="0"
-                                      max="100"
-                                      placeholder="0"
-                                      value={
-                                        activeCycle.plan.impact
-                                          .improvementPercentage || ""
-                                      }
-                                      onChange={(e) => {
-                                        const val = Math.min(
-                                          100,
-                                          Math.max(
-                                            0,
-                                            parseFloat(e.target.value) || 0,
-                                          ),
-                                        );
-                                        updatePlan({
-                                          impact: {
-                                            ...activeCycle.plan.impact,
-                                            improvementPercentage: val,
-                                            goal: val,
-                                          },
-                                        });
-                                      }}
-                                      className="w-full p-6 bg-theme-background border border-theme-border rounded-3xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground pr-12"
-                                    />
-                                    <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-slate-300">
-                                      %
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* 2. Ganhos Esperados */}
-                            <div className="space-y-10 pt-4">
-                              <div className="flex items-center gap-3 pb-2 border-b border-theme-border">
-                                <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-500">
-                                  <TrendingUp size={18} />
-                                </div>
-                                <h4 className="text-sm font-black uppercase tracking-widest text-slate-700">
-                                  2. Ganhos Esperados
-                                </h4>
-                              </div>
-
-                              {/* Tangíveis */}
-                              <div className="space-y-6">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <Zap size={16} className="text-amber-500" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                      Ganhos Tangíveis
-                                    </span>
-                                  </div>
-                                  <button
-                                    onClick={() => {
-                                      const current =
-                                        activeCycle.plan.impact.expectedGains
-                                          ?.tangible || [];
-                                      const newGains = [
-                                        ...current,
-                                        {
-                                          id: uuidv4(),
-                                          type: "",
-                                          value: 0,
-                                          unit: "",
-                                        },
-                                      ];
-                                      updatePlan({
-                                        impact: {
-                                          ...activeCycle.plan.impact,
-                                          expectedGains: {
-                                            ...activeCycle.plan.impact
-                                              .expectedGains,
-                                            tangible: newGains,
-                                          },
-                                        },
-                                      });
-                                    }}
-                                    className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-100 transition-all border border-amber-100 shadow-sm"
-                                  >
-                                    <Plus size={14} />
-                                    Adicionar Ganho Tangível
-                                  </button>
-                                </div>
-
-                                <div className="space-y-4">
-                                  {(
-                                    activeCycle.plan.impact.expectedGains
-                                      ?.tangible || []
-                                  ).map((gain, index) => (
-                                    <div
-                                      key={gain.id}
-                                      className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-theme-background/30 p-6 rounded-[2rem] border border-theme-border/50 items-end"
-                                    >
-                                      <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
-                                          Tipo
-                                        </label>
-                                        <select
-                                          value={gain.type}
-                                          onChange={(e) => {
-                                            const newGains = [
-                                              ...activeCycle.plan.impact
-                                                .expectedGains!.tangible,
-                                            ];
-                                            const type = e.target.value;
-                                            let unit = gain.unit;
-
-                                            // Auto-populate unit from structured configuration
-                                            if (
-                                              globalConfig?.structuredTangibleGains
-                                            ) {
-                                              const configGain =
-                                                globalConfig.structuredTangibleGains.find(
-                                                  (g) => g.name === type,
-                                                ) as any;
-                                              const availableUnits =
-                                                configGain?.units ||
-                                                (configGain?.unit
-                                                  ? [configGain.unit]
-                                                  : []);
-
-                                              if (availableUnits.length > 0) {
-                                                if (
-                                                  availableUnits.length === 1
-                                                ) {
-                                                  unit = availableUnits[0];
-                                                } else if (
-                                                  !availableUnits.includes(
-                                                    gain.unit,
-                                                  )
-                                                ) {
-                                                  unit = "";
-                                                }
-                                              }
-                                            }
-
-                                            newGains[index] = {
-                                              ...gain,
-                                              type,
-                                              unit,
-                                            };
-                                            updatePlan({
-                                              impact: {
-                                                ...activeCycle.plan.impact,
-                                                expectedGains: {
-                                                  ...activeCycle.plan.impact
-                                                    .expectedGains,
-                                                  tangible: newGains,
-                                                },
-                                              },
-                                            });
-                                          }}
-                                          className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground text-xs"
-                                        >
-                                          <option value="">Selecione...</option>
-                                          {(
-                                            globalConfig?.structuredTangibleGains
-                                              ?.filter((g) => g.active)
-                                              .map((g) => g.name) ||
-                                            globalConfig?.tangibleGainTypes ||
-                                            []
-                                          ).map((t, tIdx) => (
-                                            <option
-                                              key={`${t}-${tIdx}`}
-                                              value={t}
-                                            >
-                                              {t}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </div>
-                                      <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
-                                          Valor
-                                        </label>
-                                        <input
-                                          type="number"
-                                          value={gain.value || ""}
-                                          onChange={(e) => {
-                                            const newGains = [
-                                              ...activeCycle.plan.impact
-                                                .expectedGains!.tangible,
-                                            ];
-                                            newGains[index] = {
-                                              ...gain,
-                                              value:
-                                                parseFloat(e.target.value) || 0,
-                                            };
-                                            updatePlan({
-                                              impact: {
-                                                ...activeCycle.plan.impact,
-                                                expectedGains: {
-                                                  ...activeCycle.plan.impact
-                                                    .expectedGains,
-                                                  tangible: newGains,
-                                                },
-                                              },
-                                            });
-                                          }}
-                                          className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground text-xs"
-                                        />
-                                      </div>
-                                      <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
-                                          Unidade
-                                        </label>
-                                        {(() => {
-                                          const configGain =
-                                            globalConfig?.structuredTangibleGains?.find(
-                                              (g) => g.name === gain.type,
-                                            ) as any;
-                                          const availableUnits =
-                                            configGain?.units ||
-                                            (configGain?.unit
-                                              ? [configGain.unit]
-                                              : []);
-                                          const isDisabled =
-                                            availableUnits.length <= 1;
-
-                                          return (
-                                            <select
-                                              disabled={isDisabled}
-                                              value={gain.unit}
-                                              onChange={(e) => {
-                                                const newGains = [
-                                                  ...activeCycle.plan.impact
-                                                    .expectedGains!.tangible,
-                                                ];
-                                                newGains[index] = {
-                                                  ...gain,
-                                                  unit: e.target.value,
-                                                };
-                                                updatePlan({
-                                                  impact: {
-                                                    ...activeCycle.plan.impact,
-                                                    expectedGains: {
-                                                      ...activeCycle.plan.impact
-                                                        .expectedGains,
-                                                      tangible: newGains,
-                                                    },
-                                                  },
-                                                });
-                                              }}
-                                              className={cn(
-                                                "w-full p-4 border border-theme-border rounded-2xl outline-none font-bold text-xs transition-all",
-                                                isDisabled
-                                                  ? "bg-theme-background text-slate-400 cursor-not-allowed"
-                                                  : "bg-theme-card text-theme-foreground focus:ring-2 focus:ring-indigo-500 cursor-pointer",
-                                              )}
-                                            >
-                                              <option value="">
-                                                Selecione...
-                                              </option>
-                                              {availableUnits.length > 0
-                                                ? availableUnits.map((u, uIdx) => (
-                                                    <option key={`${u}-${uIdx}`} value={u}>
-                                                      {u}
-                                                    </option>
-                                                  ))
-                                                : (
-                                                    globalConfig?.structuredUnits
-                                                      ?.filter((u) => u.active)
-                                                      .map((u) => u.symbol) ||
-                                                    globalConfig?.units ||
-                                                    []
-                                                  ).map((u, uIdx) => (
-                                                    <option key={`${u}-${uIdx}`} value={u}>
-                                                      {u}
-                                                    </option>
-                                                  ))}
-                                            </select>
-                                          );
-                                        })()}
-                                      </div>
-                                      <div>
-                                        <button
-                                          onClick={() => {
-                                            const newGains =
-                                              activeCycle.plan.impact.expectedGains!.tangible.filter(
-                                                (g) => g.id !== gain.id,
-                                              );
-                                            updatePlan({
-                                              impact: {
-                                                ...activeCycle.plan.impact,
-                                                expectedGains: {
-                                                  ...activeCycle.plan.impact
-                                                    .expectedGains,
-                                                  tangible: newGains,
-                                                },
-                                              },
-                                            });
-                                          }}
-                                          className="w-full p-4 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-2xl transition-all flex items-center justify-center border border-transparent hover:border-rose-100"
-                                        >
-                                          <Trash2 size={16} />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                  {(
-                                    activeCycle.plan.impact.expectedGains
-                                      ?.tangible || []
-                                  ).length === 0 && (
-                                    <div className="text-center p-8 border-2 border-dashed border-theme-border rounded-[2rem] text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                                      Nenhum ganho tangível adicionado
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-
-                              {/* Intangíveis */}
-                              <div className="space-y-6">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <Award
-                                      size={16}
-                                      className="text-indigo-500"
-                                    />
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                                      Ganhos Intangíveis
-                                    </span>
-                                  </div>
-                                  <button
-                                    onClick={() => {
-                                      const current =
-                                        activeCycle.plan.impact.expectedGains
-                                          ?.intangible || [];
-                                      const newGains = [
-                                        ...current,
-                                        {
-                                          id: uuidv4(),
-                                          type: "",
-                                          description: "",
-                                          impactLevel: "Baixo" as const,
-                                        },
-                                      ];
-                                      updatePlan({
-                                        impact: {
-                                          ...activeCycle.plan.impact,
-                                          expectedGains: {
-                                            ...activeCycle.plan.impact
-                                              .expectedGains,
-                                            intangible: newGains,
-                                          },
-                                        },
-                                      });
-                                    }}
-                                    className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-100 transition-all border border-indigo-100 shadow-sm"
-                                  >
-                                    <Plus size={14} />
-                                    Adicionar Ganho Intangível
-                                  </button>
-                                </div>
-
-                                <div className="space-y-4">
-                                  {(
-                                    activeCycle.plan.impact.expectedGains
-                                      ?.intangible || []
-                                  ).map((gain, index) => (
-                                    <div
-                                      key={gain.id}
-                                      className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-theme-background/30 p-6 rounded-[2rem] border border-theme-border/50 items-end"
-                                    >
-                                      <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
-                                          Tipo
-                                        </label>
-                                        <select
-                                          value={gain.type}
-                                          onChange={(e) => {
-                                            const newGains = [
-                                              ...activeCycle.plan.impact
-                                                .expectedGains!.intangible,
-                                            ];
-                                            newGains[index] = {
-                                              ...gain,
-                                              type: e.target.value,
-                                            };
-                                            updatePlan({
-                                              impact: {
-                                                ...activeCycle.plan.impact,
-                                                expectedGains: {
-                                                  ...activeCycle.plan.impact
-                                                    .expectedGains,
-                                                  intangible: newGains,
-                                                },
-                                              },
-                                            });
-                                          }}
-                                          className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-theme-foreground text-xs"
-                                        >
-                                          <option value="">Selecione...</option>
-                                          {(
-                                            globalConfig?.structuredIntangibleGains
-                                              ?.filter((g) => g.active)
-                                              .map((g) => g.name) ||
-                                            globalConfig?.intangibleGainTypes ||
-                                            []
-                                          ).map((t, tIdx) => (
-                                            <option
-                                              key={`${t}-${tIdx}`}
-                                              value={t}
-                                            >
-                                              {t}
-                                            </option>
-                                          ))}
-                                        </select>
-                                      </div>
-                                      <div className="space-y-2 md:col-span-1">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
-                                          Descrição
-                                        </label>
-                                        <input
-                                          type="text"
-                                          value={gain.description || ""}
-                                          onChange={(e) => {
-                                            const newGains = [
-                                              ...activeCycle.plan.impact
-                                                .expectedGains!.intangible,
-                                            ];
-                                            newGains[index] = {
-                                              ...gain,
-                                              description: e.target.value,
-                                            };
-                                            updatePlan({
-                                              impact: {
-                                                ...activeCycle.plan.impact,
-                                                expectedGains: {
-                                                  ...activeCycle.plan.impact
-                                                    .expectedGains,
-                                                  intangible: newGains,
-                                                },
-                                              },
-                                            });
-                                          }}
-                                          placeholder="Ex: Melhoria no clima..."
-                                          className="w-full p-4 bg-theme-card border border-theme-border rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium text-theme-foreground text-xs"
-                                        />
-                                      </div>
-                                      <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">
-                                          Nível
-                                        </label>
-                                        <div className="flex gap-1">
-                                          {["Baixo", "Médio", "Alto"].map(
-                                            (level) => (
-                                              <button
-                                                key={level}
-                                                onClick={() => {
-                                                  const newGains = [
-                                                    ...activeCycle.plan.impact
-                                                      .expectedGains!
-                                                      .intangible,
-                                                  ];
-                                                  newGains[index] = {
-                                                    ...gain,
-                                                    impactLevel: level as any,
-                                                  };
-                                                  updatePlan({
-                                                    impact: {
-                                                      ...activeCycle.plan
-                                                        .impact,
-                                                      expectedGains: {
-                                                        ...activeCycle.plan
-                                                          .impact.expectedGains,
-                                                        intangible: newGains,
-                                                      },
-                                                    },
-                                                  });
-                                                }}
-                                                className={cn(
-                                                  "flex-1 py-4 px-1 rounded-xl font-black text-[8px] uppercase tracking-tighter transition-all border",
-                                                  gain.impactLevel === level
-                                                    ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
-                                                    : "bg-theme-card text-slate-400 border-theme-border hover:border-indigo-200",
-                                                )}
-                                              >
-                                                {level}
-                                              </button>
-                                            ),
-                                          )}
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <button
-                                          onClick={() => {
-                                            const newGains =
-                                              activeCycle.plan.impact.expectedGains!.intangible.filter(
-                                                (g) => g.id !== gain.id,
-                                              );
-                                            updatePlan({
-                                              impact: {
-                                                ...activeCycle.plan.impact,
-                                                expectedGains: {
-                                                  ...activeCycle.plan.impact
-                                                    .expectedGains,
-                                                  intangible: newGains,
-                                                },
-                                              },
-                                            });
-                                          }}
-                                          className="w-full p-4 hover:bg-rose-50 text-slate-400 hover:text-rose-500 rounded-2xl transition-all flex items-center justify-center border border-transparent hover:border-rose-100"
-                                        >
-                                          <Trash2 size={16} />
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ))}
-                                  {(
-                                    activeCycle.plan.impact.expectedGains
-                                      ?.intangible || []
-                                  ).length === 0 && (
-                                    <div className="text-center p-8 border-2 border-dashed border-theme-border rounded-[2rem] text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                                      Nenhum ganho intangível adicionado
-                                    </div>
+                                  {showValidationErrors && !activeCycle.plan.impact.description?.trim() && (
+                                    <p className="text-xs text-rose-500 font-bold">A descrição geral do impacto é obrigatória.</p>
                                   )}
                                 </div>
                               </div>
@@ -4767,8 +4767,18 @@ export default function PDCAEditor({
 
                       {activePlanStep < 4 ? (
                         <button
-                          onClick={() => setActivePlanStep((prev) => prev + 1)}
-                          className="flex items-center gap-2 bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all group"
+                          onClick={() => {
+                            if (activePlanStep === 3 && !isPlanStep3Valid) {
+                              setShowValidationErrors(true);
+                              setSaveFeedback(
+                                "Preencha os campos obrigatórios do Impacto (Tipo, Detalhamento e Descrição) antes de avançar para o Plano de Ação."
+                              );
+                              return;
+                            }
+                            setShowValidationErrors(false);
+                            setActivePlanStep((prev) => prev + 1);
+                          }}
+                          className="flex items-center gap-2 bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all group cursor-pointer"
                         >
                           Próximo Passo
                           <ChevronRight
@@ -5764,40 +5774,7 @@ export default function PDCAEditor({
                                                 </option>
                                               </select>
                                             </div>
-                                            <div className="md:col-span-2 space-y-1">
-                                              <GainsEditor
-                                                title="Ganho real obtido"
-                                                variant="check"
-                                                gains={
-                                                  item.realGains || {
-                                                    tangible: [],
-                                                    intangible: [],
-                                                  }
-                                                }
-                                                onChange={(gains) =>
-                                                  updateActionPlan(item.id, {
-                                                    realGains: gains,
-                                                  })
-                                                }
-                                                globalConfig={globalConfig}
-                                                inheritedGains={
-                                                  activeCycle.plan.impact
-                                                    .expectedGains
-                                                }
-                                                tangibleTypes={
-                                                  globalConfig?.structuredTangibleGains
-                                                    ?.filter((g) => g.active)
-                                                    .map((g) => g.name) ||
-                                                  globalConfig?.tangibleGainTypes
-                                                }
-                                                intangibleTypes={
-                                                  globalConfig?.structuredIntangibleGains
-                                                    ?.filter((g) => g.active)
-                                                    .map((g) => g.name) ||
-                                                  globalConfig?.intangibleGainTypes
-                                                }
-                                              />
-                                            </div>
+                                            
 
                                             {/* Campo Condicional: Motivo */}
                                             {(item.worked === "Não" ||
@@ -5853,68 +5830,6 @@ export default function PDCAEditor({
                                               </div>
                                             </div>
                                           )}
-
-                                          {/* Botão Avançar para ACT Individual */}
-                                          <div className="flex justify-end pt-4 border-t border-slate-100">
-                                            {(() => {
-                                              const isItemValid =
-                                                !!item.monitoringTool?.trim() &&
-                                                !!item.worked &&
-                                                (item.worked === "Sim" ||
-                                                  !!item.failureReason?.trim());
-                                              return (
-                                                <button
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (!isItemValid) {
-                                                      setSaveFeedback(
-                                                        "Preencha todos os campos obrigatórios (Observações do Acompanhamento e Resultado) antes de avançar.",
-                                                      );
-                                                      setShowValidationErrors(
-                                                        true,
-                                                      );
-                                                      return;
-                                                    }
-
-                                                    const newActionPlan = [
-                                                      ...activeCycle.plan
-                                                        .actionPlan,
-                                                    ];
-                                                    const itemIdx =
-                                                      newActionPlan.findIndex(
-                                                        (i) => i.id === item.id,
-                                                      );
-                                                    if (itemIdx !== -1) {
-                                                      newActionPlan[itemIdx] = {
-                                                        ...newActionPlan[
-                                                          itemIdx
-                                                        ],
-                                                        currentPhase: "ACT",
-                                                      };
-                                                      updateCycle({
-                                                        plan: {
-                                                          ...activeCycle.plan,
-                                                          actionPlan:
-                                                            newActionPlan,
-                                                        },
-                                                        etapaAtual: "ACT",
-                                                      });
-                                                      setActivePhase("ACT");
-                                                    }
-                                                  }}
-                                                  className={cn(
-                                                    "flex items-center gap-2 px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all shadow-lg",
-                                                    isItemValid
-                                                      ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100"
-                                                      : "bg-slate-200 text-slate-500 hover:bg-slate-300",
-                                                  )}
-                                                >
-                                                  Avançar para ACT
-                                                  <ArrowRight size={14} />
-                                                </button>
-                                              );
-                                            })()}
-                                          </div>
                                         </div>
                                       </motion.div>
                                     )}
@@ -5925,7 +5840,350 @@ export default function PDCAEditor({
                         )}
                       </div>
                     </div>
-                  </motion.div>
+                  
+
+                    {/* Bloco de Vinculação com PLAN e Avaliação de Resultados Obtidos */}
+                    <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm p-8 space-y-6">
+                      <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold">
+                            <Target size={20} />
+                          </div>
+                          <div>
+                            <h4 className="text-lg font-black text-slate-800 tracking-tight">
+                              Vínculo com Planejamento & Medição de Ganhos
+                            </h4>
+                            <p className="text-xs text-slate-500 font-medium">
+                              Compare o que foi estimado na etapa PLAN com o resultado real obtido.
+                            </p>
+                          </div>
+                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full">
+                          Comparativo PLAN x CHECK
+                        </span>
+                      </div>
+
+                      {/* 3.1 BLOCO 1: Resultados Obtidos */}
+                      <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-4">
+                        <div className="flex items-center gap-2">
+                          <TrendingUp size={16} className="text-emerald-600" />
+                          <span className="text-xs font-black uppercase tracking-widest text-slate-800">
+                            1. Resultados Obtidos (Resultados Reais)
+                          </span>
+                        </div>
+
+                        {/* Botões de Seleção do Tipo de Resultado */}
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                            <Target size={14} className="text-indigo-500" />
+                            Tipo de Resultado Obtido
+                          </label>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-lg">
+                            {(['Tangível', 'Intangível', 'Ambos'] as const).map((type) => {
+                              const currentType =
+                                activeCycle.check?.realResultType ||
+                                activeCycle.plan.impact.impactType ||
+                                'Tangível';
+                              const isSelected = currentType === type;
+                              return (
+                                <button
+                                  key={type}
+                                  type="button"
+                                  onClick={() =>
+                                    updateCycle({
+                                      check: {
+                                        ...activeCycle.check,
+                                        realResultType: type,
+                                      },
+                                    })
+                                  }
+                                  className={cn(
+                                    "p-3.5 rounded-2xl border text-xs font-black uppercase tracking-wider transition-all text-center cursor-pointer",
+                                    isSelected
+                                      ? "bg-indigo-600 text-white border-indigo-600 shadow-md"
+                                      : "bg-white border-slate-200 text-slate-500 hover:bg-slate-100"
+                                  )}
+                                >
+                                  {type}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Ganhos Tangíveis Reais */}
+                        {((activeCycle.check?.realResultType || activeCycle.plan.impact.impactType || 'Tangível') === 'Tangível' ||
+                          (activeCycle.check?.realResultType || activeCycle.plan.impact.impactType || 'Tangível') === 'Ambos') && (
+                          <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-3 animate-in fade-in duration-300">
+                            <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest flex items-center gap-1.5">
+                              <Zap size={14} className="text-emerald-500" />
+                              Resultados Tangíveis Reais
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                  Redução de custo real (R$)
+                                </label>
+                                <input
+                                  type="number"
+                                  placeholder="0.00"
+                                  value={activeCycle.check?.realCostReduction ?? ''}
+                                  onChange={(e) =>
+                                    updateCycle({
+                                      check: {
+                                        ...activeCycle.check,
+                                        realCostReduction: parseFloat(e.target.value) || 0,
+                                      },
+                                    })
+                                  }
+                                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                  Ganho de tempo real (horas/mês)
+                                </label>
+                                <input
+                                  type="number"
+                                  placeholder="0"
+                                  value={activeCycle.check?.realTimeGain ?? ''}
+                                  onChange={(e) =>
+                                    updateCycle({
+                                      check: {
+                                        ...activeCycle.check,
+                                        realTimeGain: parseFloat(e.target.value) || 0,
+                                      },
+                                    })
+                                  }
+                                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                  Resultado percentual (%)
+                                </label>
+                                <input
+                                  type="number"
+                                  placeholder="0"
+                                  value={activeCycle.check?.realIndicatorResult ?? ''}
+                                  onChange={(e) =>
+                                    updateCycle({
+                                      check: {
+                                        ...activeCycle.check,
+                                        realIndicatorResult: parseFloat(e.target.value) || 0,
+                                      },
+                                    })
+                                  }
+                                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Ganhos Intangíveis Reais */}
+                        {((activeCycle.check?.realResultType || activeCycle.plan.impact.impactType || 'Tangível') === 'Intangível' ||
+                          (activeCycle.check?.realResultType || activeCycle.plan.impact.impactType || 'Tangível') === 'Ambos') && (
+                          <div className="p-4 bg-white rounded-2xl border border-slate-200 space-y-3 animate-in fade-in duration-300">
+                            <span className="text-[10px] font-black text-indigo-700 uppercase tracking-widest flex items-center gap-1.5">
+                              <Award size={14} className="text-indigo-500" />
+                              Resultados Intangíveis Reais
+                            </span>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                Detalhamento dos Ganhos Intangíveis Obtidos (Satisfação, Qualidade, Clima, Processos)
+                              </label>
+                              <textarea
+                                rows={2}
+                                placeholder="Descreva os ganhos qualitativos reais observados..."
+                                value={activeCycle.check?.realIntangibleNotes ?? ''}
+                                onChange={(e) =>
+                                  updateCycle({
+                                    check: {
+                                      ...activeCycle.check,
+                                      realIntangibleNotes: e.target.value,
+                                    },
+                                  })
+                                }
+                                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="space-y-1.5 pt-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                            Observações e Notas Gerais
+                          </label>
+                          <textarea
+                            rows={2}
+                            placeholder="Anotações gerais sobre o resultado obtido na prática..."
+                            value={activeCycle.check?.realResultNotes ?? ''}
+                            onChange={(e) =>
+                              updateCycle({
+                                check: {
+                                  ...activeCycle.check,
+                                  realResultNotes: e.target.value,
+                                },
+                              })
+                            }
+                            className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 resize-y"
+                          />
+                        </div>
+                      </div>
+
+                      {/* 3.2 BLOCO 2: Comparação com Planejamento */}
+                      <div className="bg-indigo-50/40 p-6 rounded-3xl border border-indigo-100/80 space-y-4">
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2">
+                            <FileText size={16} className="text-indigo-600" />
+                            <span className="text-xs font-black text-indigo-900 uppercase tracking-widest">
+                              2. Comparação com Planejamento
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100/80 px-3 py-1 rounded-full border border-indigo-200/60 shadow-sm">
+                            Dados abaixo definidos na etapa PLAN (somente leitura)
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="bg-white p-4 rounded-2xl border border-indigo-100/60 space-y-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Tipo de Impacto</span>
+                            <p className="text-xs font-black text-slate-800">{activeCycle.plan.impact.impactType || 'Não definido'}</p>
+                          </div>
+                          <div className="bg-white p-4 rounded-2xl border border-indigo-100/60 space-y-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Perda / Impacto Estimado</span>
+                            <p className="text-xs font-black text-slate-800">
+                              R$ {(activeCycle.plan.impact.tangibleFinancialLoss || activeCycle.plan.impact.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <div className="bg-white p-4 rounded-2xl border border-indigo-100/60 space-y-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Redução Custo Esperada</span>
+                            <p className="text-xs font-black text-emerald-600">
+                              R$ {(activeCycle.plan.impact.expectedCostReduction || activeCycle.plan.impact.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <div className="bg-white p-4 rounded-2xl border border-indigo-100/60 space-y-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Ganho Tempo Esperado</span>
+                            <p className="text-xs font-black text-slate-800">
+                              {activeCycle.plan.impact.expectedTimeGain || 0} h/mês
+                            </p>
+                          </div>
+                        </div>
+
+                        {(activeCycle.plan.impact.expectedIndicatorImprovement || activeCycle.plan.impact.expectedOtherGains) && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-indigo-100/60">
+                            {activeCycle.plan.impact.expectedIndicatorImprovement ? (
+                              <div className="bg-white p-3 rounded-2xl border border-indigo-100/60 space-y-0.5">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase">% Melhoria Indicador Esperada</span>
+                                <p className="text-xs font-black text-indigo-600">{activeCycle.plan.impact.expectedIndicatorImprovement}%</p>
+                              </div>
+                            ) : null}
+                            {activeCycle.plan.impact.expectedOtherGains ? (
+                              <div className="bg-white p-3 rounded-2xl border border-indigo-100/60 space-y-0.5">
+                                <span className="text-[10px] font-bold text-slate-400 uppercase">Outros Ganhos Esperados</span>
+                                <p className="text-xs font-bold text-slate-700">{activeCycle.plan.impact.expectedOtherGains}</p>
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 3.3 BLOCO 3: Conclusão */}
+                      <div className="p-6 bg-slate-50 rounded-3xl border border-slate-200 space-y-4">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 size={16} className="text-emerald-600" />
+                          <span className="text-xs font-black text-slate-800 uppercase tracking-widest">
+                            3. Conclusão
+                          </span>
+                        </div>
+                        <div className="space-y-3">
+                          <label className="text-xs font-black text-slate-600 uppercase tracking-widest block">
+                            O ganho esperado foi atingido? <span className="text-rose-500 font-bold">* (Obrigatório)</span>
+                          </label>
+                          <div className="grid grid-cols-3 gap-3 max-w-md">
+                            {(['Sim', 'Parcial', 'Não'] as const).map((status) => {
+                              const isSelected = activeCycle.check?.expectedGainAchieved === status;
+                              return (
+                                <button
+                                  key={status}
+                                  type="button"
+                                  onClick={() =>
+                                    updateCycle({
+                                      check: {
+                                        ...activeCycle.check,
+                                        expectedGainAchieved: status,
+                                      },
+                                    })
+                                  }
+                                  className={cn(
+                                    "p-3 rounded-2xl border text-xs font-black uppercase tracking-wider transition-all text-center cursor-pointer",
+                                    isSelected
+                                      ? status === 'Sim'
+                                        ? "bg-emerald-600 text-white border-emerald-600 shadow-md"
+                                        : status === 'Parcial'
+                                          ? "bg-amber-500 text-white border-amber-500 shadow-md"
+                                          : "bg-rose-600 text-white border-rose-600 shadow-md"
+                                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100",
+                                    showValidationErrors && !activeCycle.check?.expectedGainAchieved && "border-rose-500 ring-1 ring-rose-500"
+                                  )}
+                                >
+                                  {status}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {showValidationErrors && !activeCycle.check?.expectedGainAchieved && (
+                            <p className="text-xs text-rose-500 font-bold">
+                              Selecione se o ganho esperado foi atingido para concluir esta etapa.
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Botão Avançar para ACT (Posição: após 3. Conclusão) */}
+                      <div className="pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                        <div className="text-xs font-medium">
+                          {!isCheckPhaseValid ? (
+                            <span className="text-amber-600 font-bold flex items-center gap-1.5">
+                              <AlertTriangle size={16} className="shrink-0" />
+                              Preencha o campo '3. Conclusão' e conclua o acompanhamento das ações em CHECK para habilitar o avanço.
+                            </span>
+                          ) : (
+                            <span className="text-emerald-600 font-bold flex items-center gap-1.5">
+                              <CheckCircle2 size={16} className="shrink-0" />
+                              Etapa de verificação e medição de ganhos concluída! Pronto para avançar.
+                            </span>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!isCheckPhaseValid) {
+                              setShowValidationErrors(true);
+                              setSaveFeedback(
+                                "Para avançar para ACT, selecione 'O ganho esperado foi atingido?' em 3. Conclusão e conclua o acompanhamento de todas as ações."
+                              );
+                              return;
+                            }
+                            handlePhaseChange("ACT");
+                          }}
+                          disabled={!isCheckPhaseValid}
+                          className={cn(
+                            "w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest transition-all shadow-lg cursor-pointer",
+                            isCheckPhaseValid
+                              ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-100"
+                              : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-60 shadow-none"
+                          )}
+                        >
+                          Avançar para ACT
+                          <ArrowRight size={18} />
+                        </button>
+                      </div>
+                    </div>
+
+                    </motion.div>
                 )}
 
                 {activePhase === "ACT" && (
@@ -6933,151 +7191,6 @@ export default function PDCAEditor({
       </AnimatePresence>
     </div>
   );
-
-  async function updateActionPlan(
-    id: string,
-    data: Partial<ActionPlanItem>,
-    isTyping = false,
-  ) {
-    if (!activeCycle) return;
-
-    const item = activeCycle.plan.actionPlan.find((i) => i.id === id);
-    if (item && item.status === "Cancelado") {
-      setSaveFeedback("Plano cancelado não pode ser modificado");
-      return;
-    }
-
-    // Security check: Only update ACT fields if CHECK is concluded
-    const actFields = [
-      "finalProblemStatus",
-      "finalAction",
-      "standardizationModels",
-    ];
-    const isUpdatingActField = Object.keys(data).some((key) =>
-      actFields.includes(key),
-    );
-
-    if (isUpdatingActField) {
-      if (item) {
-        const isCheckDone =
-          !!item.monitoringTool?.trim() &&
-          !!item.worked &&
-          (item.worked === "Sim" || !!item.failureReason?.trim());
-        if (!isCheckDone) {
-          setSaveFeedback("Plano ainda não liberado para ACT");
-          return;
-        }
-      }
-    }
-
-    const newPlan = [...activeCycle.plan.actionPlan];
-    const idx = newPlan.findIndex((i) => i.id === id);
-    if (idx === -1) return;
-
-    const oldItem = newPlan[idx];
-    let newItem = { ...oldItem, ...data };
-
-    // Auto-transition from DO to CHECK when status is Concluído
-    if (
-      data.status === "Concluído" &&
-      (!oldItem.currentPhase || oldItem.currentPhase === "DO")
-    ) {
-      newItem.currentPhase = "CHECK";
-    }
-
-    // Auto-transition from CHECK to ACT when all check fields are filled
-    const isCheckDone =
-      !!newItem.monitoringTool?.trim() &&
-      !!newItem.worked &&
-      (newItem.worked === "Sim" || !!newItem.failureReason?.trim());
-    if (isCheckDone && newItem.currentPhase === "CHECK") {
-      newItem.currentPhase = "ACT";
-    }
-
-    newPlan[idx] = newItem;
-    updatePlan({ actionPlan: newPlan });
-  }
-
-  function addActionPlanItem() {
-    if (!activeCycle) return;
-    const newItem: ActionPlanItem = {
-      id: uuidv4(),
-      what: "",
-      why: "",
-      where: "",
-      when: "",
-      who: "",
-      how: "",
-      howMuch: "",
-      status: "Pendente",
-      currentPhase: "DO",
-      executionLogs: [],
-      monitoringMode: "Dias",
-      monitoringPeriod: 1,
-      worked: undefined,
-      finalProblemStatus: "Resolvido",
-      finalAction: "Padronizar processo",
-      standardizationModels: [],
-    };
-    updatePlan({ actionPlan: [...activeCycle.plan.actionPlan, newItem] });
-  }
-
-  function removeActionPlanItem(id: string) {
-    if (!activeCycle) return;
-
-    // Implementing Soft Delete as per Task 7 Option A
-    const newPlan = activeCycle.plan.actionPlan.map((i) =>
-      i.id === id ? { ...i, status: "Cancelado" as any, ativo: false } : i,
-    );
-    updatePlan({ actionPlan: newPlan });
-  }
-
-  function getProgress(status: PDCAStatus, cycle?: PDCACycle) {
-    if (status === "Concluído") return 100;
-    if (!cycle) return 0;
-
-    // Average calculation of progress per plan item
-    const planItems = cycle.plan.actionPlan || [];
-    if (planItems.length === 0) {
-      const { rootCauseAnalysis } = cycle.plan;
-      const isPlanComplete =
-        rootCauseAnalysis.type === "ishikawa"
-          ? (rootCauseAnalysis.priorityCauses || []).length > 0
-          : !!rootCauseAnalysis.identifiedRootCause?.trim();
-      return isPlanComplete ? 25 : 0;
-    }
-
-    const itemsProgress = planItems.map((item) => {
-      let p = 25; // PLAN is done
-
-      const isDoDone = item.status === "Concluído";
-
-      if (isDoDone) {
-        p += 25;
-        const isCheckDone =
-          !!item.monitoringTool?.trim() &&
-          !!item.worked &&
-          (item.worked === "Sim" || !!item.failureReason?.trim());
-        if (isCheckDone) {
-          p += 25;
-          const isActDone =
-            !!item.finalProblemStatus &&
-            !!item.finalAction &&
-            (item.finalAction !== "Padronizar processo" ||
-              (item.standardizationModels || []).length > 0);
-          if (isActDone) p += 25;
-        }
-      } else if (item.status === "Em andamento") {
-        p += 10;
-      }
-
-      return p;
-    });
-
-    const averageProgress =
-      itemsProgress.reduce((acc, p) => acc + p, 0) / itemsProgress.length;
-    return Math.round(averageProgress);
-  }
 }
 
 function ReportSection({
@@ -7133,133 +7246,6 @@ function ReportField({ label, value }: { label: string; value: any }) {
       ) : (
         <p className="text-sm font-bold text-slate-700">{value || "N/A"}</p>
       )}
-    </div>
-  );
-}
-
-function StatCard({
-  title,
-  value,
-  icon,
-  color,
-}: {
-  title: string;
-  value: number;
-  icon: React.ReactNode;
-  color: string;
-}) {
-  const colors: any = {
-    indigo: "bg-indigo-50 text-indigo-600",
-    amber: "bg-amber-50 text-amber-600",
-    emerald: "bg-emerald-50 text-emerald-600",
-  };
-
-  return (
-    <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4 md:gap-6">
-      <div
-        className={cn(
-          "w-12 h-12 md:w-14 md:h-14 rounded-xl md:rounded-2xl flex items-center justify-center shrink-0",
-          colors[color],
-        )}
-      >
-        {React.cloneElement(icon as React.ReactElement, { size: 24 })}
-      </div>
-      <div className="min-w-0">
-        <p className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-widest truncate">
-          {title}
-        </p>
-        <p className="text-2xl md:text-3xl font-black text-slate-900 mt-0.5 md:mt-1">
-          {value}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: any = {
-    Ativo: "bg-indigo-100 text-indigo-700",
-    Concluído: "bg-emerald-100 text-emerald-700 border border-emerald-200",
-    "Em andamento": "bg-amber-100 text-amber-700",
-    Pendente: "bg-slate-100 text-slate-600",
-  };
-
-  return (
-    <span
-      className={cn(
-        "text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-wider",
-        styles[status] || "bg-slate-100 text-slate-600",
-      )}
-    >
-      {status}
-    </span>
-  );
-}
-
-function PhaseTab({
-  active,
-  onClick,
-  label,
-  color,
-  disabled,
-  icon,
-  lockTooltip,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-  color: string;
-  disabled?: boolean;
-  icon?: React.ReactNode;
-  lockTooltip?: string;
-}) {
-  const colors: any = {
-    indigo: "border-indigo-600 text-indigo-600",
-    amber: "border-amber-500 text-amber-500",
-    emerald: "border-emerald-500 text-emerald-500",
-    rose: "border-rose-500 text-rose-500",
-    slate: "border-slate-500 text-slate-500",
-  };
-
-  return (
-    <div className="relative group/tab">
-      <button
-        onClick={!disabled ? onClick : undefined}
-        className={cn(
-          "py-4 px-2 border-b-4 transition-all font-black text-xs tracking-widest flex items-center gap-2 outline-none",
-          active
-            ? colors[color]
-            : "border-transparent text-slate-400 hover:text-slate-600",
-          disabled && "opacity-50 cursor-not-allowed grayscale",
-        )}
-      >
-        {icon}
-        {label}
-      </button>
-
-      {disabled && lockTooltip && (
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 text-white text-[10px] font-bold rounded-lg opacity-0 group-hover/tab:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50 shadow-xl">
-          <div className="relative">
-            {lockTooltip}
-            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SectionHeader({ number, title }: { number: string; title: string }) {
-  return (
-    <div className="flex items-center gap-4">
-      <div className="session-step w-10 h-10 rounded-xl flex items-center justify-center font-black shadow-lg">
-        <span className="session-step-number text-white">
-          {number}
-        </span>
-      </div>
-      <h4 className="text-xl font-black text-slate-800 dark:text-slate-100 tracking-tight">
-        {title}
-      </h4>
     </div>
   );
 }

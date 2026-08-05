@@ -2,6 +2,7 @@ import { doc, setDoc, updateDoc, deleteDoc, collection, getDocs, query, where } 
 import { db } from '../firebase';
 import { NotificationItem, Project, OperationalAction, Subtask } from '../types';
 import { logFeature } from './changelogService';
+import { calculateActionAlert } from '../utils/calculations';
 
 export async function createNotification(params: {
   usuario_id: string;
@@ -142,4 +143,62 @@ export function notifySubtaskChanges(
     });
   }
 }
+
+export async function checkAndNotifyActionDeadlines(
+  userId: string,
+  userEmail: string | null | undefined,
+  userName: string | null | undefined,
+  actions: OperationalAction[],
+  existingNotifications: NotificationItem[]
+) {
+  if (!userId && !userEmail) return;
+
+  const todayStr = new Date().toISOString().substring(0, 10);
+
+  // Anti-spam / Daily Rule: Regra de 1 notificação por dia
+  const alreadyNotifiedToday = existingNotifications.some((n) => {
+    const notifDateStr = n.data ? n.data.substring(0, 10) : '';
+    return (
+      notifDateStr === todayStr &&
+      (n.subtask_id === 'daily_deadline_alert' || n.mensagem.includes('vencer o prazo'))
+    );
+  });
+
+  if (alreadyNotifiedToday) return;
+
+  // Filtrar ações não concluídas atribuídas ao usuário logado que estão próximas de vencer ou atrasadas
+  const userPendingActions = actions.filter((action) => {
+    if (action.status === 'Concluído') return false;
+
+    const isAssigned =
+      (action.responsibleId && (
+        action.responsibleId === userId ||
+        (userEmail && action.responsibleId.toLowerCase() === userEmail.toLowerCase())
+      )) ||
+      (action.responsibleName && userName && action.responsibleName.trim().toLowerCase() === userName.trim().toLowerCase());
+
+    if (!isAssigned) return false;
+    if (!action.forecastDate) return false;
+
+    const alertStatus = calculateActionAlert(action);
+    return alertStatus === 'Próximo do vencimento' || alertStatus === 'Atrasado';
+  });
+
+  if (userPendingActions.length === 0) return;
+
+  const count = userPendingActions.length;
+  const firstAction = userPendingActions[0];
+  const mensagem = count === 1
+    ? `Atenção: Você possui 1 ação no histórico de ações próxima de vencer o prazo ("${firstAction.action}").`
+    : `Atenção: Você possui ${count} ações no histórico de ações próximas de vencer o prazo.`;
+
+  await createNotification({
+    usuario_id: userId,
+    tipo: 'acao',
+    mensagem,
+    referencia_id: firstAction.id,
+    subtask_id: 'daily_deadline_alert',
+  });
+}
+
 

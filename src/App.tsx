@@ -226,6 +226,8 @@ export default function App() {
   const [operationalActions, setOperationalActions] = useState<OperationalAction[]>([]);
   const [targetSubtaskId, setTargetSubtaskId] = useState<string | null>(null);
   const [targetActionId, setTargetActionId] = useState<string | null>(null);
+  const [actionsNavSource, setActionsNavSource] = useState<'notification_deadline' | 'notification_action' | 'menu' | null>(null);
+  const [isDeadlineAlertFilter, setIsDeadlineAlertFilter] = useState<boolean>(false);
   const [targetProjectId, setTargetProjectId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [globalConfig, setGlobalConfig] = useState<GlobalConfig>({ 
@@ -693,7 +695,16 @@ export default function App() {
         setTargetProjectId(item.referencia_id);
       }
     } else if (item.tipo === 'acao') {
-      setTargetActionId(item.referencia_id);
+      const isDeadlineAlert =
+        item.subtask_id === 'daily_deadline_alert' ||
+        (item.mensagem && (
+          item.mensagem.toLowerCase().includes('vencer') ||
+          item.mensagem.toLowerCase().includes('prazo')
+        ));
+
+      setTargetActionId(item.referencia_id || null);
+      setIsDeadlineAlertFilter(isDeadlineAlert);
+      setActionsNavSource(isDeadlineAlert ? 'notification_deadline' : 'notification_action');
       setActiveView('actions');
     } else if (item.tipo === 'tarefa') {
       setActiveView('kanban');
@@ -944,6 +955,9 @@ export default function App() {
               onClick={() => handleNavigation(() => {
                 setActiveView('actions');
                 setSelectedProjectId(null);
+                setTargetActionId(null);
+                setIsDeadlineAlertFilter(false);
+                setActionsNavSource('menu');
                 setHasChanges(false);
                 setIsMobileMenuOpen(false);
               })}
@@ -1046,6 +1060,8 @@ export default function App() {
                 projects={projects}
                 users={users}
                 targetActionId={targetActionId || undefined}
+                isDeadlineAlertFilter={isDeadlineAlertFilter}
+                navigationSource={actionsNavSource || 'menu'}
               />
             ) : !selectedProjectId ? (
               <KanbanView 
@@ -3433,14 +3449,27 @@ function CreateProjectModal({ isOpen, onClose, onCreate, users }: {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<ProjectPriority>('Média');
-  const [assignedTo, setAssignedTo] = useState('');
+  const [assignedTo, setAssignedTo] = useState('backlog');
+
+  const loggedInUser = users.find(u => 
+    u.id === auth.currentUser?.uid || 
+    (u.email && auth.currentUser?.email && u.email.toLowerCase() === auth.currentUser.email.toLowerCase())
+  );
+  const isMaster = loggedInUser?.profile === 'Usuário Master';
+
+  const assignableUsers = isMaster 
+    ? users 
+    : users.filter(u => 
+        u.id === loggedInUser?.id || 
+        (u.email && loggedInUser?.email && u.email.toLowerCase() === loggedInUser.email.toLowerCase())
+      );
 
   useEffect(() => {
     if (isOpen) {
       setName('');
       setDescription('');
       setPriority('Média');
-      setAssignedTo(users.length > 0 ? users[0].id : '');
+      setAssignedTo('backlog');
     }
   }, [isOpen, users]);
 
@@ -3519,7 +3548,7 @@ function CreateProjectModal({ isOpen, onClose, onCreate, users }: {
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition-all"
               >
                 <option value="backlog">Backlog</option>
-                {users.map(u => (
+                {assignableUsers.map(u => (
                   <option key={u.id} value={u.id}>{u.name}</option>
                 ))}
               </select>

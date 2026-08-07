@@ -10,6 +10,8 @@ import {
   CheckCircle2,
   Clock,
   AlertCircle,
+  Calendar,
+  CalendarDays,
   MoreVertical,
   Save,
   Trash2
@@ -30,6 +32,8 @@ interface OperationalActionsTabProps {
   projects: Project[];
   users: User[];
   targetActionId?: string;
+  isDeadlineAlertFilter?: boolean;
+  navigationSource?: 'notification_deadline' | 'notification_action' | 'menu' | string;
   key?: string;
 }
 
@@ -191,7 +195,37 @@ function MultiSelectFilter({
   );
 }
 
-export default function OperationalActionsTab({ actions, projects, users, targetActionId }: OperationalActionsTabProps) {
+const getTodayStr = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getFutureDateStr = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getNormalizedAlertLabel = (action: { status: string; forecastDate: string; completionDate?: string }): string => {
+  const alert = calculateActionAlert(action);
+  if (alert === 'Dentro do prazo') return 'Sem alerta';
+  return alert;
+};
+
+export default function OperationalActionsTab({ 
+  actions, 
+  projects, 
+  users, 
+  targetActionId,
+  isDeadlineAlertFilter = false,
+  navigationSource = 'menu'
+}: OperationalActionsTabProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [actionToDelete, setActionToDelete] = useState<OperationalAction | null>(null);
@@ -202,6 +236,15 @@ export default function OperationalActionsTab({ actions, projects, users, target
   const [filterResponsibles, setFilterResponsibles] = useState<string[]>([]);
   const [filterStatuses, setFilterStatuses] = useState<string[]>([]);
   const [filterPriorities, setFilterPriorities] = useState<string[]>([]);
+  const [filterDeadlineAlertOnly, setFilterDeadlineAlertOnly] = useState<boolean>(isDeadlineAlertFilter);
+
+  // NOVO FILTRO: Alerta de Prazo
+  const [filterAlertStatuses, setFilterAlertStatuses] = useState<string[]>([]);
+
+  // NOVO FILTRO: Previsão (Data de Previsão de Conclusão)
+  const [forecastStartDate, setForecastStartDate] = useState<string>('');
+  const [forecastEndDate, setForecastEndDate] = useState<string>('');
+  const [forecastShortcut, setForecastShortcut] = useState<'all' | 'today' | 'next_7' | 'next_15' | 'next_30' | 'overdue' | 'custom'>('all');
 
   const [editingActionId, setEditingActionId] = useState<string | null>(null);
   const [tempUpdates, setTempUpdates] = useState<Partial<OperationalAction>>({});
@@ -209,12 +252,104 @@ export default function OperationalActionsTab({ actions, projects, users, target
   const [updatesToSave, setUpdatesToSave] = useState<Partial<OperationalAction>>({});
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<Record<string, boolean>>({});
 
+  const prevNavRef = useRef<{ source: string; targetId?: string; isDeadline?: boolean }>({
+    source: navigationSource,
+    targetId: targetActionId,
+    isDeadline: isDeadlineAlertFilter
+  });
+
+  const resetAllFilters = () => {
+    setSearchTerm('');
+    setFilterProjects([]);
+    setFilterResponsibles([]);
+    setFilterStatuses([]);
+    setFilterPriorities([]);
+    setFilterDeadlineAlertOnly(false);
+    setFilterAlertStatuses([]);
+    setForecastStartDate('');
+    setForecastEndDate('');
+    setForecastShortcut('all');
+  };
+
+  const handleSelectForecastShortcut = (shortcut: 'all' | 'today' | 'next_7' | 'next_15' | 'next_30' | 'overdue') => {
+    setForecastShortcut(shortcut);
+    const today = getTodayStr();
+
+    if (shortcut === 'all') {
+      setForecastStartDate('');
+      setForecastEndDate('');
+    } else if (shortcut === 'today') {
+      setForecastStartDate(today);
+      setForecastEndDate(today);
+    } else if (shortcut === 'next_7') {
+      setForecastStartDate(today);
+      setForecastEndDate(getFutureDateStr(7));
+    } else if (shortcut === 'next_15') {
+      setForecastStartDate(today);
+      setForecastEndDate(getFutureDateStr(15));
+    } else if (shortcut === 'next_30') {
+      setForecastStartDate(today);
+      setForecastEndDate(getFutureDateStr(30));
+    } else if (shortcut === 'overdue') {
+      setForecastStartDate('');
+      setForecastEndDate('');
+    }
+  };
+
   useEffect(() => {
-    if (targetActionId) {
-      const target = actions.find(a => a.id === targetActionId);
-      if (target) {
-        setSearchTerm(target.action);
+    const prev = prevNavRef.current;
+    const navChanged =
+      prev.source !== navigationSource ||
+      prev.targetId !== targetActionId ||
+      prev.isDeadline !== isDeadlineAlertFilter;
+
+    if (navChanged) {
+      prevNavRef.current = {
+        source: navigationSource,
+        targetId: targetActionId,
+        isDeadline: isDeadlineAlertFilter
+      };
+
+      // Always clear search input when coming from navigation or notification
+      setSearchTerm('');
+
+      if (navigationSource === 'notification_deadline' || isDeadlineAlertFilter) {
+        // Notification for deadline alert: reset project filter (global view) & show actions near deadline
+        setFilterProjects([]);
+        setFilterResponsibles([]);
+        setFilterPriorities([]);
+        setFilterStatuses([]);
+        setFilterDeadlineAlertOnly(true);
+        setFilterAlertStatuses([]);
+        setForecastStartDate('');
+        setForecastEndDate('');
+        setForecastShortcut('all');
+      } else if (navigationSource === 'notification_action') {
+        // Notification for specific action: reset filters and scroll to target
+        setFilterProjects([]);
+        setFilterResponsibles([]);
+        setFilterStatuses([]);
+        setFilterPriorities([]);
+        setFilterDeadlineAlertOnly(false);
+        setFilterAlertStatuses([]);
+        setForecastStartDate('');
+        setForecastEndDate('');
+        setForecastShortcut('all');
+      } else {
+        // Menu or clean entry: reset all filters completely
+        setFilterProjects([]);
+        setFilterResponsibles([]);
+        setFilterStatuses([]);
+        setFilterPriorities([]);
+        setFilterDeadlineAlertOnly(false);
+        setFilterAlertStatuses([]);
+        setForecastStartDate('');
+        setForecastEndDate('');
+        setForecastShortcut('all');
       }
+    }
+
+    if (targetActionId) {
       const timer = setTimeout(() => {
         const el = document.getElementById(`action-row-${targetActionId}`);
         if (el) {
@@ -223,9 +358,42 @@ export default function OperationalActionsTab({ actions, projects, users, target
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [targetActionId, actions]);
+  }, [navigationSource, isDeadlineAlertFilter, targetActionId, actions]);
 
   const matchesArr = (arr: string[], val: string) => arr.length === 0 || arr.includes(val);
+
+  const isAlertMatch = (action: OperationalAction) => {
+    if (filterDeadlineAlertOnly) {
+      if (action.status === 'Concluído') return false;
+      const alert = calculateActionAlert(action);
+      if (alert !== 'Próximo do vencimento' && alert !== 'Atrasado') return false;
+    }
+
+    if (filterAlertStatuses.length > 0) {
+      const alertLabel = getNormalizedAlertLabel(action);
+      const rawAlert = calculateActionAlert(action);
+      const matched = filterAlertStatuses.includes(alertLabel) || filterAlertStatuses.includes(rawAlert);
+      if (!matched) return false;
+    }
+
+    return true;
+  };
+
+  const isForecastMatch = (action: OperationalAction) => {
+    const today = getTodayStr();
+
+    if (forecastShortcut === 'overdue') {
+      return action.status !== 'Concluído' && !!action.forecastDate && action.forecastDate < today;
+    }
+
+    if (forecastStartDate || forecastEndDate) {
+      if (!action.forecastDate) return false;
+      if (forecastStartDate && action.forecastDate < forecastStartDate) return false;
+      if (forecastEndDate && action.forecastDate > forecastEndDate) return false;
+    }
+
+    return true;
+  };
 
   // Dynamic filter options (Excel style - based on other filters)
   const availableProjects = useMemo(() => {
@@ -240,12 +408,14 @@ export default function OperationalActionsTab({ actions, projects, users, target
         const matchesResponsible = matchesArr(filterResponsibles, a.responsibleId);
         const matchesStatus = matchesArr(filterStatuses, a.status);
         const matchesPriority = matchesArr(filterPriorities, a.priority);
-        return matchesSearch && matchesResponsible && matchesStatus && matchesPriority;
+        const matchesAlert = isAlertMatch(a);
+        const matchesForecast = isForecastMatch(a);
+        return matchesSearch && matchesResponsible && matchesStatus && matchesPriority && matchesAlert && matchesForecast;
       }).map(a => a.projectId)
     );
     filterProjects.forEach(id => ids.add(id));
     return sorted.filter(p => ids.has(p.id));
-  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, projects]);
+  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut, projects]);
 
   const availableResponsibles = useMemo(() => {
     const sorted = [...users].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
@@ -259,12 +429,14 @@ export default function OperationalActionsTab({ actions, projects, users, target
         const matchesProject = matchesArr(filterProjects, a.projectId);
         const matchesStatus = matchesArr(filterStatuses, a.status);
         const matchesPriority = matchesArr(filterPriorities, a.priority);
-        return matchesSearch && matchesProject && matchesStatus && matchesPriority;
+        const matchesAlert = isAlertMatch(a);
+        const matchesForecast = isForecastMatch(a);
+        return matchesSearch && matchesProject && matchesStatus && matchesPriority && matchesAlert && matchesForecast;
       }).map(a => a.responsibleId)
     );
     filterResponsibles.forEach(id => ids.add(id));
     return sorted.filter(u => ids.has(u.id));
-  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, users]);
+  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut, users]);
 
   const availableStatuses = useMemo(() => {
     const allPossible = ['Pendente', 'Em andamento', 'Concluído', 'Pausado'];
@@ -278,12 +450,14 @@ export default function OperationalActionsTab({ actions, projects, users, target
         const matchesProject = matchesArr(filterProjects, a.projectId);
         const matchesResponsible = matchesArr(filterResponsibles, a.responsibleId);
         const matchesPriority = matchesArr(filterPriorities, a.priority);
-        return matchesSearch && matchesProject && matchesResponsible && matchesPriority;
+        const matchesAlert = isAlertMatch(a);
+        const matchesForecast = isForecastMatch(a);
+        return matchesSearch && matchesProject && matchesResponsible && matchesPriority && matchesAlert && matchesForecast;
       }).map(a => a.status)
     );
     filterStatuses.forEach(s => statuses.add(s));
     return allPossible.filter(s => statuses.has(s));
-  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities]);
+  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut]);
 
   const availablePriorities = useMemo(() => {
     const allPossible = ['Baixa', 'Média', 'Alta', 'Urgente'];
@@ -297,12 +471,43 @@ export default function OperationalActionsTab({ actions, projects, users, target
         const matchesProject = matchesArr(filterProjects, a.projectId);
         const matchesResponsible = matchesArr(filterResponsibles, a.responsibleId);
         const matchesStatus = matchesArr(filterStatuses, a.status);
-        return matchesSearch && matchesProject && matchesResponsible && matchesStatus;
+        const matchesAlert = isAlertMatch(a);
+        const matchesForecast = isForecastMatch(a);
+        return matchesSearch && matchesProject && matchesResponsible && matchesStatus && matchesAlert && matchesForecast;
       }).map(a => a.priority)
     );
     filterPriorities.forEach(p => priorities.add(p));
     return allPossible.filter(p => priorities.has(p));
-  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities]);
+  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut]);
+
+  const availableAlertStatuses = useMemo(() => {
+    const allPossible = [
+      'Sem alerta',
+      'Próximo do vencimento',
+      'Atrasado',
+      'Concluído no prazo',
+      'Concluído fora do prazo'
+    ];
+    if (actions.length === 0) return allPossible;
+    const found = new Set<string>();
+    actions.forEach(a => {
+      const matchesSearch = !searchTerm.trim() ||
+        a.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        a.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (a.subtaskTitle || '').toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesProject = matchesArr(filterProjects, a.projectId);
+      const matchesResponsible = matchesArr(filterResponsibles, a.responsibleId);
+      const matchesStatus = matchesArr(filterStatuses, a.status);
+      const matchesPriority = matchesArr(filterPriorities, a.priority);
+      const matchesForecast = isForecastMatch(a);
+
+      if (matchesSearch && matchesProject && matchesResponsible && matchesStatus && matchesPriority && matchesForecast) {
+        found.add(getNormalizedAlertLabel(a));
+      }
+    });
+    filterAlertStatuses.forEach(s => found.add(s));
+    return allPossible.filter(s => found.has(s));
+  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, forecastStartDate, forecastEndDate, forecastShortcut, filterAlertStatuses]);
 
   const filteredActions = useMemo(() => {
     return actions.filter(a => {
@@ -314,10 +519,12 @@ export default function OperationalActionsTab({ actions, projects, users, target
       const matchesResponsible = matchesArr(filterResponsibles, a.responsibleId);
       const matchesStatus = matchesArr(filterStatuses, a.status);
       const matchesPriority = matchesArr(filterPriorities, a.priority);
+      const matchesAlert = isAlertMatch(a);
+      const matchesForecast = isForecastMatch(a);
       
-      return matchesSearch && matchesProject && matchesResponsible && matchesStatus && matchesPriority;
+      return matchesSearch && matchesProject && matchesResponsible && matchesStatus && matchesPriority && matchesAlert && matchesForecast;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities]);
+  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut]);
 
   const handleUpdateAction = async (id: string, updates: Partial<OperationalAction>) => {
     try {
@@ -466,22 +673,31 @@ export default function OperationalActionsTab({ actions, projects, users, target
         </div>
 
         {/* Filtros com Múltipla Seleção */}
-        <div className="bg-theme-card p-6 rounded-3xl border border-theme-border shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-slate-400">
-              <Filter size={16} />
-              <span className="text-xs font-black uppercase tracking-widest">Filtros de Busca (Múltipla Seleção)</span>
-            </div>
-            {(filterProjects.length > 0 || filterResponsibles.length > 0 || filterStatuses.length > 0 || filterPriorities.length > 0 || searchTerm) && (
+        <div className="bg-theme-card p-6 rounded-3xl border border-theme-border shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2 text-slate-400">
+                <Filter size={16} />
+                <span className="text-xs font-black uppercase tracking-widest">Filtros de Busca (Múltipla Seleção)</span>
+              </div>
               <button
                 type="button"
-                onClick={() => {
-                  setSearchTerm('');
-                  setFilterProjects([]);
-                  setFilterResponsibles([]);
-                  setFilterStatuses([]);
-                  setFilterPriorities([]);
-                }}
+                onClick={() => setFilterDeadlineAlertOnly(prev => !prev)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer",
+                  filterDeadlineAlertOnly
+                    ? "bg-amber-500 text-white border-amber-600 shadow-sm"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200"
+                )}
+              >
+                <AlertCircle size={14} />
+                <span>Próximas do Vencimento / Atrasadas</span>
+              </button>
+            </div>
+            {(filterProjects.length > 0 || filterResponsibles.length > 0 || filterStatuses.length > 0 || filterPriorities.length > 0 || filterAlertStatuses.length > 0 || searchTerm || filterDeadlineAlertOnly || forecastStartDate || forecastEndDate || forecastShortcut !== 'all') && (
+              <button
+                type="button"
+                onClick={resetAllFilters}
                 className="text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-colors flex items-center gap-1 cursor-pointer"
               >
                 <X size={14} />
@@ -490,7 +706,26 @@ export default function OperationalActionsTab({ actions, projects, users, target
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 min-w-0">
+          {filterDeadlineAlertOnly && (
+            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-900 dark:text-amber-200 text-xs font-bold shadow-sm">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={16} className="text-amber-600 dark:text-amber-400 animate-pulse shrink-0" />
+                <span>
+                  Filtro Ativo: Exibindo apenas ações com <strong>Alerta de Vencimento</strong> (Próximas do Vencimento ou Atrasadas) — Visualização Global (Todos os Projetos)
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFilterDeadlineAlertOnly(false)}
+                className="text-xs bg-amber-200/60 hover:bg-amber-200 dark:bg-amber-800/60 dark:hover:bg-amber-800 px-3 py-1 rounded-xl transition-colors cursor-pointer text-amber-900 dark:text-amber-100 font-bold"
+              >
+                Remover Filtro
+              </button>
+            </div>
+          )}
+
+          {/* Grid de Filtros Principais */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 min-w-0">
             <div className="relative min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input 
@@ -498,7 +733,7 @@ export default function OperationalActionsTab({ actions, projects, users, target
                 placeholder="Buscar ação..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-theme-background border border-theme-border text-theme-foreground rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all"
+                className="w-full pl-10 pr-4 py-2 bg-theme-background border border-theme-border text-theme-foreground rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 outline-none transition-all h-[38px]"
               />
             </div>
             
@@ -535,6 +770,141 @@ export default function OperationalActionsTab({ actions, projects, users, target
               selectedValues={filterPriorities}
               onChange={setFilterPriorities}
             />
+
+            <MultiSelectFilter 
+              label="Alerta de Prazo"
+              placeholder="Todos os Alertas"
+              options={availableAlertStatuses.map(a => ({ id: a, label: a }))}
+              selectedValues={filterAlertStatuses}
+              onChange={setFilterAlertStatuses}
+            />
+          </div>
+
+          {/* Sub-painel: Filtro por Previsão de Conclusão */}
+          <div className="pt-3 border-t border-theme-border/60 flex flex-col xl:flex-row xl:items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400 mr-1">
+                <Calendar size={14} className="text-indigo-600 dark:text-indigo-400" />
+                <span className="text-xs font-bold uppercase tracking-wider">Previsão:</span>
+              </div>
+              
+              <div className="flex flex-wrap items-center gap-1 bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => handleSelectForecastShortcut('all')}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                    forecastShortcut === 'all' && !forecastStartDate && !forecastEndDate
+                      ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  )}
+                >
+                  Todas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectForecastShortcut('today')}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                    forecastShortcut === 'today'
+                      ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  )}
+                >
+                  Hoje
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectForecastShortcut('next_7')}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                    forecastShortcut === 'next_7'
+                      ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  )}
+                >
+                  Próximos 7 dias
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectForecastShortcut('next_15')}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                    forecastShortcut === 'next_15'
+                      ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  )}
+                >
+                  Próximos 15 dias
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectForecastShortcut('next_30')}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                    forecastShortcut === 'next_30'
+                      ? "bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-xs"
+                      : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                  )}
+                >
+                  Próximos 30 dias
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSelectForecastShortcut('overdue')}
+                  className={cn(
+                    "px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1",
+                    forecastShortcut === 'overdue'
+                      ? "bg-rose-500 text-white shadow-xs"
+                      : "text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                  )}
+                >
+                  <Clock size={12} />
+                  <span>Atrasadas</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start xl:self-auto">
+              <span className="text-xs font-bold text-slate-400 shrink-0">Intervalo:</span>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="date"
+                  value={forecastStartDate}
+                  onChange={(e) => {
+                    setForecastStartDate(e.target.value);
+                    setForecastShortcut('custom');
+                  }}
+                  className="px-2.5 py-1 bg-theme-background border border-theme-border text-theme-foreground rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500"
+                  title="Data de Previsão Inicial"
+                />
+                <span className="text-xs text-slate-400">até</span>
+                <input
+                  type="date"
+                  value={forecastEndDate}
+                  onChange={(e) => {
+                    setForecastEndDate(e.target.value);
+                    setForecastShortcut('custom');
+                  }}
+                  className="px-2.5 py-1 bg-theme-background border border-theme-border text-theme-foreground rounded-xl text-xs outline-none focus:ring-1 focus:ring-indigo-500"
+                  title="Data de Previsão Final"
+                />
+                {(forecastStartDate || forecastEndDate) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForecastStartDate('');
+                      setForecastEndDate('');
+                      setForecastShortcut('all');
+                    }}
+                    className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
+                    title="Limpar intervalo de datas"
+                  >
+                    <X size={14} />
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </div>

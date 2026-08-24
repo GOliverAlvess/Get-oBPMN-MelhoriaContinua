@@ -10,7 +10,8 @@ import {
   Layout,
   Layers,
   HelpCircle,
-  Plus
+  Plus,
+  GraduationCap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
@@ -18,6 +19,7 @@ import { cn } from '../lib/utils';
 interface BpmnGuideProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenLearn?: () => void;
 }
 
 interface BpmnItem {
@@ -508,7 +510,7 @@ const BPMN_GUIDE_DATA: BpmnItem[] = [
   }
 ];
 
-export default function BpmnGuide({ isOpen, onClose }: BpmnGuideProps) {
+export default function BpmnGuide({ isOpen, onClose, onOpenLearn }: BpmnGuideProps) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredItems = BPMN_GUIDE_DATA.filter(item => 
@@ -559,8 +561,8 @@ export default function BpmnGuide({ isOpen, onClose }: BpmnGuideProps) {
               </button>
             </div>
 
-            {/* Search */}
-            <div className="p-6 border-b border-slate-100 dark:border-slate-800">
+            {/* Search and Learn banner */}
+            <div className="p-6 border-b border-slate-100 dark:border-slate-800 space-y-3">
               <div className="relative group">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" size={18} />
                 <input 
@@ -571,6 +573,26 @@ export default function BpmnGuide({ isOpen, onClose }: BpmnGuideProps) {
                   className="w-full pl-12 pr-4 py-3.5 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-2xl text-sm font-medium text-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 transition-all shadow-sm"
                 />
               </div>
+
+              {onOpenLearn && (
+                <div className="p-3 bg-indigo-50/80 dark:bg-indigo-950/40 rounded-xl border border-indigo-100 dark:border-indigo-900/50 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+                      <GraduationCap size={15} />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-indigo-950 dark:text-indigo-200 leading-tight">Aprenda BPMN Interativo</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Guia passo a passo com exemplos práticos</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => { onClose(); onOpenLearn(); }}
+                    className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-indigo-50 dark:hover:bg-slate-700 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all shadow-sm shrink-0"
+                  >
+                    Abrir
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* List */}

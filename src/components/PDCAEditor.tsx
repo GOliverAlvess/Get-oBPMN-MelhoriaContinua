@@ -55,6 +55,7 @@ import {
 } from "../types";
 import ParetoDiagram from "./ParetoDiagram";
 import GainsEditor from "./GainsEditor";
+import ContextHelp from "./ContextHelp";
 import { cn, isValidUrl, formatUrl, exportarCSVPadrao } from "../lib/utils";
 import { logFeature, logFix, logMelhoria, logAjuste } from "../lib/changelogService";
 
@@ -83,10 +84,12 @@ const SectionHeader = ({
   number,
   title,
   subtitle,
+  helpKey,
 }: {
   number?: string;
   title: string;
   subtitle?: string;
+  helpKey?: string;
 }) => (
   <div className="flex items-start gap-4 pb-6 border-b border-slate-200">
     {number && (
@@ -95,7 +98,10 @@ const SectionHeader = ({
       </div>
     )}
     <div>
-      <h3 className="text-lg font-black text-slate-800 tracking-tight">{title}</h3>
+      <div className="flex items-center gap-2">
+        <h3 className="text-lg font-black text-slate-800 tracking-tight">{title}</h3>
+        {helpKey && <ContextHelp contentKey={helpKey} size="xs" />}
+      </div>
       {subtitle && <p className="text-xs text-slate-500 font-medium mt-0.5">{subtitle}</p>}
     </div>
   </div>
@@ -3437,6 +3443,7 @@ export default function PDCAEditor({
                 </div>
                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <StatusBadge status={activeCycle?.status || "Ativo"} />
+                  <ContextHelp contentKey="pdca" size="xs" />
                   <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
                     {activeCycle &&
                       format(new Date(activeCycle.createdAt), "dd/MM/yyyy")}
@@ -3603,43 +3610,48 @@ export default function PDCAEditor({
                     className="max-w-5xl mx-auto space-y-6 md:space-y-8"
                   >
                     {/* PLAN Steps Navigation */}
-                    <div className="flex items-center justify-between bg-theme-card p-1 md:p-2 rounded-2xl md:rounded-3xl border border-theme-border shadow-sm mb-4 overflow-x-auto no-scrollbar">
-                      {[
-                        {
-                          id: 1,
-                          title: "Descrição",
-                          icon: <FileText size={16} />,
-                        },
-                        {
-                          id: 2,
-                          title: "Causa Raiz",
-                          icon: <Target size={16} />,
-                        },
-                        {
-                          id: 3,
-                          title: "Impacto",
-                          icon: <TrendingUp size={16} />,
-                        },
-                        {
-                          id: 4,
-                          title: "Plano de Ação",
-                          icon: <GitBranch size={16} />,
-                        },
-                      ].map((step) => (
-                        <button
-                          key={step.id}
-                          onClick={() => setActivePlanStep(step.id)}
-                          className={cn(
-                            "flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl md:rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shrink-0",
-                            activePlanStep === step.id
-                              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
-                              : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50",
-                          )}
-                        >
-                          {step.icon}
-                          <span className="hidden sm:block">{step.title}</span>
-                        </button>
-                      ))}
+                    <div className="flex items-center justify-between bg-theme-card p-1 md:p-2 rounded-2xl md:rounded-3xl border border-theme-border shadow-sm mb-4 overflow-x-auto no-scrollbar gap-2">
+                      <div className="flex-1 flex items-center justify-between gap-1 md:gap-2">
+                        {[
+                          {
+                            id: 1,
+                            title: "Descrição",
+                            icon: <FileText size={16} />,
+                          },
+                          {
+                            id: 2,
+                            title: "Causa Raiz",
+                            icon: <Target size={16} />,
+                          },
+                          {
+                            id: 3,
+                            title: "Impacto",
+                            icon: <TrendingUp size={16} />,
+                          },
+                          {
+                            id: 4,
+                            title: "Plano de Ação",
+                            icon: <GitBranch size={16} />,
+                          },
+                        ].map((step) => (
+                          <button
+                            key={step.id}
+                            onClick={() => setActivePlanStep(step.id)}
+                            className={cn(
+                              "flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl md:rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shrink-0",
+                              activePlanStep === step.id
+                                ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200"
+                                : "text-slate-400 hover:text-indigo-600 hover:bg-indigo-50",
+                            )}
+                          >
+                            {step.icon}
+                            <span className="hidden sm:block">{step.title}</span>
+                          </button>
+                        ))}
+                      </div>
+                      <div className="px-2 shrink-0 border-l border-slate-100 dark:border-slate-800">
+                        <ContextHelp contentKey="plan" size="sm" />
+                      </div>
                     </div>
 
                     <div className="space-y-12">
@@ -3676,6 +3688,7 @@ export default function PDCAEditor({
                             <SectionHeader
                               number="2"
                               title="Análise de Causa Raiz"
+                              helpKey="causaRaiz"
                             />
                             <div className="flex bg-theme-background p-1 rounded-xl border border-theme-border self-start md:self-auto">
                               <button
@@ -4236,6 +4249,7 @@ export default function PDCAEditor({
                             <SectionHeader
                               number="3"
                               title="Impacto do Problema"
+                              helpKey="impacto"
                             />
 
                             {/* 1. Impacto Atual */}
@@ -4487,6 +4501,7 @@ export default function PDCAEditor({
                                     <div className="flex items-center gap-2 text-emerald-800">
                                       <TrendingUp size={16} className="text-emerald-600" />
                                       <span className="text-xs font-black uppercase tracking-widest">Ganho Esperado (Metas Estruturadas)</span>
+                                      <ContextHelp contentKey="ganhoEsperado" size="xs" />
                                     </div>
                                     <span className="text-[10px] font-bold text-slate-600 bg-white/80 px-3 py-1 rounded-full border border-slate-200 shadow-xs">
                                       Preenchimento Opcional
@@ -4876,13 +4891,18 @@ export default function PDCAEditor({
                     className="max-w-5xl mx-auto space-y-8"
                   >
                     <div className="bg-theme-card rounded-[2.5rem] border border-theme-border shadow-sm overflow-hidden">
-                      <div className="p-8 border-b border-theme-border bg-theme-background/50">
-                        <h4 className="text-xl font-black text-theme-foreground tracking-tight">
-                          Execução e Histórico
-                        </h4>
-                        <p className="text-slate-400 text-sm mt-1">
-                          Registre cada atualização das ações planejadas.
-                        </p>
+                      <div className="p-8 border-b border-theme-border bg-theme-background/50 flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xl font-black text-theme-foreground tracking-tight">
+                              Execução e Histórico
+                            </h4>
+                            <ContextHelp contentKey="do" size="sm" />
+                          </div>
+                          <p className="text-slate-400 text-sm mt-1">
+                            Registre cada atualização das ações planejadas.
+                          </p>
+                        </div>
                       </div>
                       <div className="divide-y divide-theme-border">
                         {activeCycle.plan.actionPlan.filter(
@@ -5553,13 +5573,18 @@ export default function PDCAEditor({
                     className="max-w-5xl mx-auto space-y-8"
                   >
                     <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
-                      <div className="p-8 border-b border-slate-100 bg-slate-50/50">
-                        <h4 className="text-xl font-black text-slate-800 tracking-tight">
-                          Verificação de Resultados
-                        </h4>
-                        <p className="text-slate-500 text-sm mt-1">
-                          Acompanhamento e validação de cada ação.
-                        </p>
+                      <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xl font-black text-slate-800 tracking-tight">
+                              Verificação de Resultados
+                            </h4>
+                            <ContextHelp contentKey="check" size="sm" />
+                          </div>
+                          <p className="text-slate-500 text-sm mt-1">
+                            Acompanhamento e validação de cada ação.
+                          </p>
+                        </div>
                       </div>
                       <div className="divide-y divide-slate-100">
                         {activeCycle.plan.actionPlan.filter(
@@ -6261,13 +6286,18 @@ export default function PDCAEditor({
                     className="max-w-5xl mx-auto space-y-8"
                   >
                     <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden">
-                      <div className="p-8 border-b border-slate-100 bg-slate-50/50">
-                        <h4 className="text-xl font-black text-slate-800 tracking-tight">
-                          Ação de Melhoria Contínua
-                        </h4>
-                        <p className="text-slate-500 text-sm mt-1">
-                          Padronização ou novos ajustes para cada ação.
-                        </p>
+                      <div className="p-8 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="text-xl font-black text-slate-800 tracking-tight">
+                              Ação de Melhoria Contínua
+                            </h4>
+                            <ContextHelp contentKey="act" size="sm" />
+                          </div>
+                          <p className="text-slate-500 text-sm mt-1">
+                            Padronização ou novos ajustes para cada ação.
+                          </p>
+                        </div>
                       </div>
                       <div className="divide-y divide-slate-100">
                         {activeCycle.plan.actionPlan.filter(

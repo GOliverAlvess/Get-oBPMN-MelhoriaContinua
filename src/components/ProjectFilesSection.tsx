@@ -16,6 +16,7 @@ import { db, collection, query, where, onSnapshot, addDoc, doc, updateDoc, delet
 import { cn } from '../lib/utils';
 import { logUserActivity } from '../lib/activityLogger';
 import { getApiUrl } from '../utils/apiUrl';
+import ContextHelp from './ContextHelp';
 
 // Propriedades recebidas pelo componente de lista de anexos do projeto (ProjectFilesSection)
 interface ProjectFilesSectionProps {
@@ -262,7 +263,10 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
             <Paperclip size={20} />
           </div>
           <div>
-            <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Arquivos do Projeto</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-black text-slate-800 uppercase tracking-tight">Arquivos do Projeto</h3>
+              <ContextHelp contentKey="arquivos" size="xs" />
+            </div>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
               Arraste e solte ou selecione múltiplos arquivos (Google Drive)
             </p>

@@ -100,6 +100,7 @@ import ReportsTab from './components/ReportsTab';
 import ProjectFilesSection from './components/ProjectFilesSection';
 import NotificationBell from './components/NotificationBell';
 import UserActivityMonitoringTab from './components/UserActivityMonitoringTab';
+import ContextHelp from './components/ContextHelp';
 import { logUserActivity } from './lib/activityLogger';
 import { notifyProjectChanges, notifySubtaskChanges, checkAndNotifyActionDeadlines } from './lib/notificationService';
 import { calculateProjectProgress, calculateProjectStatus, calculateSubtaskStatus, getCardProgress, hasPendingSubtasksOrPDCA } from './lib/projectUtils';
@@ -1337,7 +1338,10 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
     >
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-          <h2 className="text-3xl font-bold text-slate-900">Projetos</h2>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-3xl font-bold text-slate-900">Projetos</h2>
+            <ContextHelp contentKey="projetos" size="sm" />
+          </div>
           <p className="text-slate-500 mt-1">
             Visualizando por {groupBy === 'status' ? 'status' : 'colaborador'}.
           </p>
@@ -2499,12 +2503,15 @@ function ScopeTab({
     <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-8 md:space-y-12">
       {/* 1. INFORMAÇÕES GERAIS */}
       <section className="bg-white p-4 md:p-8 rounded-2xl md:rounded-3xl border border-slate-200 shadow-sm space-y-6 md:space-y-8">
-        <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl md:rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-            <FileText size={20} />
-          </div>
-          Informações Gerais
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg md:text-xl font-black text-slate-900 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl md:rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+              <FileText size={20} />
+            </div>
+            Informações Gerais
+          </h3>
+          <ContextHelp contentKey="escopo" size="sm" />
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
           <div className="space-y-6">
             <FormField 

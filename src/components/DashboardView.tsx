@@ -49,6 +49,7 @@ import { calculateProjectProgress, getCardProgress } from '../lib/projectUtils';
 import ActionsDashboardView from './ActionsDashboardView';
 import FilterDropdown from './FilterDropdown';
 import DetailedOverviewTab from './DetailedOverviewTab';
+import ContextHelp from './ContextHelp';
 
 interface DashboardViewProps {
   projects: Project[];
@@ -467,7 +468,10 @@ export default function DashboardView({ projects, users, actions, onProjectClick
     <div className="space-y-8 pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 min-w-0">
         <div className="min-w-0 flex-1">
-          <h2 className="text-3xl font-black text-theme-foreground tracking-tight truncate">Dashboard Executivo</h2>
+          <div className="flex items-center gap-2.5">
+            <h2 className="text-3xl font-black text-theme-foreground tracking-tight truncate">Dashboard Executivo</h2>
+            <ContextHelp contentKey="dashboard" size="sm" />
+          </div>
           <p className="text-slate-400 mt-1 truncate">Visão estratégica e financeira do sistema.</p>
         </div>
         <div className="flex items-center gap-4 shrink-0 flex-wrap md:flex-nowrap">

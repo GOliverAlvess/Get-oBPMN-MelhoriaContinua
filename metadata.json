@@ -1,5 +1,6 @@
 {
   "name": "GIP Flow - Gestão de Processos",
   "description": "Plataforma integrada para gestão de processos corporativos, mapeamento BPMN e melhoria contínua (PDCA).",
-  "requestFramePermissions": []
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

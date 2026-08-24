@@ -26,7 +26,11 @@ import {
   Move,
   BookOpen,
   Copy,
-  Clipboard
+  Clipboard,
+  GraduationCap,
+  Sparkles,
+  Lightbulb,
+  ArrowUpRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -35,6 +39,418 @@ import { Project, BPMNTaskData, SavedColor } from '../types';
 import { cn } from '../lib/utils';
 import { logFeature, logAjuste } from '../lib/changelogService';
 import BpmnGuide from './BpmnGuide';
+import BpmnLearn from './BpmnLearn';
+import ContextHelp from './ContextHelp';
+import {
+  ExclusiveGatewayIcon,
+  ParallelGatewayIcon,
+  InclusiveGatewayIcon,
+  EventGatewayIcon,
+  ComplexGatewayIcon,
+  StartEventIcon,
+  TimerStartEventIcon,
+  MessageStartEventIcon,
+  IntermediateEventIcon,
+  TimerIntermediateEventIcon,
+  MessageIntermediateCatchIcon,
+  EndEventIcon,
+  MessageEndEventIcon,
+  ErrorEndEventIcon,
+  TerminateEndEventIcon,
+  GenericTaskIcon,
+  UserTaskIcon,
+  ManualTaskIcon,
+  ServiceTaskIcon,
+  SendTaskIcon,
+  ReceiveTaskIcon,
+  BusinessRuleTaskIcon,
+  ScriptTaskIcon,
+  CallActivityIcon,
+  SubProcessIcon,
+  PoolIcon,
+  LaneIcon,
+  SequenceFlowIcon,
+  MessageFlowIcon
+} from './bpmnSymbols';
+
+const getElementContextualHelp = (element: any) => {
+  if (!element) return null;
+  const type = element.type || element.businessObject?.$type || '';
+  const eventDef = element.businessObject?.eventDefinitions?.[0]?.$type || '';
+
+  // Gateways
+  if (type === 'bpmn:ExclusiveGateway') {
+    return {
+      title: 'Gateway Exclusivo (XOR)',
+      badge: 'Apenas 1 Caminho',
+      badgeColor: 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-900',
+      icon: <ExclusiveGatewayIcon />,
+      rule: 'XOR = Escolha de apenas UM caminho de saída.',
+      whenToUse: 'Utilize quando o fluxo depender de uma pergunta com resposta única (Sim/Não) ou rota mutuamente excludente.',
+      example: 'Mercadoria avariada? SIM ➔ Abrir ocorrência; NÃO ➔ Liberar expedição.',
+      tab: 'gateways',
+      targetId: 'sc-xor'
+    };
+  }
+  if (type === 'bpmn:ParallelGateway') {
+    return {
+      title: 'Gateway Paralelo (AND)',
+      badge: 'Todos os Caminhos',
+      badgeColor: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900',
+      icon: <ParallelGatewayIcon />,
+      rule: 'AND = TODOS os caminhos simultâneos (não há teste condicional).',
+      whenToUse: 'Utilize para dividir ou sincronizar caminhos que devem acontecer ao mesmo tempo.',
+      example: 'Conferir CT-e fiscal E Conferir carga física paralelamente.',
+      tab: 'gateways',
+      targetId: 'sc-and'
+    };
+  }
+  if (type === 'bpmn:InclusiveGateway') {
+    return {
+      title: 'Gateway Inclusivo (OR)',
+      badge: '1 ou Mais Caminhos',
+      badgeColor: 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-900',
+      icon: <InclusiveGatewayIcon />,
+      rule: 'OR = UM OU MAIS caminhos possíveis conforme as condições.',
+      whenToUse: 'Utilize quando uma, várias ou todas as saídas puderem ser verdadeiras simultaneamente.',
+      example: 'Tratativas de sinistro: Comunicar cliente e/ou Acionar seguradora.',
+      tab: 'gateways',
+      targetId: 'sc-or'
+    };
+  }
+  if (type === 'bpmn:EventBasedGateway') {
+    return {
+      title: 'Gateway por Evento',
+      badge: 'Primeiro Evento Vence',
+      badgeColor: 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-900',
+      icon: <EventGatewayIcon />,
+      rule: 'A decisão aguarda e segue o PRIMEIRO evento externo a ocorrer.',
+      whenToUse: 'Utilize quando a rota depender de eventos externos concorrentes (ex: retorno de e-mail vs timeout de 48h).',
+      example: 'Aguardar resposta do cliente OU Timeout de 48h.',
+      tab: 'gateways'
+    };
+  }
+  if (type === 'bpmn:ComplexGateway') {
+    return {
+      title: 'Gateway Complexo',
+      badge: 'Lógica Especial',
+      badgeColor: 'bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-900',
+      icon: <ComplexGatewayIcon />,
+      rule: 'Para regras de sincronização avançadas que não cabem no XOR/AND/OR.',
+      whenToUse: 'Utilize apenas quando a decisão exigir expressões complexas.',
+      example: 'Necessita de 3 de 5 aprovações para seguir.',
+      tab: 'gateways'
+    };
+  }
+
+  // Tasks
+  if (type === 'bpmn:UserTask') {
+    return {
+      title: 'Tarefa do Usuário (User Task)',
+      badge: 'Humano + Sistema',
+      badgeColor: 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-900',
+      icon: <UserTaskIcon />,
+      rule: 'Ação executada por uma pessoa utilizando um software/computador.',
+      whenToUse: 'Utilize quando um usuário precisa preencher formulário, analisar dados em tela ou aprovar no sistema.',
+      example: 'Cadastrar cotação no TMS ou aprovar solicitação de frete.',
+      tab: 'tasks',
+      targetId: 'sc-task'
+    };
+  }
+  if (type === 'bpmn:ManualTask') {
+    return {
+      title: 'Tarefa Manual (Manual Task)',
+      badge: 'Física / Sem Sistema',
+      badgeColor: 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-900',
+      icon: <ManualTaskIcon />,
+      rule: 'Ação física executada fora do computador/sistema.',
+      whenToUse: 'Utilize para atividades no pátio, armazém ou transporte sem interface direta com software.',
+      example: 'Carregar pallets no caminhão ou colar etiqueta física no volume.',
+      tab: 'tasks'
+    };
+  }
+  if (type === 'bpmn:ServiceTask') {
+    return {
+      title: 'Tarefa Automática (Service Task)',
+      badge: '100% Automática',
+      badgeColor: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900',
+      icon: <ServiceTaskIcon />,
+      rule: 'Executada automaticamente por um sistema ou API sem intervenção humana.',
+      whenToUse: 'Utilize para chamadas web, integrações de banco de dados ou processamento automático.',
+      example: 'Transmitir CT-e para a SEFAZ ou consultar status na Receita Federal.',
+      tab: 'tasks'
+    };
+  }
+  if (type === 'bpmn:SendTask') {
+    return {
+      title: 'Tarefa de Envio (Send Task)',
+      badge: 'Envio de Mensagem',
+      badgeColor: 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-900',
+      icon: <SendTaskIcon />,
+      rule: 'Envia dados ou mensagem para um participante externo.',
+      whenToUse: 'Utilize para disparo explícito de e-mails, arquivos EDI ou notificações a terceiros.',
+      example: 'Enviar arquivo NOTFIS para embarcador.',
+      tab: 'tasks'
+    };
+  }
+  if (type === 'bpmn:ReceiveTask') {
+    return {
+      title: 'Tarefa de Recebimento (Receive Task)',
+      badge: 'Aguarda Mensagem',
+      badgeColor: 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-900',
+      icon: <ReceiveTaskIcon />,
+      rule: 'Pausa o fluxo até receber a mensagem ou sinal externo esperado.',
+      whenToUse: 'Utilize quando a continuação do fluxo depender de uma comunicação enviada por terceiros.',
+      example: 'Aguardar comprovante de entrega do motorista.',
+      tab: 'tasks'
+    };
+  }
+  if (type === 'bpmn:BusinessRuleTask') {
+    return {
+      title: 'Regra de Negócio (Business Rule)',
+      badge: 'Tabelas DMN',
+      badgeColor: 'bg-purple-100 dark:bg-purple-950/60 text-purple-800 dark:text-purple-300 border-purple-200 dark:border-purple-900',
+      icon: <BusinessRuleTaskIcon />,
+      rule: 'Aplica regras pré-definidas ou cálculos de matriz de decisão.',
+      whenToUse: 'Utilize para cálculo de tarifas de frete, regras fiscais ou matrizes de risco.',
+      example: 'Calcular valor do frete e pedágio conforme peso e rota.',
+      tab: 'tasks'
+    };
+  }
+  if (type === 'bpmn:ScriptTask') {
+    return {
+      title: 'Tarefa de Script (Script Task)',
+      badge: 'Script Interno',
+      badgeColor: 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+      icon: <ScriptTaskIcon />,
+      rule: 'Executa um script de programação diretamente no motor de processos.',
+      whenToUse: 'Utilize para manipulação de variáveis, formatação de textos ou lógica simples.',
+      example: 'Formatar CEP e sanitizar endereço antes da emissão.',
+      tab: 'tasks'
+    };
+  }
+  if (type === 'bpmn:CallActivity') {
+    return {
+      title: 'Chamada de Processo (Call Activity)',
+      badge: 'Processo Global',
+      badgeColor: 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-900',
+      icon: <CallActivityIcon />,
+      rule: 'Invoca outro processo independente já modelado no repositório.',
+      whenToUse: 'Utilize para reaproveitar subprocessos corporativos (ex: Faturamento, Gestão de Sinistros).',
+      example: 'Chamar processo de "Emissão Fiscal e Averbação".',
+      tab: 'tasks'
+    };
+  }
+  if (type === 'bpmn:SubProcess') {
+    return {
+      title: 'Subprocesso (Sub-Process)',
+      badge: 'Agrupamento Modular',
+      badgeColor: 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-900',
+      icon: <SubProcessIcon />,
+      rule: 'Agrupa um conjunto de atividades detalhadas para manter a visão principal limpa.',
+      whenToUse: 'Utilize para evitar fluxos gigantes com mais de 15 a 20 atividades em tela.',
+      example: 'Subprocesso de "Conferência e Triagem da Carga".',
+      tab: 'tasks'
+    };
+  }
+  if (type === 'bpmn:Task') {
+    return {
+      title: 'Tarefa Geral (Task)',
+      badge: 'Atividade Padrão',
+      badgeColor: 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+      icon: <GenericTaskIcon />,
+      rule: 'Atividade genérica. Pode ser convertida para User, Service ou Manual Task.',
+      whenToUse: 'Utilize no início do desenho ou quando a atividade não estiver tipificada.',
+      example: 'Registrar entrada de mercadoria.',
+      tab: 'tasks',
+      targetId: 'sc-task'
+    };
+  }
+
+  // Events
+  if (type === 'bpmn:StartEvent') {
+    if (eventDef.includes('Timer')) {
+      return {
+        title: 'Início por Temporizador (Timer)',
+        badge: 'Disparo Programado',
+        badgeColor: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900',
+        icon: <TimerStartEventIcon />,
+        rule: 'Inicia o processo em horários ou frequências fixas.',
+        whenToUse: 'Utilize para processos periódicos (ex: todo dia às 08h, todo dia 1º).',
+        example: 'Disparar rotina de fechamento financeiro às 23:59.',
+        tab: 'events'
+      };
+    }
+    if (eventDef.includes('Message')) {
+      return {
+        title: 'Início por Mensagem',
+        badge: 'Disparo por Mensagem',
+        badgeColor: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900',
+        icon: <MessageStartEventIcon />,
+        rule: 'Inicia o processo ao receber um estímulo de comunicação externa.',
+        whenToUse: 'Utilize quando o processo é acionado por e-mail, webhook ou EDI de terceiro.',
+        example: 'Chegada de novo pedido de cotação via portal do cliente.',
+        tab: 'events'
+      };
+    }
+    return {
+      title: 'Evento de Início (Start Event)',
+      badge: 'Origem do Processo',
+      badgeColor: 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900',
+      icon: <StartEventIcon />,
+      rule: 'Ponto de partida do processo. Todo fluxo deve iniciar aqui.',
+      whenToUse: 'Utilize para marcar o início de qualquer fluxo de trabalho.',
+      example: 'Chegada do caminhão no pátio.',
+      tab: 'events',
+      targetId: 'sc-start'
+    };
+  }
+
+  if (type === 'bpmn:EndEvent') {
+    if (eventDef.includes('Terminate')) {
+      return {
+        title: 'Fim Terminativo',
+        badge: 'Encerramento Total',
+        badgeColor: 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-900',
+        icon: <TerminateEndEventIcon />,
+        rule: 'Interrompe imediatamente todas as raias e atividades do processo.',
+        whenToUse: 'Utilize em cancelamentos totais onde nada mais deve ser executado.',
+        example: 'Pedido cancelado pelo cliente antes do carregamento.',
+        tab: 'events'
+      };
+    }
+    if (eventDef.includes('Error')) {
+      return {
+        title: 'Fim por Erro',
+        badge: 'Término com Falha',
+        badgeColor: 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-900',
+        icon: <ErrorEndEventIcon />,
+        rule: 'Encerra o caminho atual sinalizando uma exceção ou falha.',
+        whenToUse: 'Utilize quando a etapa falhar e precisar acionar tratamento de erro.',
+        example: 'CT-e rejeitado definitivamente pela SEFAZ.',
+        tab: 'events'
+      };
+    }
+    if (eventDef.includes('Message')) {
+      return {
+        title: 'Fim com Mensagem',
+        badge: 'Notificação Conclusiva',
+        badgeColor: 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-900',
+        icon: <MessageEndEventIcon />,
+        rule: 'Finaliza o fluxo enviando uma mensagem para o participante externo.',
+        whenToUse: 'Utilize quando o encerramento do processo dispara aviso ao cliente.',
+        example: 'Processo encerrado com envio de e-mail de confirmação.',
+        tab: 'events'
+      };
+    }
+    return {
+      title: 'Evento de Fim (End Event)',
+      badge: 'Conclusão Normal',
+      badgeColor: 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-900',
+      icon: <EndEventIcon />,
+      rule: 'Marca o término de um caminho do processo.',
+      whenToUse: 'Utilize para registrar a entrega do resultado final.',
+      example: 'Carga entregue e canhoto assinado com sucesso.',
+      tab: 'events',
+      targetId: 'sc-end'
+    };
+  }
+
+  if (type === 'bpmn:IntermediateCatchEvent' || type === 'bpmn:IntermediateThrowEvent' || type === 'bpmn:BoundaryEvent') {
+    if (eventDef.includes('Timer')) {
+      return {
+        title: 'Evento Temporizador (Timer)',
+        badge: 'Espera de Prazo',
+        badgeColor: 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-900',
+        icon: <TimerIntermediateEventIcon />,
+        rule: 'Pausa o fluxo até atingir um tempo de espera ou data limite.',
+        whenToUse: 'Utilize quando for necessário aguardar um intervalo de tempo.',
+        example: 'Aguardar 24h para retorno de cotação.',
+        tab: 'events',
+        targetId: 'sc-timer'
+      };
+    }
+    if (eventDef.includes('Message')) {
+      return {
+        title: 'Evento de Mensagem',
+        badge: 'Troca de Mensagem',
+        badgeColor: 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-900',
+        icon: <MessageIntermediateCatchIcon />,
+        rule: 'Aguarda ou dispara uma mensagem intermediária no fluxo.',
+        whenToUse: 'Utilize para sincronização com participantes externos.',
+        example: 'Receber aceite da proposta pelo cliente.',
+        tab: 'events',
+        targetId: 'sc-msg'
+      };
+    }
+    return {
+      title: 'Evento Intermediário',
+      badge: 'Ocorrência no Fluxo',
+      badgeColor: 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-900',
+      icon: <IntermediateEventIcon />,
+      rule: 'Representa um evento ou espera ocorrida no meio do caminho.',
+      whenToUse: 'Utilize para indicar pontos onde o fluxo aguarda uma ocorrência.',
+      example: 'Aguardar autorização do supervisor.',
+      tab: 'events'
+    };
+  }
+
+  // Participants & Lanes
+  if (type === 'bpmn:Lane') {
+    return {
+      title: 'Raia (Lane)',
+      badge: 'Responsabilidade Interna',
+      badgeColor: 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-900',
+      icon: <LaneIcon />,
+      rule: 'Divide setores, áreas ou cargos dentro da mesma organização.',
+      whenToUse: 'Utilize para deixar claro quem executa cada atividade.',
+      example: 'Raia "Expedição", Raia "Financeiro", Raia "SAC".',
+      tab: 'participants',
+      targetId: 'sc-lane'
+    };
+  }
+  if (type === 'bpmn:Participant' || type === 'bpmn:Collaboration') {
+    return {
+      title: 'Pool (Participante)',
+      badge: 'Entidade / Organização',
+      badgeColor: 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-800 dark:text-indigo-300 border-indigo-200 dark:border-indigo-900',
+      icon: <PoolIcon />,
+      rule: 'Representa uma empresa parceira, cliente ou processo autônomo.',
+      whenToUse: 'Utilize quando o diagrama envolver diferentes entidades jurídicas.',
+      example: 'Pool "Transportadora" comunicando com Pool "Embarcador".',
+      tab: 'participants',
+      targetId: 'sc-pool'
+    };
+  }
+
+  // Flows
+  if (type === 'bpmn:SequenceFlow') {
+    return {
+      title: 'Fluxo de Sequência',
+      badge: 'Linha Contínua',
+      badgeColor: 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700',
+      icon: <SequenceFlowIcon />,
+      rule: 'Conecta nós dentro da mesma Pool. NUNCA sai para outra Pool.',
+      whenToUse: 'Utilize para definir a sequência de execução das etapas.',
+      example: 'Conecta Atividade A para Decisão B.',
+      tab: 'participants'
+    };
+  }
+  if (type === 'bpmn:MessageFlow') {
+    return {
+      title: 'Fluxo de Mensagem',
+      badge: 'Linha Tracejada',
+      badgeColor: 'bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-900',
+      icon: <MessageFlowIcon />,
+      rule: 'Conecta exclusivamente duas Pools distintas para envio de dados.',
+      whenToUse: 'Utilize para troca de mensagens entre diferentes organizações.',
+      example: 'Envio de comprovante da transportadora para o cliente.',
+      tab: 'participants'
+    };
+  }
+
+  return null;
+};
 
 const translationsPT: Record<string, string> = {
   // Tasks
@@ -424,6 +840,15 @@ export default function BPMNModeler({
   const [newColorName, setNewColorName] = useState('');
   const [isDiagramReady, setIsDiagramReady] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [isLearnOpen, setIsLearnOpen] = useState(false);
+  const [learnInitialTab, setLearnInitialTab] = useState<string>('start');
+  const [learnInitialTarget, setLearnInitialTarget] = useState<string | undefined>(undefined);
+
+  const openLearnWithContext = (tab: string = 'start', targetId?: string) => {
+    setLearnInitialTab(tab);
+    setLearnInitialTarget(targetId);
+    setIsLearnOpen(true);
+  };
   const [showRemoveProblemModal, setShowRemoveProblemModal] = useState(false);
   const isSyncingRef = useRef(false);
   const isLoadedRef = useRef(false);
@@ -1198,12 +1623,29 @@ export default function BPMNModeler({
           </div>
 
           <button 
+            type="button"
             onClick={() => setIsGuideOpen(true)}
-            className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 px-4 py-2 rounded-lg text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm"
+            className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 px-3.5 py-2 rounded-lg text-xs font-bold hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-sm"
+            title="Guia BPMN - Referência rápida dos elementos"
           >
             <BookOpen size={14} className="text-indigo-500" />
             Guia BPMN
           </button>
+
+          <button 
+            type="button"
+            onClick={() => openLearnWithContext('start')}
+            className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white px-3.5 py-2 rounded-lg text-xs font-bold transition-all shadow-md shadow-indigo-100 dark:shadow-none"
+            title="Aprenda BPMN 2.0 - Manual Didático e Interativo"
+          >
+            <GraduationCap size={15} className="text-indigo-200" />
+            Aprenda BPMN
+          </button>
+          <ContextHelp 
+            contentKey="bpmn" 
+            onAction={() => openLearnWithContext('start')} 
+            size="sm" 
+          />
           <button 
             onClick={exportAsPng}
             className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
@@ -1279,11 +1721,71 @@ export default function BPMNModeler({
                   </div>
                 </div>
 
+                {/* Ajuda Contextual Didática do Elemento BPMN */}
+                {(() => {
+                  const elementHelp = getElementContextualHelp(selectedElement);
+                  if (!elementHelp) return null;
+                  return (
+                    <div className="pt-5 border-t border-slate-100 dark:border-slate-700/80">
+                      <div className="p-3.5 rounded-2xl bg-gradient-to-br from-indigo-50/80 via-slate-50 to-white dark:from-indigo-950/30 dark:via-slate-900/60 dark:to-slate-900 border border-indigo-100/80 dark:border-indigo-900/50 shadow-sm space-y-3">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-indigo-100 dark:border-slate-700 flex items-center justify-center text-indigo-600 dark:text-indigo-400 shadow-sm shrink-0">
+                            {elementHelp.icon}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-extrabold text-slate-800 dark:text-slate-100 leading-tight truncate">
+                              {elementHelp.title}
+                            </p>
+                            <span className={cn(
+                              "inline-block text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md border mt-0.5",
+                              elementHelp.badgeColor
+                            )}>
+                              {elementHelp.badge}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5 text-[11px] leading-relaxed">
+                          <div className="bg-white/90 dark:bg-slate-800/80 rounded-xl p-2.5 border border-slate-200/60 dark:border-slate-700/60 shadow-xs">
+                            <p className="font-bold text-slate-700 dark:text-slate-200 flex items-center gap-1.5 text-[10px] uppercase tracking-wider">
+                              <Lightbulb size={12} className="text-amber-500 shrink-0" />
+                              Quando utilizar:
+                            </p>
+                            <p className="text-slate-600 dark:text-slate-300 mt-1 text-[11px] font-medium leading-normal">
+                              {elementHelp.whenToUse}
+                            </p>
+                          </div>
+
+                          {elementHelp.example && (
+                            <div className="px-2.5 py-1.5 text-[10px] text-slate-600 dark:text-slate-400 bg-slate-100/80 dark:bg-slate-800/50 rounded-xl border border-slate-200/40 dark:border-slate-700/40">
+                              <span className="font-bold text-slate-800 dark:text-slate-200">Exemplo: </span>
+                              {elementHelp.example}
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => openLearnWithContext(elementHelp.tab, elementHelp.targetId)}
+                          className="w-full flex items-center justify-center gap-1.5 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[11px] font-bold transition-all shadow-sm shadow-indigo-100 dark:shadow-none"
+                        >
+                          <GraduationCap size={13} className="text-indigo-200" />
+                          <span>Ver no Aprenda BPMN</span>
+                          <ArrowUpRight size={13} className="opacity-80" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 <div className="pt-6 border-t border-slate-100 dark:border-slate-700 space-y-4">
                   <div className="flex items-center justify-between">
-                    <div className="flex flex-col">
-                      <span className="text-xs font-bold text-slate-700 dark:text-white">Etapa Problema</span>
-                      <span className="text-[10px] text-slate-400 dark:text-white/60 font-medium">Marcar como gargalo</span>
+                    <div className="flex items-center gap-2">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-slate-700 dark:text-white">Etapa Problema</span>
+                        <span className="text-[10px] text-slate-400 dark:text-white/60 font-medium">Marcar como gargalo</span>
+                      </div>
+                      <ContextHelp contentKey="etapaProblema" size="xs" />
                     </div>
                     <button 
                       onClick={() => {
@@ -1429,6 +1931,14 @@ export default function BPMNModeler({
       <BpmnGuide 
         isOpen={isGuideOpen} 
         onClose={() => setIsGuideOpen(false)} 
+        onOpenLearn={() => openLearnWithContext('start')}
+      />
+
+      <BpmnLearn
+        isOpen={isLearnOpen}
+        onClose={() => setIsLearnOpen(false)}
+        initialTab={learnInitialTab}
+        initialTargetElement={learnInitialTarget}
       />
 
       {/* Modal de confirmação ao remover flag de etapa problema */}

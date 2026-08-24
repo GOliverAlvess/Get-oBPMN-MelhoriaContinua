@@ -30,6 +30,7 @@ import { calculateActionAlert } from '../utils/calculations';
 import { logFeature, logMelhoria } from '../lib/changelogService';
 import { logUserActivity } from '../lib/activityLogger';
 import ActionOverviewSection from './ActionOverviewSection';
+import ContextHelp from './ContextHelp';
 
 interface OperationalActionsTabProps {
   actions: OperationalAction[];
@@ -815,7 +816,10 @@ export default function OperationalActionsTab({
       <div className="sticky top-0 z-[50] bg-theme-background/95 backdrop-blur-sm -mx-4 lg:-mx-8 px-4 lg:px-8 py-4 mb-4 border-b border-theme-border flex flex-col gap-6 shadow-sm transition-all duration-300">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Histórico de Ações</h2>
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Histórico de Ações</h2>
+              <ContextHelp contentKey="historicoAcoes" size="sm" />
+            </div>
             <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Gestão de tratativas e ações operacionais do setor.</p>
           </div>
           

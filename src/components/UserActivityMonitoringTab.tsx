@@ -27,6 +27,7 @@ import {
 import { db, collection, onSnapshot, query, orderBy, handleFirestoreError, OperationType } from '../firebase';
 import { User, UserActivityLog } from '../types';
 import { cn, exportarCSVPadrao } from '../lib/utils';
+import ContextHelp from './ContextHelp';
 
 interface UserActivityMonitoringTabProps {
   users: User[];
@@ -355,6 +356,7 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
               <Activity size={22} />
             </div>
             <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Monitoramento de Usuários</h2>
+            <ContextHelp contentKey="monitoramento" size="sm" />
           </div>
           <p className="text-slate-500 text-sm mt-1">
             Painel exclusivo do perfil Master para acompanhamento da frequência de acessos, engajamento e auditoria de atividades.

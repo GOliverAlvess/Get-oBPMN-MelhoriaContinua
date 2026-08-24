@@ -49,6 +49,7 @@ import { cn, exportarCSVPadrao } from '../lib/utils';
 import { logFeature } from '../lib/changelogService';
 import { logUserActivity } from '../lib/activityLogger';
 import FilterDropdown from './FilterDropdown';
+import ContextHelp from './ContextHelp';
 
 const STATUS_MAP: Record<string, string> = {
   'pending': 'Pendente',
@@ -1430,7 +1431,10 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
     <div className="p-6 space-y-12 w-full">
       <div className="space-y-8">
         <div>
-          <h3 className="text-xl font-bold text-slate-900">Gerador de Relatórios</h3>
+          <div className="flex items-center gap-2.5">
+            <h3 className="text-xl font-bold text-slate-900">Gerador de Relatórios</h3>
+            <ContextHelp contentKey="relatorios" size="sm" />
+          </div>
           <p className="text-slate-500 text-sm mt-1">Selecione os filtros e gere relatórios em formato Excel.</p>
         </div>
 

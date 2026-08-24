@@ -3688,7 +3688,7 @@ export default function PDCAEditor({
                                   })
                                 }
                                 className={cn(
-                                  "px-6 py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
+                                  "px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all",
                                   activeCycle.plan.rootCauseAnalysis.type ===
                                     "5whys"
                                     ? "bg-theme-card text-indigo-400 shadow-sm"
@@ -3741,6 +3741,72 @@ export default function PDCAEditor({
                               </button>
                             </div>
                           </div>
+
+                          {/* Orientação Contextual da Metodologia Selecionada */}
+                          <AnimatePresence mode="wait">
+                            {activeCycle.plan.rootCauseAnalysis.type === "5whys" && (
+                              <motion.div
+                                key="guide-5whys"
+                                initial={{ opacity: 0, y: -4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -4 }}
+                                transition={{ duration: 0.15 }}
+                                className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100/80 dark:border-indigo-900/40 text-slate-700 dark:text-slate-300 text-xs leading-relaxed flex items-start gap-3"
+                              >
+                                <div className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
+                                  <HelpCircle size={14} />
+                                </div>
+                                <div className="space-y-0.5">
+                                  <p className="text-xs leading-relaxed">
+                                    <strong className="font-bold text-indigo-950 dark:text-indigo-200">5 Porquês:</strong>{" "}
+                                    técnica utilizada para aprofundar a investigação de um problema, perguntando sucessivamente &quot;por quê?&quot; até chegar à causa fundamental. Comece pelo problema identificado e pergunte por que ele ocorreu. A cada resposta, questione novamente o motivo até chegar a uma causa que explique a origem do problema, evitando parar em sintomas ou consequências.
+                                  </p>
+                                </div>
+                              </motion.div>
+                            )}
+
+                            {activeCycle.plan.rootCauseAnalysis.type === "ishikawa" && (
+                              <motion.div
+                                key="guide-ishikawa"
+                                initial={{ opacity: 0, y: -4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -4 }}
+                                transition={{ duration: 0.15 }}
+                                className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100/80 dark:border-indigo-900/40 text-slate-700 dark:text-slate-300 text-xs leading-relaxed flex items-start gap-3"
+                              >
+                                <div className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
+                                  <HelpCircle size={14} />
+                                </div>
+                                <div className="space-y-0.5">
+                                  <p className="text-xs leading-relaxed">
+                                    <strong className="font-bold text-indigo-950 dark:text-indigo-200">Ishikawa:</strong>{" "}
+                                    ferramenta utilizada para organizar e investigar possíveis causas de um problema. Distribua as causas por categorias e explore os diferentes fatores que podem ter contribuído para o problema, buscando evidências antes de definir quais são realmente relevantes. O objetivo é chegar às causas fundamentais, e não apenas listar sintomas.
+                                  </p>
+                                </div>
+                              </motion.div>
+                            )}
+
+                            {activeCycle.plan.rootCauseAnalysis.type === "list" && (
+                              <motion.div
+                                key="guide-list"
+                                initial={{ opacity: 0, y: -4 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -4 }}
+                                transition={{ duration: 0.15 }}
+                                className="p-3.5 sm:p-4 rounded-xl sm:rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-100/80 dark:border-indigo-900/40 text-slate-700 dark:text-slate-300 text-xs leading-relaxed flex items-start gap-3"
+                              >
+                                <div className="w-6 h-6 rounded-lg bg-indigo-100 dark:bg-indigo-900/50 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0 mt-0.5">
+                                  <HelpCircle size={14} />
+                                </div>
+                                <div className="space-y-0.5">
+                                  <p className="text-xs leading-relaxed">
+                                    <strong className="font-bold text-indigo-950 dark:text-indigo-200">Lista de causas:</strong>{" "}
+                                    método utilizado para levantar e organizar as possíveis causas relacionadas ao problema. Liste todas as causas relevantes identificadas pela equipe e, posteriormente, analise quais possuem maior relação com o problema e quais devem ser investigadas ou tratadas. Evite considerar apenas a primeira causa identificada como causa raiz sem realizar essa análise.
+                                  </p>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
 
                           <div className="space-y-4">
                             {activeCycle.plan.rootCauseAnalysis.type ===

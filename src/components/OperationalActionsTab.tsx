@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { 
   Plus, 
   Search, 
@@ -14,7 +14,10 @@ import {
   CalendarDays,
   MoreVertical,
   Save,
-  Trash2
+  Trash2,
+  LayoutGrid,
+  List,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -26,6 +29,7 @@ import { db, setDoc, doc, deleteDoc, handleFirestoreError, OperationType, auth }
 import { calculateActionAlert } from '../utils/calculations';
 import { logFeature, logMelhoria } from '../lib/changelogService';
 import { logUserActivity } from '../lib/activityLogger';
+import ActionOverviewSection from './ActionOverviewSection';
 
 interface OperationalActionsTabProps {
   actions: OperationalAction[];
@@ -237,6 +241,10 @@ export default function OperationalActionsTab({
   const [filterStatuses, setFilterStatuses] = useState<string[]>([]);
   const [filterPriorities, setFilterPriorities] = useState<string[]>([]);
   const [filterDeadlineAlertOnly, setFilterDeadlineAlertOnly] = useState<boolean>(isDeadlineAlertFilter);
+
+  // NOVO MODO DE VISUALIZAÇÃO: Visão Geral vs Lista de Ações
+  const [viewMode, setViewMode] = useState<'overview' | 'list'>('overview');
+  const [scopeMode, setScopeMode] = useState<'my_actions' | 'all_actions'>('my_actions');
 
   // NOVO FILTRO: Alerta de Prazo
   const [filterAlertStatuses, setFilterAlertStatuses] = useState<string[]>([]);
@@ -526,6 +534,163 @@ export default function OperationalActionsTab({
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut]);
 
+  // Usuário atualmente autenticado
+  const currentLoggedInUser = useMemo(() => {
+    if (!auth.currentUser) return null;
+    return users.find(u => 
+      (u.id && u.id.toLowerCase() === auth.currentUser?.uid.toLowerCase()) || 
+      (u.email && auth.currentUser?.email && u.email.toLowerCase() === auth.currentUser.email.toLowerCase()) ||
+      (u.name && auth.currentUser?.displayName && u.name.toLowerCase() === auth.currentUser.displayName.toLowerCase())
+    ) || null;
+  }, [users]);
+
+  // Função auxiliar para verificar se o usuário logado possui vínculo com o projeto
+  const isUserLinkedToProject = useCallback((project: Project, userObj: User | null, allOperationalActions: OperationalAction[]) => {
+    if (!userObj && !auth.currentUser) return true;
+
+    const currentUid = auth.currentUser?.uid?.trim().toLowerCase();
+    const currentDbId = userObj?.id?.trim().toLowerCase();
+    const currentName = (userObj?.name || auth.currentUser?.displayName || '').trim().toLowerCase();
+    const currentEmail = (userObj?.email || auth.currentUser?.email || '').trim().toLowerCase();
+
+    // 1. Atribuído diretamente ao projeto (assignedTo)
+    if (project.assignedTo) {
+      const assigned = project.assignedTo.trim().toLowerCase();
+      if (currentUid && assigned === currentUid) return true;
+      if (currentDbId && assigned === currentDbId) return true;
+      if (currentEmail && assigned === currentEmail) return true;
+      if (currentName && (assigned === currentName || assigned.includes(currentName) || currentName.includes(assigned))) return true;
+    }
+
+    // 2. Responsável pelo escopo do projeto (scope.responsible)
+    if (project.scope?.responsible) {
+      const resp = project.scope.responsible.trim().toLowerCase();
+      if (currentName && (resp === currentName || resp.includes(currentName) || currentName.includes(resp))) return true;
+      if (currentDbId && resp === currentDbId) return true;
+      if (currentUid && resp === currentUid) return true;
+      if (currentEmail && resp === currentEmail) return true;
+    }
+
+    // 3. Subtarefas e itens PDCA / 5W2H do projeto
+    if (Array.isArray(project.subtasks)) {
+      for (const sub of project.subtasks) {
+        if (sub.responsibleId) {
+          const subResp = sub.responsibleId.trim().toLowerCase();
+          if (currentUid && subResp === currentUid) return true;
+          if (currentDbId && subResp === currentDbId) return true;
+          if (currentEmail && subResp === currentEmail) return true;
+          if (currentName && (subResp === currentName || subResp.includes(currentName) || currentName.includes(subResp))) return true;
+        }
+
+        if (Array.isArray(sub.pdcaCycles)) {
+          for (const cycle of sub.pdcaCycles) {
+            if (Array.isArray(cycle.plan?.actionPlan)) {
+              for (const item of cycle.plan.actionPlan) {
+                if (item.who) {
+                  const who = item.who.trim().toLowerCase();
+                  if (currentName && (who === currentName || who.includes(currentName) || currentName.includes(who))) return true;
+                  if (currentDbId && who === currentDbId) return true;
+                  if (currentUid && who === currentUid) return true;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 4. Qualquer ação operacional cadastrada neste projeto atribuída ao usuário
+    if (Array.isArray(allOperationalActions)) {
+      const hasAction = allOperationalActions.some(a => {
+        if (a.projectId !== project.id) return false;
+        const actRespId = (a.responsibleId || '').trim().toLowerCase();
+        const actRespName = (a.responsibleName || '').trim().toLowerCase();
+        if (currentUid && actRespId === currentUid) return true;
+        if (currentDbId && actRespId === currentDbId) return true;
+        if (currentName && actRespName && actRespName === currentName) return true;
+        if (currentEmail && actRespName && actRespName === currentEmail) return true;
+        return false;
+      });
+      if (hasAction) return true;
+    }
+
+    return false;
+  }, []);
+
+  const hasActiveFilters = useMemo(() => {
+    return (
+      searchTerm.trim() !== '' ||
+      filterProjects.length > 0 ||
+      filterResponsibles.length > 0 ||
+      filterStatuses.length > 0 ||
+      filterPriorities.length > 0 ||
+      filterDeadlineAlertOnly ||
+      filterAlertStatuses.length > 0 ||
+      forecastStartDate !== '' ||
+      forecastEndDate !== '' ||
+      forecastShortcut !== 'all'
+    );
+  }, [
+    searchTerm,
+    filterProjects,
+    filterResponsibles,
+    filterStatuses,
+    filterPriorities,
+    filterDeadlineAlertOnly,
+    filterAlertStatuses,
+    forecastStartDate,
+    forecastEndDate,
+    forecastShortcut
+  ]);
+
+  // Ações com escopo (Minhas Ações -> Somente ações atribuídas ao usuário logado; Todas as Ações -> Todas as ações)
+  const scopedFilteredActions = useMemo(() => {
+    if (scopeMode === 'all_actions') {
+      return filteredActions;
+    }
+    const currentUid = auth.currentUser?.uid?.trim().toLowerCase();
+    const currentDbId = currentLoggedInUser?.id?.trim().toLowerCase();
+    const currentName = (currentLoggedInUser?.name || auth.currentUser?.displayName || '').trim().toLowerCase();
+    const currentEmail = (auth.currentUser?.email || '').trim().toLowerCase();
+
+    return filteredActions.filter(a => {
+      const actRespId = (a.responsibleId || '').trim().toLowerCase();
+      const actRespName = (a.responsibleName || '').trim().toLowerCase();
+
+      if (currentUid && actRespId === currentUid) return true;
+      if (currentDbId && actRespId === currentDbId) return true;
+      if (currentName && actRespName && actRespName === currentName) return true;
+      if (currentEmail && actRespName && actRespName === currentEmail) return true;
+      return false;
+    });
+  }, [filteredActions, scopeMode, currentLoggedInUser]);
+
+  // Projetos com escopo (Minhas Ações -> Projetos vinculados ao usuário; Todas as Ações -> Todos os projetos)
+  const scopedProjects = useMemo(() => {
+    let baseProjects = projects;
+
+    if (scopeMode === 'my_actions') {
+      baseProjects = projects.filter(p => isUserLinkedToProject(p, currentLoggedInUser, actions));
+    }
+
+    // Se houver filtros ativos, mantemos apenas os projetos que possuem pelo menos 1 ação no resultado filtrado
+    if (hasActiveFilters) {
+      const activeProjectIds = new Set(scopedFilteredActions.map(a => a.projectId));
+      return baseProjects.filter(p => activeProjectIds.has(p.id));
+    }
+
+    return baseProjects;
+  }, [projects, scopeMode, currentLoggedInUser, actions, isUserLinkedToProject, hasActiveFilters, scopedFilteredActions]);
+
+  const handleQuickComplete = (action: OperationalAction) => {
+    const today = getTodayStr();
+    setActionToSave(action);
+    setUpdatesToSave({
+      status: 'Concluído',
+      completionDate: today
+    });
+  };
+
   const handleUpdateAction = async (id: string, updates: Partial<OperationalAction>) => {
     try {
       const actionRef = doc(db, 'operationalActions', id);
@@ -648,25 +813,55 @@ export default function OperationalActionsTab({
   return (
     <div className="space-y-8">
       <div className="sticky top-0 z-[50] bg-theme-background/95 backdrop-blur-sm -mx-4 lg:-mx-8 px-4 lg:px-8 py-4 mb-4 border-b border-theme-border flex flex-col gap-6 shadow-sm transition-all duration-300">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Histórico de Ações</h2>
-            <p className="text-slate-500 mt-1">Gestão de tratativas e ações operacionais do setor.</p>
+            <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Histórico de Ações</h2>
+            <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm">Gestão de tratativas e ações operacionais do setor.</p>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Seletor de Modo: Visão Geral vs Lista */}
+            <div className="flex items-center gap-1 p-1 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode('overview')}
+                className={cn(
+                  "flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer",
+                  viewMode === 'overview'
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-300 hover:text-indigo-600"
+                )}
+              >
+                <LayoutGrid size={15} />
+                <span>Visão Geral</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={cn(
+                  "flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-black transition-all cursor-pointer",
+                  viewMode === 'list'
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-300 hover:text-indigo-600"
+                )}
+              >
+                <List size={15} />
+                <span>Lista de Ações</span>
+              </button>
+            </div>
+
             <button 
               onClick={exportToCSV}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm hover:bg-slate-50 transition-all shadow-sm cursor-pointer"
+              className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-700 transition-all shadow-xs cursor-pointer h-[38px]"
             >
-              <Download size={18} />
+              <Download size={16} />
               Exportar CSV
             </button>
             <button 
               onClick={() => setIsModalOpen(true)}
-              className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 cursor-pointer"
+              className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white rounded-xl font-bold text-xs hover:bg-indigo-700 transition-all shadow-md shadow-indigo-200 dark:shadow-none cursor-pointer h-[38px]"
             >
-              <Plus size={18} />
+              <Plus size={16} />
               Nova Ação
             </button>
           </div>
@@ -909,42 +1104,102 @@ export default function OperationalActionsTab({
         </div>
       </div>
 
-      {/* Listagem */}
-      <div className="bg-theme-card rounded-3xl border border-theme-border shadow-sm overflow-hidden">
-        <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-350px)] custom-scrollbar">
-          <table className="w-full text-left border-separate border-spacing-0 min-w-[1600px]">
-            <thead className="sticky top-0 z-[40]">
-              <tr className="bg-indigo-600 dark:bg-indigo-900">
-                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[200px] z-[41] border-b border-white/10">Projeto</th>
-                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px] z-[41] border-b border-white/10">Subtarefa</th>
-                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px] z-[41] border-b border-white/10">Responsável</th>
-                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[350px] z-[41] border-b border-white/10">Ação</th>
-                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[120px] z-[41] border-b border-white/10">Prioridade</th>
-                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[160px] z-[41] border-b border-white/10">Status</th>
-                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[120px] z-[41] border-b border-white/10">Previsão</th>
-                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[300px] z-[41] border-b border-white/10">Retorno da Tratativa</th>
-                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[160px] z-[41] border-b border-white/10">Data de Conclusão</th>
-                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px] z-[41] border-b border-white/10">Alerta de Prazo</th>
-                <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest w-32 text-right z-[41] border-b border-white/10">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-theme-border">
-              {filteredActions.map((action) => {
-                const isEditing = editingActionId === action.id;
-                const currentStatus = isEditing ? (tempUpdates.status || action.status) : action.status;
-                const currentFeedback = isEditing ? (tempUpdates.feedback || action.feedback) : action.feedback;
-                const currentCompletionDate = isEditing ? (tempUpdates.completionDate || action.completionDate) : action.completionDate;
+      {/* Conteúdo Principal: Visão Geral vs Lista de Ações */}
+      {viewMode === 'overview' ? (
+        <ActionOverviewSection
+          actions={scopedFilteredActions}
+          projects={scopedProjects}
+          scopeMode={scopeMode}
+          hasActiveFilters={hasActiveFilters}
+          onScopeModeChange={setScopeMode}
+          editingActionId={editingActionId}
+          tempUpdates={tempUpdates}
+          onStartEditing={startEditing}
+          onCancelEditing={() => {
+            setEditingActionId(null);
+            setTempUpdates({});
+          }}
+          onTempUpdateChange={(updates) => setTempUpdates(prev => ({ ...prev, ...updates }))}
+          onSaveAction={(id, updates) => handleConfirmSave(id, updates)}
+          onDeleteClick={handleDeleteClick}
+          onQuickComplete={handleQuickComplete}
+          onCreateActionClick={() => setIsModalOpen(true)}
+          targetActionId={targetActionId}
+        />
+      ) : (
+        /* Listagem em Tabela */
+        <div className="bg-theme-card rounded-3xl border border-theme-border shadow-sm overflow-hidden">
+          {/* Header da Tabela com Seletor de Escopo Rápido */}
+          <div className="p-4 bg-slate-50/70 dark:bg-slate-900/40 border-b border-theme-border flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <List size={16} className="text-indigo-600 dark:text-indigo-400" />
+              <span className="text-xs font-black text-slate-800 dark:text-slate-200">
+                Lista Tabular de Ações ({scopedFilteredActions.length})
+              </span>
+            </div>
 
-                return (
-                  <tr 
-                    key={action.id} 
-                    id={`action-row-${action.id}`}
-                    className={cn(
-                      "group transition-all duration-300",
-                      isEditing ? "bg-indigo-500/5" : "hover:bg-theme-background/50",
-                      targetActionId === action.id && "ring-2 ring-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/20 font-bold shadow-md"
-                    )}
-                  >
+            <div className="flex items-center gap-1.5 p-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-xs">
+              <button
+                type="button"
+                onClick={() => setScopeMode('my_actions')}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                  scopeMode === 'my_actions'
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-300 hover:text-indigo-600"
+                )}
+              >
+                Minhas Ações
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeMode('all_actions')}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer",
+                  scopeMode === 'all_actions'
+                    ? "bg-indigo-600 text-white shadow-xs"
+                    : "text-slate-600 dark:text-slate-300 hover:text-indigo-600"
+                )}
+              >
+                Todas as Ações
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-350px)] custom-scrollbar">
+            <table className="w-full text-left border-separate border-spacing-0 min-w-[1600px]">
+              <thead className="sticky top-0 z-[40]">
+                <tr className="bg-indigo-600 dark:bg-indigo-900">
+                  <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[200px] z-[41] border-b border-white/10">Projeto</th>
+                  <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px] z-[41] border-b border-white/10">Subtarefa</th>
+                  <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px] z-[41] border-b border-white/10">Responsável</th>
+                  <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[350px] z-[41] border-b border-white/10">Ação</th>
+                  <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[120px] z-[41] border-b border-white/10">Prioridade</th>
+                  <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[160px] z-[41] border-b border-white/10">Status</th>
+                  <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[120px] z-[41] border-b border-white/10">Previsão</th>
+                  <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[300px] z-[41] border-b border-white/10">Retorno da Tratativa</th>
+                  <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[160px] z-[41] border-b border-white/10">Data de Conclusão</th>
+                  <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest min-w-[180px] z-[41] border-b border-white/10">Alerta de Prazo</th>
+                  <th className="sticky top-0 bg-indigo-600 dark:bg-indigo-900 px-6 py-4 text-[10px] font-black text-white uppercase tracking-widest w-32 text-right z-[41] border-b border-white/10">Ações</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-theme-border">
+                {scopedFilteredActions.map((action) => {
+                  const isEditing = editingActionId === action.id;
+                  const currentStatus = isEditing ? (tempUpdates.status || action.status) : action.status;
+                  const currentFeedback = isEditing ? (tempUpdates.feedback || action.feedback) : action.feedback;
+                  const currentCompletionDate = isEditing ? (tempUpdates.completionDate || action.completionDate) : action.completionDate;
+
+                  return (
+                    <tr 
+                      key={action.id} 
+                      id={`action-row-${action.id}`}
+                      className={cn(
+                        "group transition-all duration-300",
+                        isEditing ? "bg-indigo-500/5" : "hover:bg-theme-background/50",
+                        targetActionId === action.id && "ring-2 ring-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/20 font-bold shadow-md"
+                      )}
+                    >
                     <td className={cn(
                       "px-6 py-4 min-w-0 transition-all text-theme-foreground",
                       isEditing && "border-l-4 border-indigo-500"
@@ -1130,16 +1385,16 @@ export default function OperationalActionsTab({
                   </tr>
                 );
               })}
-              {filteredActions.length === 0 && (
+              {scopedFilteredActions.length === 0 && (
                 <tr>
                   <td colSpan={11} className="px-6 py-20 text-center">
                     <div className="flex flex-col items-center gap-3">
-                      <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-200">
+                      <div className="w-16 h-16 bg-slate-50 dark:bg-slate-800 rounded-2xl flex items-center justify-center text-slate-300">
                         <History size={32} />
                       </div>
                       <div>
-                        <p className="font-bold text-slate-500">Nenhuma ação encontrada</p>
-                        <p className="text-xs text-slate-400 mt-1">Tente ajustar os filtros ou crie uma nova ação.</p>
+                        <p className="font-bold text-slate-600 dark:text-slate-300">Nenhuma ação encontrada</p>
+                        <p className="text-xs text-slate-400 mt-1">Tente ajustar os filtros, alternar o escopo ou crie uma nova ação.</p>
                       </div>
                     </div>
                   </td>
@@ -1149,6 +1404,7 @@ export default function OperationalActionsTab({
           </table>
         </div>
       </div>
+      )}
 
       <CreateActionModal 
         isOpen={isModalOpen}

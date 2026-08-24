@@ -291,6 +291,7 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
             className="hidden" 
             onChange={handleFileUpload}
             disabled={isUploading}
+            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.svg,.txt,.csv,.zip,.rar,.7z,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,image/*"
           />
         </label>
       </div>
@@ -382,6 +383,7 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
                 className="hidden" 
                 onChange={handleFileUpload}
                 disabled={isUploading}
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.svg,.txt,.csv,.zip,.rar,.7z,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,image/*"
               />
               <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 group-hover:scale-110 mx-auto mb-4 shadow-sm border border-slate-100 transition-all">
                 <Upload size={28} />

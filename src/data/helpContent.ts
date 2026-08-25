@@ -69,13 +69,6 @@ export const HELP_CONTENT: Record<string, HelpItemContent> = {
     whatToDo: 'Avalie se o impacto é tangível, intangível ou possui os dois tipos e registre as informações que permitam compreender sua relevância.',
     objective: 'Demonstrar a dimensão do problema e criar uma base para comparar os resultados obtidos após as ações de melhoria.',
   },
-  ganhoEsperado: {
-    key: 'ganhoEsperado',
-    title: 'Ganho Esperado',
-    whatIs: 'Representa o resultado esperado após a implementação das ações planejadas.',
-    whatToDo: 'Defina metas coerentes com o impacto identificado e com aquilo que será posteriormente acompanhado.',
-    objective: 'Criar uma referência clara para comparar o resultado planejado com o resultado efetivamente alcançado.',
-  },
   do: {
     key: 'do',
     title: 'DO — Executar',

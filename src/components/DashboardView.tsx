@@ -77,9 +77,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
   }, [projects, selectedCollaborators, selectedStatuses, selectedProjectIds]);
 
   const gainsStats = useMemo(() => {
-    let totalEstimatedGain = 0;
     let totalRealizedGain = 0;
-    let totalEstimatedHours = 0;
     let totalRealizedHours = 0;
     let tangibleProjectsCount = 0;
     let intangibleProjectsCount = 0;
@@ -90,18 +88,14 @@ export default function DashboardView({ projects, users, actions, onProjectClick
       assignedToName: string;
       status: string;
       impactType: string;
-      estimatedFinancialGain: number;
       realizedFinancialGain: number;
-      estimatedHours: number;
       realizedHours: number;
       gainAchievedStatus?: string;
     }> = [];
 
     filteredProjects.forEach(p => {
       const user = users.find(u => u.id === p.assignedTo);
-      let pEstGain = p.scope?.financial?.gainProjection?.value || 0;
       let pRealGain = 0;
-      let pEstHours = 0;
       let pRealHours = 0;
       let hasTangible = false;
       let hasIntangible = false;
@@ -132,19 +126,6 @@ export default function DashboardView({ projects, users, actions, onProjectClick
             ) {
               hasIntangible = true;
             }
-
-            const estCost = impact.expectedCostReduction || impact.value || 0;
-            pEstGain += estCost;
-
-            const estHours = impact.expectedTimeGain || impact.tangibleWastedTime || 0;
-            pEstHours += estHours;
-
-            (impact.expectedGains?.tangible || []).forEach(t => {
-              if (t.value) pEstGain += t.value;
-              if (t.unit && (t.unit.toLowerCase().includes('hora') || t.unit.toLowerCase() === 'h')) {
-                pEstHours += t.value || 0;
-              }
-            });
           }
 
           if (c.check) {
@@ -175,9 +156,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
       if (hasTangible) tangibleProjectsCount++;
       if (hasIntangible) intangibleProjectsCount++;
 
-      totalEstimatedGain += pEstGain;
       totalRealizedGain += pRealGain;
-      totalEstimatedHours += pEstHours;
       totalRealizedHours += pRealHours;
 
       let impactTypeStr = 'Não definido';
@@ -199,9 +178,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
         assignedToName: user?.name || 'Não atribuído',
         status: p.status,
         impactType: impactTypeStr,
-        estimatedFinancialGain: pEstGain,
         realizedFinancialGain: pRealGain,
-        estimatedHours: pEstHours,
         realizedHours: pRealHours,
         gainAchievedStatus: mainAchievedStatus,
       });
@@ -211,13 +188,11 @@ export default function DashboardView({ projects, users, actions, onProjectClick
       if (b.realizedFinancialGain !== a.realizedFinancialGain) {
         return b.realizedFinancialGain - a.realizedFinancialGain;
       }
-      return b.estimatedFinancialGain - a.estimatedFinancialGain;
+      return b.realizedHours - a.realizedHours;
     });
 
     return {
-      totalEstimatedGain,
       totalRealizedGain,
-      totalEstimatedHours,
       totalRealizedHours,
       tangibleProjectsCount,
       intangibleProjectsCount,
@@ -259,7 +234,6 @@ export default function DashboardView({ projects, users, actions, onProjectClick
 
     // Gain Impact (Ganho Geral do Dashboard considera PDCAs concluídos de qualquer projeto)
     let totalGainValue = 0; // Ganho Realizado (PDCAs concluídos)
-    let potentialGainValue = 0; // Ganho Potencial (PDCAs em andamento)
     const projectGainsMap: Record<string, { name: string; gain: number }> = {};
 
     filteredProjects.forEach(p => {
@@ -282,12 +256,6 @@ export default function DashboardView({ projects, users, actions, onProjectClick
 
             pRealizedGain += cycleGain;
             totalGainValue += cycleGain;
-          } else if (cycle.status !== 'Cancelado') {
-            const cycleExpected = (cycle.plan?.impact?.expectedGains?.tangible || []).reduce(
-              (acc, t) => acc + (t.value || 0),
-              0
-            );
-            potentialGainValue += cycleExpected;
           }
         });
       });
@@ -363,7 +331,6 @@ export default function DashboardView({ projects, users, actions, onProjectClick
       collaboratorRanking,
       projectGains,
       totalGainValue,
-      potentialGainValue,
       projectProgressList,
       avgProgress,
       recentActivities,
@@ -599,14 +566,6 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                 {/* 5 Indicadores Agregados */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
                   <StatCard 
-                    title="Ganho Estimado" 
-                    value={gainsStats.totalEstimatedGain} 
-                    isCurrency
-                    icon={<DollarSign size={18} />} 
-                    color="bg-blue-600" 
-                    subtext={<span className="text-[10px] text-slate-400 font-bold">Total previsto (R$)</span>}
-                  />
-                  <StatCard 
                     title="Ganho Realizado" 
                     value={gainsStats.totalRealizedGain} 
                     isCurrency
@@ -619,7 +578,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                     value={`${gainsStats.totalRealizedHours}h`} 
                     icon={<Clock size={18} />} 
                     color="bg-amber-500" 
-                    subtext={<span className="text-[10px] text-slate-400 font-bold">Previsto: {gainsStats.totalEstimatedHours}h</span>}
+                    subtext={<span className="text-[10px] text-slate-400 font-bold">Total realizado</span>}
                   />
                   <StatCard 
                     title="Impacto Tangível" 
@@ -635,6 +594,13 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                     color="bg-purple-600" 
                     subtext={<span className="text-[10px] text-slate-400 font-bold">Qtd. Projetos</span>}
                   />
+                  <StatCard 
+                    title="Projetos Mapeados" 
+                    value={gainsStats.projectRanking.length} 
+                    icon={<TrendingUp size={18} />} 
+                    color="bg-blue-600" 
+                    subtext={<span className="text-[10px] text-slate-400 font-bold">Com impactos/ganhos</span>}
+                  />
                 </div>
 
                 {/* Ranking de Projetos por Impacto */}
@@ -646,7 +612,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                         Ranking de Projetos por Impacto e Ganhos
                       </h3>
                       <p className="text-xs text-slate-400 mt-1">
-                        Projetos ordenados pelo maior impacto financeiro obtido e estimado.
+                        Projetos ordenados pelo maior impacto financeiro obtido.
                       </p>
                     </div>
                     <span className="text-xs font-bold text-slate-400 bg-theme-background px-3 py-1.5 rounded-xl border border-theme-border self-start sm:self-auto">
@@ -661,7 +627,6 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                           <th className="py-4 px-4"># / Projeto</th>
                           <th className="py-4 px-4">Responsável</th>
                           <th className="py-4 px-4">Tipo de Impacto</th>
-                          <th className="py-4 px-4 text-right">Ganho Estimado (R$)</th>
                           <th className="py-4 px-4 text-right">Ganho Realizado (R$)</th>
                           <th className="py-4 px-4 text-right">Horas Economizadas</th>
                           <th className="py-4 px-4 text-center">Status Ganho</th>
@@ -704,14 +669,11 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                                 {item.impactType}
                               </span>
                             </td>
-                            <td className="py-4 px-4 text-right font-black text-slate-400">
-                              R$ {item.estimatedFinancialGain.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </td>
                             <td className="py-4 px-4 text-right font-black text-emerald-600 dark:text-emerald-400">
                               R$ {item.realizedFinancialGain.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </td>
                             <td className="py-4 px-4 text-right font-bold text-slate-400">
-                              {item.realizedHours}h <span className="text-[10px] text-slate-500">({item.estimatedHours}h est)</span>
+                              {item.realizedHours}h
                             </td>
                             <td className="py-4 px-4 text-center">
                               <span className={cn(
@@ -731,7 +693,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                         ))}
                         {gainsStats.projectRanking.length === 0 && (
                           <tr>
-                            <td colSpan={7} className="py-12 text-center text-slate-400 italic">
+                            <td colSpan={6} className="py-12 text-center text-slate-400 italic">
                               Nenhum projeto encontrado com os filtros selecionados.
                             </td>
                           </tr>

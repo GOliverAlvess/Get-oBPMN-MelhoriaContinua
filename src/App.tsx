@@ -698,14 +698,21 @@ export default function App() {
     } else if (item.tipo === 'acao') {
       const isDeadlineAlert =
         item.subtask_id === 'daily_deadline_alert' ||
+        item.referencia_id === 'all_deadline_actions' ||
         (item.mensagem && (
           item.mensagem.toLowerCase().includes('vencer') ||
           item.mensagem.toLowerCase().includes('prazo')
         ));
 
-      setTargetActionId(item.referencia_id || null);
-      setIsDeadlineAlertFilter(isDeadlineAlert);
-      setActionsNavSource(isDeadlineAlert ? 'notification_deadline' : 'notification_action');
+      if (isDeadlineAlert) {
+        setTargetActionId(null);
+        setIsDeadlineAlertFilter(true);
+        setActionsNavSource('notification_deadline');
+      } else {
+        setTargetActionId(item.referencia_id || null);
+        setIsDeadlineAlertFilter(false);
+        setActionsNavSource('notification_action');
+      }
       setActiveView('actions');
     } else if (item.tipo === 'tarefa') {
       setActiveView('kanban');

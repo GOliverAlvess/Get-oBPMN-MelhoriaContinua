@@ -33,6 +33,7 @@ interface ActionOverviewCardProps {
   onDeleteClick: (action: OperationalAction) => void;
   onQuickComplete: (action: OperationalAction) => void;
   isTarget?: boolean;
+  isMaster?: boolean;
 }
 
 export default function ActionOverviewCard({
@@ -45,7 +46,8 @@ export default function ActionOverviewCard({
   onSaveAction,
   onDeleteClick,
   onQuickComplete,
-  isTarget = false
+  isTarget = false,
+  isMaster = false
 }: ActionOverviewCardProps) {
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
 
@@ -315,8 +317,13 @@ export default function ActionOverviewCard({
         <button
           type="button"
           onClick={() => onDeleteClick(action)}
-          className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-xl transition-all cursor-pointer"
-          title="Excluir ação"
+          className={cn(
+            "p-2 rounded-xl transition-all cursor-pointer",
+            action.status === 'Concluído' && !isMaster
+              ? "text-slate-300 dark:text-slate-700 hover:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 opacity-50"
+              : "text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+          )}
+          title={action.status === 'Concluído' && !isMaster ? "Ações concluídas não podem ser excluídas por este perfil" : "Excluir ação"}
         >
           <Trash2 size={16} />
         </button>

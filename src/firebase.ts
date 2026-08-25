@@ -85,6 +85,9 @@ export function onAuthStateChanged(authInstance: MockAuth, callback: (user: Fire
   return authInstance.onAuthStateChanged(callback);
 }
 
+export const LAST_LOGIN_EMAIL_KEY = 'gip_last_login_email';
+export const REMEMBER_EMAIL_PREF_KEY = 'gip_remember_email_pref';
+
 // Sleek, beautiful modern modal for custom login without Google/Firebase OAuth setup
 export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -160,6 +163,11 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
               profile: matchedUser.profile || 'Usuário Analista'
             };
             
+            // Salvar e-mail validado no navegador local se autorizado
+            try {
+              if (email) localStorage.setItem(LAST_LOGIN_EMAIL_KEY, email);
+            } catch (e) {}
+
             authInstance.currentUser = mockUser;
             sessionStorage.setItem('pdca_auth_user', JSON.stringify(mockUser));
             authInstance.emitChange();
@@ -184,8 +192,20 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
 
     document.body.appendChild(modalContainer);
 
+    // Recupera localmente e isoladamente o último e-mail lembrado neste dispositivo/navegador
+    let savedEmail: string | null = null;
+    try {
+      savedEmail = localStorage.getItem(LAST_LOGIN_EMAIL_KEY);
+    } catch (e) {}
+
+    let rememberEmailPref = true;
+    try {
+      rememberEmailPref = localStorage.getItem(REMEMBER_EMAIL_PREF_KEY) !== 'false';
+    } catch (e) {}
+
     let currentStep: 'email' | 'password' | 'first_access' = 'email';
-    let emailVal = '';
+    let emailVal = (savedEmail && savedEmail.trim()) ? savedEmail.trim() : '';
+    let rememberEmail = rememberEmailPref;
     let userIdVal = '';
 
     const cleanup = () => {
@@ -199,7 +219,7 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
 
       if (currentStep === 'email') {
         contentHtml = `
-          <div class="bg-white dark:bg-[#111625] border border-slate-200 dark:border-slate-800/80 rounded-3xl shadow-2xl max-w-sm w-full p-8 md:p-10 space-y-8 transform scale-95 transition-all duration-200">
+          <div class="bg-white dark:bg-[#111625] border border-slate-200 dark:border-slate-800/80 rounded-3xl shadow-2xl max-w-sm w-full p-8 md:p-10 space-y-7 transform scale-95 transition-all duration-200">
             <!-- App Icon -->
             <div class="flex justify-center">
               <svg class="w-8 h-8" viewBox="0 0 24 24">
@@ -210,27 +230,44 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
               </svg>
             </div>
             
-            <div class="text-center space-y-2">
+            <div class="text-center space-y-1.5">
               <h2 class="text-2xl font-semibold text-slate-900 dark:text-white tracking-tight">Fazer login</h2>
               <p class="text-sm text-slate-600 dark:text-slate-400 font-medium">Insira seu e-mail cadastrado</p>
             </div>
 
-            <form id="auth-form" class="space-y-6">
+            <form id="auth-form" class="space-y-5">
               <div id="auth-error-container" class="hidden text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/40 p-3.5 rounded-xl font-bold leading-relaxed"></div>
               
-              <div class="space-y-1">
+              <div class="space-y-2.5">
                 <div class="relative">
-                  <input type="email" id="auth-email" required placeholder="E-mail" value="${emailVal}" autoComplete="off" autofocus
+                  <input type="email" id="auth-email" required placeholder="E-mail" value="${emailVal}" autoComplete="email" autofocus
                     class="w-full px-4 py-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm font-medium placeholder:text-slate-400" />
+                </div>
+
+                <!-- Lembrar e-mail isolado por dispositivo -->
+                <div class="flex items-center justify-between px-0.5 pt-0.5 text-xs">
+                  <label class="flex items-center gap-2 cursor-pointer select-none">
+                    <input type="checkbox" id="auth-remember-email" ${rememberEmail ? 'checked' : ''} 
+                      class="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-blue-600 focus:ring-blue-500 cursor-pointer accent-blue-600" />
+                    <span class="text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 font-medium transition-colors">
+                      Lembrar meu e-mail neste dispositivo
+                    </span>
+                  </label>
+
+                  ${savedEmail ? `
+                    <button type="button" id="auth-forget-email" class="text-[11px] text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 transition-colors font-semibold cursor-pointer underline underline-offset-2 ml-1 shrink-0" title="Remover o e-mail lembrado deste dispositivo">
+                      Esquecer e-mail
+                    </button>
+                  ` : ''}
                 </div>
               </div>
 
-              <div class="flex justify-between items-center pt-4">
+              <div class="flex justify-between items-center pt-3">
                 <button id="auth-cancel" type="button" class="text-sm text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-bold transition-colors">
                   Cancelar
                 </button>
                 <button type="submit" id="auth-submit-btn"
-                  class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] transition-all text-white rounded-xl font-bold text-sm shadow-md shadow-blue-100 dark:shadow-none flex items-center justify-center gap-2">
+                  class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] transition-all text-white rounded-xl font-bold text-sm shadow-md shadow-blue-100 dark:shadow-none flex items-center justify-center gap-2 cursor-pointer">
                   Próxima
                 </button>
               </div>
@@ -270,7 +307,7 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
                   Voltar
                 </button>
                 <button type="submit" id="auth-submit-btn"
-                  class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] transition-all text-white rounded-xl font-bold text-sm shadow-md shadow-blue-100 dark:shadow-none flex items-center justify-center gap-2">
+                  class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] transition-all text-white rounded-xl font-bold text-sm shadow-md shadow-blue-100 dark:shadow-none flex items-center justify-center gap-2 cursor-pointer">
                   Entrar
                 </button>
               </div>
@@ -314,7 +351,7 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
                   Voltar
                 </button>
                 <button type="submit" id="auth-submit-btn"
-                  class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] transition-all text-white rounded-xl font-bold text-sm shadow-md shadow-blue-100 dark:shadow-none flex items-center justify-center gap-2">
+                  class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 active:scale-[0.98] transition-all text-white rounded-xl font-bold text-sm shadow-md shadow-blue-100 dark:shadow-none flex items-center justify-center gap-2 cursor-pointer">
                   Confirmar e Entrar
                 </button>
               </div>
@@ -329,6 +366,37 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
       const form = modalContainer.querySelector('#auth-form') as HTMLFormElement;
       const cancelBtn = modalContainer.querySelector('#auth-cancel') as HTMLButtonElement | null;
       const backBtn = modalContainer.querySelector('#auth-back') as HTMLButtonElement | null;
+      const rememberCheckbox = modalContainer.querySelector('#auth-remember-email') as HTMLInputElement | null;
+      const forgetEmailBtn = modalContainer.querySelector('#auth-forget-email') as HTMLButtonElement | null;
+
+      if (rememberCheckbox) {
+        rememberCheckbox.addEventListener('change', (e) => {
+          rememberEmail = (e.target as HTMLInputElement).checked;
+          try {
+            localStorage.setItem(REMEMBER_EMAIL_PREF_KEY, rememberEmail ? 'true' : 'false');
+            if (!rememberEmail) {
+              localStorage.removeItem(LAST_LOGIN_EMAIL_KEY);
+              savedEmail = null;
+            }
+          } catch (err) {}
+        });
+      }
+
+      if (forgetEmailBtn) {
+        forgetEmailBtn.addEventListener('click', () => {
+          try {
+            localStorage.removeItem(LAST_LOGIN_EMAIL_KEY);
+          } catch (err) {}
+          savedEmail = null;
+          emailVal = '';
+          const emailInput = modalContainer.querySelector('#auth-email') as HTMLInputElement | null;
+          if (emailInput) {
+            emailInput.value = '';
+            emailInput.focus();
+          }
+          render();
+        });
+      }
 
       if (cancelBtn) {
         cancelBtn.addEventListener('click', () => {
@@ -355,7 +423,16 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
 
         if (currentStep === 'email') {
           const emailInput = modalContainer.querySelector('#auth-email') as HTMLInputElement;
+          const currentCheckbox = modalContainer.querySelector('#auth-remember-email') as HTMLInputElement | null;
+          
           emailVal = emailInput.value.trim().toLowerCase();
+          if (currentCheckbox) {
+            rememberEmail = currentCheckbox.checked;
+            try {
+              localStorage.setItem(REMEMBER_EMAIL_PREF_KEY, rememberEmail ? 'true' : 'false');
+            } catch (err) {}
+          }
+          
           submitBtn.textContent = 'Verificando...';
 
           try {
@@ -422,6 +499,15 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
 
             const data = await res.json();
             const loggedInUser = data.user;
+
+            // Salva ou remove o e-mail validado no localStorage exclusivamente após o sucesso do login
+            try {
+              if (rememberEmail && emailVal) {
+                localStorage.setItem(LAST_LOGIN_EMAIL_KEY, emailVal);
+              } else {
+                localStorage.removeItem(LAST_LOGIN_EMAIL_KEY);
+              }
+            } catch (err) {}
 
             const mockUser: FirebaseUser = {
               uid: loggedInUser.id,
@@ -490,6 +576,15 @@ export function signInWithPopup(authInstance: MockAuth, provider: any): Promise<
 
             const data = await res.json();
             const loggedInUser = data.user;
+
+            // Salva ou remove o e-mail validado no localStorage exclusivamente após o sucesso do registro
+            try {
+              if (rememberEmail && emailVal) {
+                localStorage.setItem(LAST_LOGIN_EMAIL_KEY, emailVal);
+              } else {
+                localStorage.removeItem(LAST_LOGIN_EMAIL_KEY);
+              }
+            } catch (err) {}
 
             const mockUser: FirebaseUser = {
               uid: loggedInUser.id,

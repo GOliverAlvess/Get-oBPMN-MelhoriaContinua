@@ -234,16 +234,6 @@ if (pdfFonts && (pdfFonts as any).pdfMake) {
   (pdfMake as any).vfs = (pdfFonts as any).vfs;
 }
 
-const formatExpectedTangibleGains = (gains: GainsStructure | undefined): string => {
-  if (!gains || !gains.tangible || gains.tangible.length === 0) return '';
-  return gains.tangible.map(t => `${t.type || ''}: ${t.unit || ''} ${t.value ?? ''}`).filter(Boolean).join(' | ');
-};
-
-const formatExpectedIntangibleGains = (gains: GainsStructure | undefined): string => {
-  if (!gains || !gains.intangible || gains.intangible.length === 0) return '';
-  return gains.intangible.map(i => `${i.type || ''} (${i.impactLevel || ''})${i.description ? ` - ${i.description}` : ''}`).filter(Boolean).join(' | ');
-};
-
 const formatRealGainsStr = (gains: GainsStructure | undefined): string => {
   if (!gains) return '';
   const tangible = (gains.tangible || []).map(t => `${t.type || ''}: ${t.unit || ''} ${t.value ?? ''}`).filter(Boolean).join(' | ');
@@ -283,8 +273,6 @@ const HEADERS_PDCA = [
   "PLAN - Impacto - Descrição",
   "PLAN - Impacto - Valor Atual",
   "PLAN - Meta (%)",
-  "PLAN - Impacto - Ganhos Esperados Tangíveis",
-  "PLAN - Impacto - Ganhos Esperados Intangíveis",
   "ODS",
   "ODS (Descrição)",
   "ESG",
@@ -841,23 +829,6 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                   margin: [0, 0, 0, 10]
                 });
 
-                // Ganhos Esperados (PLAN)
-                if (cycle.plan.impact?.expectedGains && (cycle.plan.impact.expectedGains.tangible?.length > 0 || cycle.plan.impact.expectedGains.intangible?.length > 0)) {
-                  planItems.push({ text: 'GANHOS ESPERADOS (PLAN)', style: 'fieldLabel', margin: [0, 5, 0, 2] });
-                  if (cycle.plan.impact.expectedGains.tangible?.length > 0) {
-                    planItems.push(renderGainsTable(cycle.plan.impact.expectedGains));
-                  }
-                  if (cycle.plan.impact.expectedGains.intangible?.length > 0) {
-                    planItems.push({
-                      ul: cycle.plan.impact.expectedGains.intangible.map((ig: any) => ({
-                        text: `${ig.type}: ${ig.description} (Impacto: ${ig.impactLevel})`,
-                        fontSize: 7
-                      })),
-                      margin: [10, 4, 0, 8]
-                    });
-                  }
-                }
-
                 // Plano de Ação (5W2H)
                 if (mappedActions.length > 0) {
                   planItems.push({ text: 'PLANO DE AÇÃO (5W2H)', style: 'fieldLabel', margin: [0, 8, 0, 4] });
@@ -1340,8 +1311,6 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                       "PLAN - Impacto - Descrição": cycle.plan.impact.description || '',
                       "PLAN - Impacto - Valor Atual": cycle.plan.impact.value ?? '',
                       "PLAN - Meta (%)": cycle.plan.impact.improvementPercentage ?? cycle.plan.impact.goal ?? '',
-                      "PLAN - Impacto - Ganhos Esperados Tangíveis": formatExpectedTangibleGains(cycle.plan.impact.expectedGains),
-                      "PLAN - Impacto - Ganhos Esperados Intangíveis": formatExpectedIntangibleGains(cycle.plan.impact.expectedGains),
                       "ODS": (project.scope?.odsSelecionadas && project.scope.odsSelecionadas.length > 0) ? project.scope.odsSelecionadas.join(', ') : '',
                       "ODS (Descrição)": project.scope?.odsDescricao || project.scope?.ods || '',
                       "ESG": (project.scope?.esgSelecionado && project.scope.esgSelecionado.length > 0) ? project.scope.esgSelecionado.join(', ') : '',

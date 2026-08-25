@@ -136,6 +136,30 @@ async function startServer() {
 
     const profile = user.profile || 'Usuário Analista';
 
+    // Notifications: Allow any authenticated user to create/manage their own notifications (and Masters all)
+    if (collection === 'notifications') {
+      if (method === 'DELETE' || method === 'PUT') {
+        if (id) {
+          let existingNotif: any = null;
+          if (db) {
+            existingNotif = await db.collection('notifications').findOne({ _id: id });
+          } else {
+            existingNotif = memoryDb['notifications']?.[id];
+          }
+          if (existingNotif) {
+            const isOwner = (
+              (existingNotif.usuario_id && existingNotif.usuario_id === user.id) ||
+              (existingNotif.usuario_id && user.email && existingNotif.usuario_id.toLowerCase() === user.email.toLowerCase())
+            );
+            if (!isOwner && profile !== 'Usuário Master') {
+              return { authorized: false, error: "Você só possui permissão para gerenciar suas próprias notificações." };
+            }
+          }
+        }
+      }
+      return { authorized: true };
+    }
+
     if (profile === 'Usuário Master') {
       return { authorized: true };
     }
@@ -180,7 +204,6 @@ async function startServer() {
       }
 
       if (collection === 'operationalActions') {
-        const payload = req.body?.data;
         if (method === 'DELETE') {
           let existingAction: any = null;
           if (db) {
@@ -188,14 +211,14 @@ async function startServer() {
           } else {
             existingAction = memoryDb['operationalActions']?.[id!];
           }
-          if (existingAction && existingAction.responsibleId !== user.id) {
-            return { authorized: false, error: "Você não é o responsável por esta ação." };
-          }
-        } else {
-          if (payload && payload.responsibleId && payload.responsibleId !== user.id) {
-            return { authorized: false, error: "Você só pode salvar ações atribuídas a você mesmo." };
+          if (existingAction && existingAction.status === 'Concluído') {
+            return { 
+              authorized: false, 
+              error: "Apenas usuários com perfil Master possuem permissão para excluir ações com status Concluído." 
+            };
           }
         }
+        return { authorized: true };
       }
 
       return { authorized: true };
@@ -453,6 +476,81 @@ async function startServer() {
     }
   });
 
+  // POST: Clear all notifications for authenticated user
+  app.post("/api/notifications/clear-all", async (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    const uid = req.headers['x-user-uid'] as string;
+    const { notificationIds } = req.body || {};
+
+    if (!email && !uid) {
+      return res.status(401).json({ error: "Usuário não autenticado." });
+    }
+
+    try {
+      const user = email ? await getUserByEmail(email) : null;
+      const targetUserId = user?.id || uid;
+      const targetUserEmail = user?.email || email;
+      const validUserIds = new Set<string>();
+      if (uid) validUserIds.add(uid);
+      if (user?.id) validUserIds.add(user.id);
+      if (targetUserId) validUserIds.add(targetUserId);
+      if (email) {
+        validUserIds.add(email);
+        validUserIds.add(email.toLowerCase());
+      }
+      if (user?.email) {
+        validUserIds.add(user.email);
+        validUserIds.add(user.email.toLowerCase());
+      }
+
+      const validList = Array.from(validUserIds);
+
+      if (db) {
+        const filterOr: any[] = [];
+        validList.forEach(id => {
+          filterOr.push({ usuario_id: id });
+        });
+
+        if (Array.isArray(notificationIds) && notificationIds.length > 0) {
+          filterOr.push({ _id: { $in: notificationIds }, usuario_id: { $in: validList } });
+        }
+
+        const filter = filterOr.length === 1 ? filterOr[0] : { $or: filterOr };
+        const docsToDelete = await db.collection("notifications").find(filter).toArray();
+        if (docsToDelete.length > 0) {
+          const idsToDelete = docsToDelete.map(d => d._id);
+          await db.collection("notifications").deleteMany({ _id: { $in: idsToDelete } });
+          for (const doc of docsToDelete) {
+            await broadcastDocChange("notifications", doc._id, "delete");
+          }
+        }
+        return res.json({ success: true, count: docsToDelete.length });
+      } else {
+        const notifs = memoryDb["notifications"] || {};
+        let count = 0;
+        const idsToRemove: string[] = [];
+        for (const [id, notif] of Object.entries(notifs)) {
+          const n = notif as any;
+          const matchesUser = validList.some(vid => 
+            n.usuario_id === vid || (n.usuario_id && vid && n.usuario_id.toLowerCase() === vid.toLowerCase())
+          );
+          if (matchesUser) {
+            idsToRemove.push(id);
+          }
+        }
+        for (const id of idsToRemove) {
+          delete memoryDb["notifications"][id];
+          await broadcastDocChange("notifications", id, "delete");
+          count++;
+        }
+        return res.json({ success: true, count });
+      }
+    } catch (error: any) {
+      console.error("Erro ao limpar notificações:", error);
+      res.status(500).json({ error: error.message || "Erro ao limpar notificações." });
+    }
+  });
+
   // GET: Get single document
   app.get("/api/db/:collection/:id", async (req, res) => {
     const { collection, id } = req.params;
@@ -685,6 +783,10 @@ async function startServer() {
     const mimeMap: Record<string, string> = {
       pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
       ppt: 'application/vnd.ms-powerpoint',
+      ppsx: 'application/vnd.openxmlformats-officedocument.presentationml.slideshow',
+      pps: 'application/vnd.ms-powerpoint',
+      potx: 'application/vnd.openxmlformats-officedocument.presentationml.template',
+      pot: 'application/vnd.ms-powerpoint',
       docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       doc: 'application/msword',
       xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -710,13 +812,33 @@ async function startServer() {
       : 'application/octet-stream';
   };
 
+  const MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100MB em bytes
+
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
+    limits: { 
+      fileSize: MAX_UPLOAD_SIZE,
+      fieldSize: MAX_UPLOAD_SIZE
+    }
   });
 
   // API Routes
-  app.post("/api/drive/upload", upload.single("file"), async (req: MulterRequest, res: Response) => {
+  app.post("/api/drive/upload", (req: Request, res: Response, next) => {
+    upload.single("file")(req, res, (err: any) => {
+      if (err) {
+        if (err instanceof multer.MulterError) {
+          if (err.code === "LIMIT_FILE_SIZE") {
+            return res.status(413).json({ 
+              error: "O arquivo excede o limite máximo permitido para upload (100 MB)." 
+            });
+          }
+          return res.status(400).json({ error: `Erro no upload do arquivo: ${err.message}` });
+        }
+        return res.status(500).json({ error: err.message || "Erro durante o processamento do upload." });
+      }
+      next();
+    });
+  }, async (req: MulterRequest, res: Response) => {
     try {
       const { projectId, projectName, driveFolderId } = req.body;
       const file = req.file;
@@ -733,10 +855,21 @@ async function startServer() {
         return res.status(400).json({ error: "Campos obrigatórios ausentes no upload de arquivo." });
       }
 
+      if (file.size > MAX_UPLOAD_SIZE) {
+        return res.status(413).json({ 
+          error: `O arquivo ${file.originalname} excede o limite máximo permitido para upload (100 MB).` 
+        });
+      }
+
       // Decode filename if received in latin1
       let originalName = file.originalname;
       try {
-        originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        if (/[\x80-\xFF]/.test(file.originalname)) {
+          const decoded = Buffer.from(file.originalname, 'latin1').toString('utf8');
+          if (!decoded.includes('\ufffd')) {
+            originalName = decoded;
+          }
+        }
       } catch (e) {
         originalName = file.originalname;
       }

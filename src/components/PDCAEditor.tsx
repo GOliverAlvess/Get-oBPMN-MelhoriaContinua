@@ -54,7 +54,6 @@ import {
   GlobalConfig,
 } from "../types";
 import ParetoDiagram from "./ParetoDiagram";
-import GainsEditor from "./GainsEditor";
 import ContextHelp from "./ContextHelp";
 import { cn, isValidUrl, formatUrl, exportarCSVPadrao } from "../lib/utils";
 import { logFeature, logFix, logMelhoria, logAjuste } from "../lib/changelogService";
@@ -897,26 +896,6 @@ export default function PDCAEditor({
   const exportToCSV = () => {
     if (relatedCycles.length === 0) return;
 
-    const formatExpectedTangibleGains = (gains: any): string => {
-      if (!gains || !gains.tangible || gains.tangible.length === 0) return "";
-      return gains.tangible
-        .map((t: any) => `${t.type || ""}: ${t.unit || ""} ${t.value ?? ""}`)
-        .filter(Boolean)
-        .join(" | ");
-    };
-
-    const formatExpectedIntangibleGains = (gains: any): string => {
-      if (!gains || !gains.intangible || gains.intangible.length === 0)
-        return "";
-      return gains.intangible
-        .map(
-          (i: any) =>
-            `${i.type || ""} (${i.impactLevel || ""})${i.description ? ` - ${i.description}` : ""}`,
-        )
-        .filter(Boolean)
-        .join(" | ");
-    };
-
     const formatRealGainsStr = (gains: any): string => {
       if (!gains) return "";
       const tangible = (gains.tangible || [])
@@ -965,8 +944,6 @@ export default function PDCAEditor({
       "PLAN - Impacto - Descrição",
       "PLAN - Impacto - Valor Atual",
       "PLAN - Meta (%)",
-      "PLAN - Impacto - Ganhos Esperados Tangíveis",
-      "PLAN - Impacto - Ganhos Esperados Intangíveis",
       "ODS",
       "ODS (Descrição)",
       "ESG",
@@ -1006,8 +983,6 @@ export default function PDCAEditor({
             cycle.plan.impact.description || "",
             cycle.plan.impact.value ?? "",
             cycle.plan.impact.improvementPercentage ?? cycle.plan.impact.goal ?? "",
-            formatExpectedTangibleGains(cycle.plan.impact.expectedGains),
-            formatExpectedIntangibleGains(cycle.plan.impact.expectedGains),
             (project.scope?.odsSelecionadas && project.scope.odsSelecionadas.length > 0) ? project.scope.odsSelecionadas.join(", ") : "",
             project.scope?.odsDescricao || project.scope?.ods || "",
             (project.scope?.esgSelecionado && project.scope.esgSelecionado.length > 0) ? project.scope.esgSelecionado.join(", ") : "",
@@ -1586,11 +1561,15 @@ export default function PDCAEditor({
                 width: "50%",
                 stack: [
                   {
-                    text: "GANHOS TANGÍVEIS (ALVO)",
+                    text: "TIPO DE IMPACTO DO PROBLEMA",
                     style: "fieldLabel",
                     margin: [0, 0, 0, 4],
                   },
-                  renderGainsTable(activeCycle.plan.impact.expectedGains),
+                  {
+                    text: activeCycle.plan.impact.impactType || "Não definido",
+                    style: "bodyHighlight",
+                    bold: true,
+                  },
                 ],
               },
             ],
@@ -1723,7 +1702,7 @@ export default function PDCAEditor({
               {
                 columns: [
                   {
-                    width: "40%",
+                    width: "50%",
                     stack: [
                       { text: "VALOR DO IMPACTO ATUAL", style: "fieldLabel", margin: [0, 0, 0, 4] },
                       { 
@@ -1737,17 +1716,10 @@ export default function PDCAEditor({
                     ]
                   },
                   {
-                    width: "30%",
+                    width: "50%",
                     stack: [
                       { text: "META DE REDUÇÃO (%)", style: "fieldLabel", margin: [0, 0, 0, 4] },
                       { text: (activeCycle.plan.impact.improvementPercentage ?? activeCycle.plan.impact.goal) ? `${activeCycle.plan.impact.improvementPercentage ?? activeCycle.plan.impact.goal}%` : "0%", style: "bodyHighlight", bold: true, color: "#059669" }
-                    ]
-                  },
-                  {
-                    width: "30%",
-                    stack: [
-                      { text: "GANHOS ESPERADOS", style: "fieldLabel", margin: [0, 0, 0, 4] },
-                      { text: activeCycle.plan.impact.expectedGains?.tangible && activeCycle.plan.impact.expectedGains.tangible.length > 0 ? `${activeCycle.plan.impact.expectedGains.tangible.length} ganho(s) mapeado(s)` : "Não mapeado", style: "bodyHighlight" }
                     ]
                   }
                 ],
@@ -4495,88 +4467,6 @@ export default function PDCAEditor({
                                   </div>
                                 )}
 
-                                {/* Bloco Ganho Esperado (Estruturado) - OPCIONAL */}
-                                <div className="p-6 bg-emerald-50/50 rounded-3xl border border-emerald-100 space-y-4">
-                                  <div className="flex items-center justify-between flex-wrap gap-2">
-                                    <div className="flex items-center gap-2 text-emerald-800">
-                                      <TrendingUp size={16} className="text-emerald-600" />
-                                      <span className="text-xs font-black uppercase tracking-widest">Ganho Esperado (Metas Estruturadas)</span>
-                                      <ContextHelp contentKey="ganhoEsperado" size="xs" />
-                                    </div>
-                                    <span className="text-[10px] font-bold text-slate-600 bg-white/80 px-3 py-1 rounded-full border border-slate-200 shadow-xs">
-                                      Preenchimento Opcional
-                                    </span>
-                                  </div>
-                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    {activeCycle.plan.impact.impactType !== 'Intangível' && (
-                                      <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Redução de custo estimada (R$)</label>
-                                        <input
-                                          type="number"
-                                          placeholder="0.00"
-                                          value={activeCycle.plan.impact.expectedCostReduction ?? ''}
-                                          onChange={(e) => updatePlan({
-                                            impact: {
-                                              ...activeCycle.plan.impact,
-                                              expectedCostReduction: parseFloat(e.target.value) || 0
-                                            }
-                                          })}
-                                          className="w-full p-4 bg-white border border-emerald-200/80 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
-                                        />
-                                      </div>
-                                    )}
-                                    <div className="space-y-2">
-                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ganho de tempo (horas/mês)</label>
-                                      <input
-                                        type="number"
-                                        placeholder="0"
-                                        value={activeCycle.plan.impact.expectedTimeGain ?? ''}
-                                        onChange={(e) => updatePlan({
-                                          impact: {
-                                            ...activeCycle.plan.impact,
-                                            expectedTimeGain: parseFloat(e.target.value) || 0
-                                          }
-                                        })}
-                                        className="w-full p-4 bg-white border border-emerald-200/80 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
-                                      />
-                                    </div>
-                                    <div className="space-y-2">
-                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Melhoria percentual de indicador (%)</label>
-                                      <input
-                                        type="number"
-                                        placeholder="0"
-                                        value={activeCycle.plan.impact.expectedIndicatorImprovement ?? ''}
-                                        onChange={(e) => {
-                                          const val = parseFloat(e.target.value) || 0;
-                                          updatePlan({
-                                            impact: {
-                                              ...activeCycle.plan.impact,
-                                              expectedIndicatorImprovement: val,
-                                              improvementPercentage: val || activeCycle.plan.impact.improvementPercentage
-                                            }
-                                          });
-                                        }}
-                                        className="w-full p-4 bg-white border border-emerald-200/80 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
-                                      />
-                                    </div>
-                                    <div className="space-y-2">
-                                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Outros ganhos</label>
-                                      <input
-                                        type="text"
-                                        placeholder="Ex: Melhoria do clima, padronização do processo"
-                                        value={activeCycle.plan.impact.expectedOtherGains ?? ''}
-                                        onChange={(e) => updatePlan({
-                                          impact: {
-                                            ...activeCycle.plan.impact,
-                                            expectedOtherGains: e.target.value
-                                          }
-                                        })}
-                                        className="w-full p-4 bg-white border border-emerald-200/80 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
-                                      />
-                                    </div>
-                                  </div>
-                                </div>
-
                                 <div className="space-y-4 pt-4 border-t border-theme-border">
                                   <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                     <FileText
@@ -6123,59 +6013,43 @@ export default function PDCAEditor({
                         </div>
                       </div>
 
-                      {/* 3.2 BLOCO 2: Comparação com Planejamento */}
+                      {/* 3.2 BLOCO 2: Contexto do Impacto Mapeado no PLAN */}
                       <div className="bg-indigo-50/40 p-6 rounded-3xl border border-indigo-100/80 space-y-4">
                         <div className="flex items-center justify-between flex-wrap gap-2">
                           <div className="flex items-center gap-2">
                             <FileText size={16} className="text-indigo-600" />
                             <span className="text-xs font-black text-indigo-900 uppercase tracking-widest">
-                              2. Comparação com Planejamento
+                              2. Impacto Mapeado no Planejamento (PLAN)
                             </span>
                           </div>
                           <span className="text-[10px] font-bold text-indigo-700 bg-indigo-100/80 px-3 py-1 rounded-full border border-indigo-200/60 shadow-sm">
-                            Dados abaixo definidos na etapa PLAN (somente leitura)
+                            Dados do problema definidos na etapa PLAN (somente leitura)
                           </span>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                           <div className="bg-white p-4 rounded-2xl border border-indigo-100/60 space-y-1">
                             <span className="text-[10px] font-bold text-slate-400 uppercase">Tipo de Impacto</span>
                             <p className="text-xs font-black text-slate-800">{activeCycle.plan.impact.impactType || 'Não definido'}</p>
                           </div>
                           <div className="bg-white p-4 rounded-2xl border border-indigo-100/60 space-y-1">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">Perda / Impacto Estimado</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Perda / Impacto Financeiro Estimado</span>
                             <p className="text-xs font-black text-slate-800">
                               R$ {(activeCycle.plan.impact.tangibleFinancialLoss || activeCycle.plan.impact.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                             </p>
                           </div>
                           <div className="bg-white p-4 rounded-2xl border border-indigo-100/60 space-y-1">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">Redução Custo Esperada</span>
-                            <p className="text-xs font-black text-emerald-600">
-                              R$ {(activeCycle.plan.impact.expectedCostReduction || activeCycle.plan.impact.value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </p>
-                          </div>
-                          <div className="bg-white p-4 rounded-2xl border border-indigo-100/60 space-y-1">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">Ganho Tempo Esperado</span>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Tempo Desperdiçado Mapeado</span>
                             <p className="text-xs font-black text-slate-800">
-                              {activeCycle.plan.impact.expectedTimeGain || 0} h/mês
+                              {activeCycle.plan.impact.tangibleWastedTime || 0} h/mês
                             </p>
                           </div>
                         </div>
 
-                        {(activeCycle.plan.impact.expectedIndicatorImprovement || activeCycle.plan.impact.expectedOtherGains) && (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-indigo-100/60">
-                            {activeCycle.plan.impact.expectedIndicatorImprovement ? (
-                              <div className="bg-white p-3 rounded-2xl border border-indigo-100/60 space-y-0.5">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase">% Melhoria Indicador Esperada</span>
-                                <p className="text-xs font-black text-indigo-600">{activeCycle.plan.impact.expectedIndicatorImprovement}%</p>
-                              </div>
-                            ) : null}
-                            {activeCycle.plan.impact.expectedOtherGains ? (
-                              <div className="bg-white p-3 rounded-2xl border border-indigo-100/60 space-y-0.5">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase">Outros Ganhos Esperados</span>
-                                <p className="text-xs font-bold text-slate-700">{activeCycle.plan.impact.expectedOtherGains}</p>
-                              </div>
-                            ) : null}
+                        {activeCycle.plan.impact.description && (
+                          <div className="bg-white p-4 rounded-2xl border border-indigo-100/60 space-y-1">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Descrição do Impacto do Problema</span>
+                            <p className="text-xs font-medium text-slate-700">{activeCycle.plan.impact.description}</p>
                           </div>
                         )}
                       </div>
@@ -6190,7 +6064,7 @@ export default function PDCAEditor({
                         </div>
                         <div className="space-y-3">
                           <label className="text-xs font-black text-slate-600 uppercase tracking-widest block">
-                            O ganho esperado foi atingido? <span className="text-rose-500 font-bold">* (Obrigatório)</span>
+                            As ações de melhoria funcionaram? <span className="text-rose-500 font-bold">* (Obrigatório)</span>
                           </label>
                           <div className="grid grid-cols-3 gap-3 max-w-md">
                             {(['Sim', 'Parcial', 'Não'] as const).map((status) => {
@@ -6226,7 +6100,7 @@ export default function PDCAEditor({
                           </div>
                           {showValidationErrors && !activeCycle.check?.expectedGainAchieved && (
                             <p className="text-xs text-rose-500 font-bold">
-                              Selecione se o ganho esperado foi atingido para concluir esta etapa.
+                              Selecione se as ações de melhoria funcionaram para concluir esta etapa.
                             </p>
                           )}
                         </div>
@@ -6254,7 +6128,7 @@ export default function PDCAEditor({
                             if (!isCheckPhaseValid) {
                               setShowValidationErrors(true);
                               setSaveFeedback(
-                                "Para avançar para ACT, selecione 'O ganho esperado foi atingido?' em 3. Conclusão e conclua o acompanhamento de todas as ações."
+                                "Para avançar para ACT, selecione se as ações de melhoria funcionaram em 3. Conclusão e conclua o acompanhamento de todas as ações."
                               );
                               return;
                             }

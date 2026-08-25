@@ -52,6 +52,7 @@ interface ActionOverviewSectionProps {
   onQuickComplete: (action: OperationalAction) => void;
   onCreateActionClick: () => void;
   targetActionId?: string;
+  isMaster?: boolean;
 }
 
 const getTodayDateStr = () => {
@@ -77,7 +78,8 @@ export default function ActionOverviewSection({
   onDeleteClick,
   onQuickComplete,
   onCreateActionClick,
-  targetActionId
+  targetActionId,
+  isMaster = false
 }: ActionOverviewSectionProps) {
   const todayStr = getTodayDateStr();
   const [projectStatusFilter, setProjectStatusFilter] = useState<'all' | ProjectOperationalStatus>('all');
@@ -182,7 +184,7 @@ export default function ActionOverviewSection({
     });
   }, [actions, projects, todayStr, hasActiveFilters]);
 
-  // Expand project that contains the targetActionId automatically
+  // Expand project that contains the targetActionId or all projects with matching actions when filtered
   React.useEffect(() => {
     if (targetActionId) {
       const targetAction = actions.find(a => a.id === targetActionId);
@@ -192,8 +194,14 @@ export default function ActionOverviewSection({
           [targetAction.projectId]: true
         }));
       }
+    } else if (hasActiveFilters && projectGroups.length > 0) {
+      const all: Record<string, boolean> = {};
+      projectGroups.forEach(g => {
+        all[g.project.id] = true;
+      });
+      setExpandedProjectIds(all);
     }
-  }, [targetActionId, actions]);
+  }, [targetActionId, actions, hasActiveFilters, projectGroups]);
 
   // Filter project groups by tab
   const filteredProjectGroups = useMemo(() => {
@@ -591,6 +599,7 @@ export default function ActionOverviewSection({
                             onDeleteClick={onDeleteClick}
                             onQuickComplete={onQuickComplete}
                             isTarget={targetActionId === action.id}
+                            isMaster={isMaster}
                           />
                         ))}
                       </div>

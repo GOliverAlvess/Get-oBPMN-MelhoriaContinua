@@ -24,6 +24,8 @@ interface ProjectFilesSectionProps {
   onUpdateProject: (updates: Partial<Project>) => void; // Função de retorno disparada ao atualizar metadados primários do projeto
 }
 
+const MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024; // Limite máximo de 100 MB por arquivo (104.857.600 bytes)
+
 // Componente reativo encarregado por listar e carregar documentos e imagens salvos no Google Drive associados ao projeto
 export default function ProjectFilesSection({ project, onUpdateProject }: ProjectFilesSectionProps) {
   const [files, setFiles] = useState<ProjectFile[]>([]); // Lista contendo os metadados dos arquivos anexos
@@ -78,6 +80,13 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
 
     for (let i = 0; i < fileArray.length; i++) {
       const selectedFile = fileArray[i];
+
+      // Validação no cliente: verifica se o tamanho real do arquivo excede 100 MB (104.857.600 bytes)
+      if (selectedFile.size > MAX_FILE_SIZE_BYTES) {
+        errors.push(`O arquivo ${selectedFile.name} excede o limite máximo permitido para upload (100 MB).`);
+        continue;
+      }
+
       setUploadProgress(
         fileArray.length > 1 
           ? `Enviando (${i + 1}/${fileArray.length}): ${selectedFile.name}` 
@@ -117,7 +126,11 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
             }
           } catch (e) {
             if (response.status === 413) {
-              errorMsg = `O arquivo ${selectedFile.name} excede o limite máximo permitido para upload (100 MB).`;
+              if (selectedFile.size > MAX_FILE_SIZE_BYTES) {
+                errorMsg = `O arquivo ${selectedFile.name} excede o limite máximo permitido para upload (100 MB).`;
+              } else {
+                errorMsg = `O servidor recusou o envio do arquivo ${selectedFile.name} (HTTP 413 Payload Too Large).`;
+              }
             }
           }
           throw new Error(errorMsg);

@@ -17,7 +17,10 @@ import {
   Trash2,
   LayoutGrid,
   List,
-  Sparkles
+  Sparkles,
+  Edit3,
+  Loader2,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -259,7 +262,26 @@ export default function OperationalActionsTab({
   const [tempUpdates, setTempUpdates] = useState<Partial<OperationalAction>>({});
   const [actionToSave, setActionToSave] = useState<OperationalAction | null>(null);
   const [updatesToSave, setUpdatesToSave] = useState<Partial<OperationalAction>>({});
+  const [isSavingConfirmation, setIsSavingConfirmation] = useState(false);
+  const [saveConfirmationError, setSaveConfirmationError] = useState<string | null>(null);
+  const [isDeletingAction, setIsDeletingAction] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [expandedHistoryIds, setExpandedHistoryIds] = useState<Record<string, boolean>>({});
+  
+  // Modal de edição completa da ação
+  const [actionToEditFull, setActionToEditFull] = useState<OperationalAction | null>(null);
+
+  // Toast notifications
+  const [toastNotification, setToastNotification] = useState<{ type: 'success' | 'error' | 'info'; message: string } | null>(null);
+
+  useEffect(() => {
+    if (toastNotification) {
+      const timer = setTimeout(() => {
+        setToastNotification(null);
+      }, 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastNotification]);
 
   const prevNavRef = useRef<{ source: string; targetId?: string; isDeadline?: boolean }>({
     source: navigationSource,
@@ -323,7 +345,8 @@ export default function OperationalActionsTab({
       setSearchTerm('');
 
       if (navigationSource === 'notification_deadline' || isDeadlineAlertFilter) {
-        // Notification for deadline alert: reset project filter (global view) & show actions near deadline
+        // Notification for deadline alert: switch to 'my_actions', reset project filter (global view) & show actions near deadline
+        setScopeMode('my_actions');
         setFilterProjects([]);
         setFilterResponsibles([]);
         setFilterPriorities([]);
@@ -545,6 +568,8 @@ export default function OperationalActionsTab({
     ) || null;
   }, [users]);
 
+  const isMaster = currentLoggedInUser?.profile === 'Usuário Master';
+
   // Função auxiliar para verificar se o usuário logado possui vínculo com o projeto
   const isUserLinkedToProject = useCallback((project: Project, userObj: User | null, allOperationalActions: OperationalAction[]) => {
     if (!userObj && !auth.currentUser) return true;
@@ -692,62 +717,65 @@ export default function OperationalActionsTab({
     });
   };
 
-  const handleUpdateAction = async (id: string, updates: Partial<OperationalAction>) => {
+  const handleUpdateAction = async (id: string, updates: Partial<OperationalAction>): Promise<boolean> => {
     try {
       const actionRef = doc(db, 'operationalActions', id);
       const action = actions.find(a => a.id === id);
-      if (action) {
-        // Log follow-up history
-        const originalFeedback = action.feedback || '';
-        const newFeedback = (updates.feedback || '').trim();
-        
-        let updatedHistory = action.historicoTratativas ? [...action.historicoTratativas] : [];
-        if (originalFeedback.trim() !== '' && newFeedback !== originalFeedback.trim()) {
-          const loggedInUser = users.find(u => u.id === auth.currentUser?.uid);
-          const currentUserName = loggedInUser?.name || auth.currentUser?.email || 'Usuário';
-          
-          updatedHistory.push({
-            texto: originalFeedback,
-            usuario: currentUserName,
-            data: new Date().toISOString()
-          });
-        }
-        
-        const finalUpdates = {
-          ...updates,
-          ...(updatedHistory.length > 0 ? { historicoTratativas: updatedHistory } : {})
-        };
-
-        const finalAction = cleanObject({ ...action, ...finalUpdates });
-        await setDoc(actionRef, finalAction);
-        notifyActionChanges(action, finalAction, auth.currentUser?.uid);
-
-        logUserActivity({
-          userId: auth.currentUser?.uid || '',
-          userName: auth.currentUser?.displayName || auth.currentUser?.email || 'Usuário',
-          userEmail: auth.currentUser?.email || '',
-          actionType: 'operational_action',
-          actionName: 'Atualização de Ação Operacional',
-          details: `Atualizou a ação operacional '${finalAction.action}'`,
-          entityId: finalAction.id,
-          entityName: finalAction.action
-        });
-        if (updatedHistory.length > (action.historicoTratativas?.length || 0)) {
-          logFeature('Inclusão do histórico de interações nas ações', 'Ações', '💬');
-        } else {
-          logMelhoria('Atualização do status e detalhes da ação operacional', 'Ações', '⚡');
-        }
-        setEditingActionId(null);
-        setTempUpdates({});
+      if (!action) {
+        throw new Error('Ação não encontrada para atualização.');
       }
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `operationalActions/${id}`);
+
+      // Log follow-up history
+      const originalFeedback = action.feedback || '';
+      const newFeedback = (updates.feedback !== undefined ? updates.feedback : originalFeedback).trim();
+      
+      let updatedHistory = action.historicoTratativas ? [...action.historicoTratativas] : [];
+      if (originalFeedback.trim() !== '' && newFeedback !== originalFeedback.trim()) {
+        const loggedInUser = users.find(u => u.id === auth.currentUser?.uid);
+        const currentUserName = loggedInUser?.name || auth.currentUser?.email || 'Usuário';
+        
+        updatedHistory.push({
+          texto: originalFeedback,
+          usuario: currentUserName,
+          data: new Date().toISOString()
+        });
+      }
+      
+      const finalUpdates = {
+        ...updates,
+        ...(updatedHistory.length > 0 ? { historicoTratativas: updatedHistory } : {})
+      };
+
+      const finalAction = cleanObject({ ...action, ...finalUpdates });
+      await setDoc(actionRef, finalAction);
+      notifyActionChanges(action, finalAction, auth.currentUser?.uid);
+
+      logUserActivity({
+        userId: auth.currentUser?.uid || '',
+        userName: auth.currentUser?.displayName || auth.currentUser?.email || 'Usuário',
+        userEmail: auth.currentUser?.email || '',
+        actionType: 'operational_action',
+        actionName: 'Atualização de Ação Operacional',
+        details: `Atualizou a ação operacional '${finalAction.action}'`,
+        entityId: finalAction.id,
+        entityName: finalAction.action
+      });
+      if (updatedHistory.length > (action.historicoTratativas?.length || 0)) {
+        logFeature('Inclusão do histórico de interações nas ações', 'Ações', '💬');
+      } else {
+        logMelhoria('Atualização do status e detalhes da ação operacional', 'Ações', '⚡');
+      }
+      return true;
+    } catch (error: any) {
+      console.error('Erro ao atualizar ação operacional:', error);
+      throw error;
     }
   };
 
   const handleConfirmSave = (id: string, updates: Partial<OperationalAction>) => {
     const action = actions.find(a => a.id === id);
     if (action) {
+      setSaveConfirmationError(null);
       setActionToSave(action);
       setUpdatesToSave(updates);
     }
@@ -755,14 +783,36 @@ export default function OperationalActionsTab({
 
   const onConfirmSave = async () => {
     if (!actionToSave) return;
-    await handleUpdateAction(actionToSave.id, updatesToSave);
-    setActionToSave(null);
-    setUpdatesToSave({});
+    setIsSavingConfirmation(true);
+    setSaveConfirmationError(null);
+    try {
+      await handleUpdateAction(actionToSave.id, updatesToSave);
+      setActionToSave(null);
+      setUpdatesToSave({});
+      setEditingActionId(null);
+      setTempUpdates({});
+      setToastNotification({
+        type: 'success',
+        message: 'Alterações na ação foram salvas com sucesso!'
+      });
+    } catch (error: any) {
+      const msg = error.message || 'Falha ao salvar as alterações. Verifique sua conexão e tente novamente.';
+      setSaveConfirmationError(msg);
+      setToastNotification({
+        type: 'error',
+        message: msg
+      });
+    } finally {
+      setIsSavingConfirmation(false);
+    }
   };
 
   const startEditing = (action: OperationalAction) => {
     if (action.status === 'Concluído') {
-      alert('Ações concluídas não podem ser editadas.');
+      setToastNotification({
+        type: 'info',
+        message: 'Ações concluídas não podem ser editadas.'
+      });
       return;
     }
     setEditingActionId(action.id);
@@ -775,17 +825,54 @@ export default function OperationalActionsTab({
 
   const handleConfirmDelete = async () => {
     if (!actionToDelete) return;
-    
+
+    if (actionToDelete.status === 'Concluído' && !isMaster) {
+      const msg = 'Apenas usuários com perfil Master podem excluir ações concluídas.';
+      setDeleteError(msg);
+      setToastNotification({
+        type: 'error',
+        message: msg
+      });
+      return;
+    }
+
+    setIsDeletingAction(true);
+    setDeleteError(null);
     try {
       await deleteDoc(doc(db, 'operationalActions', actionToDelete.id));
+      const deletedName = actionToDelete.action;
+
+      logUserActivity({
+        userId: auth.currentUser?.uid || currentLoggedInUser?.id || '',
+        userName: currentLoggedInUser?.name || auth.currentUser?.displayName || auth.currentUser?.email || 'Usuário Master',
+        userEmail: auth.currentUser?.email || currentLoggedInUser?.email || '',
+        actionType: 'operational_action',
+        actionName: 'Exclusão de Ação Operacional',
+        details: `Excluiu a ação operacional '${deletedName}' (Status: ${actionToDelete.status}, Projeto: ${actionToDelete.projectName})`,
+        entityId: actionToDelete.id,
+        entityName: deletedName
+      });
+
       setActionToDelete(null);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `operationalActions/${actionToDelete.id}`);
+      setToastNotification({
+        type: 'success',
+        message: `Ação '${deletedName}' excluída com sucesso!`
+      });
+    } catch (error: any) {
+      console.error('Erro ao excluir ação:', error);
+      const msg = error.message || 'Não foi possível excluir a ação. Tente novamente.';
+      setDeleteError(msg);
+      setToastNotification({
+        type: 'error',
+        message: msg
+      });
+    } finally {
+      setIsDeletingAction(false);
     }
   };
 
   const handleDeleteClick = (action: OperationalAction) => {
-    if (action.status === 'Concluído') {
+    if (action.status === 'Concluído' && !isMaster) {
       setShowBlockedMessage(true);
       setTimeout(() => setShowBlockedMessage(false), 3000);
       return;
@@ -1129,6 +1216,7 @@ export default function OperationalActionsTab({
           onQuickComplete={handleQuickComplete}
           onCreateActionClick={() => setIsModalOpen(true)}
           targetActionId={targetActionId}
+          isMaster={isMaster}
         />
       ) : (
         /* Listagem em Tabela */
@@ -1368,19 +1456,33 @@ export default function OperationalActionsTab({
                             </button>
                           </>
                         ) : (
-                          <button 
-                            onClick={() => startEditing(action)}
-                            disabled={action.status === 'Concluído'}
-                            className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shadow-sm border border-transparent hover:border-indigo-100 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:hover:border-transparent cursor-pointer"
-                            title="Editar"
-                          >
-                            <MoreVertical size={18} />
-                          </button>
+                          <>
+                            <button 
+                              onClick={() => setActionToEditFull(action)}
+                              className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-xl transition-all shadow-sm border border-transparent hover:border-indigo-100 cursor-pointer"
+                              title="Editar Ação Completa"
+                            >
+                              <Edit3 size={17} />
+                            </button>
+                            <button 
+                              onClick={() => startEditing(action)}
+                              disabled={action.status === 'Concluído'}
+                              className="p-2.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-xl transition-all shadow-sm border border-transparent hover:border-indigo-100 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400 disabled:hover:border-transparent cursor-pointer"
+                              title="Editar Tratativa Rápida"
+                            >
+                              <MoreVertical size={18} />
+                            </button>
+                          </>
                         )}
                         <button 
                           onClick={() => handleDeleteClick(action)}
-                          className="p-2.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-xl transition-all shadow-sm border border-transparent hover:border-rose-100 cursor-pointer"
-                          title="Excluir"
+                          className={cn(
+                            "p-2.5 rounded-xl transition-all shadow-sm border border-transparent cursor-pointer",
+                            action.status === 'Concluído' && !isMaster
+                              ? "text-slate-300 dark:text-slate-700 hover:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 opacity-50"
+                              : "text-slate-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:border-rose-100"
+                          )}
+                          title={action.status === 'Concluído' && !isMaster ? "Ações concluídas não podem ser excluídas por este perfil" : "Excluir ação"}
                         >
                           <Trash2 size={18} />
                         </button>
@@ -1410,12 +1512,55 @@ export default function OperationalActionsTab({
       </div>
       )}
 
+      {/* Modal de Criação de Ação */}
       <CreateActionModal 
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         projects={projects}
         users={users}
+        onSuccess={(msg) => setToastNotification({ type: 'success', message: msg })}
       />
+
+      {/* Modal de Edição Completa da Ação */}
+      <EditActionModal
+        isOpen={!!actionToEditFull}
+        action={actionToEditFull}
+        onClose={() => setActionToEditFull(null)}
+        projects={projects}
+        users={users}
+        onSuccess={(msg) => setToastNotification({ type: 'success', message: msg })}
+      />
+
+      {/* Toast Notification Flutuante */}
+      <AnimatePresence>
+        {toastNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-6 right-6 z-[300] max-w-md shadow-2xl"
+          >
+            <div className={cn(
+              "px-5 py-4 rounded-2xl border flex items-center gap-3 font-bold text-sm backdrop-blur-md",
+              toastNotification.type === 'success' && "bg-emerald-600 text-white border-emerald-500 shadow-emerald-500/20",
+              toastNotification.type === 'error' && "bg-rose-600 text-white border-rose-500 shadow-rose-500/20",
+              toastNotification.type === 'info' && "bg-indigo-600 text-white border-indigo-500 shadow-indigo-500/20"
+            )}>
+              {toastNotification.type === 'success' && <CheckCircle2 size={20} className="shrink-0 text-emerald-100" />}
+              {toastNotification.type === 'error' && <AlertCircle size={20} className="shrink-0 text-rose-100" />}
+              {toastNotification.type === 'info' && <AlertCircle size={20} className="shrink-0 text-indigo-100" />}
+              <span className="flex-1 text-xs sm:text-sm font-medium">{toastNotification.message}</span>
+              <button 
+                type="button" 
+                onClick={() => setToastNotification(null)}
+                className="p-1 hover:bg-white/20 rounded-lg transition-colors text-white/80 hover:text-white"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Alerta de Ação Bloqueada */}
       <AnimatePresence>
@@ -1427,7 +1572,7 @@ export default function OperationalActionsTab({
             className="fixed bottom-8 right-8 z-[200] bg-rose-600 text-white px-6 py-4 rounded-2xl shadow-xl flex items-center gap-3 font-bold border border-rose-500"
           >
             <AlertCircle size={20} />
-            <span>Ações concluídas não podem ser excluídas.</span>
+            <span>Ações concluídas não podem ser excluídas por este perfil.</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1440,34 +1585,67 @@ export default function OperationalActionsTab({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setActionToDelete(null)}
+              onClick={() => {
+                if (!isDeletingAction) {
+                  setActionToDelete(null);
+                  setDeleteError(null);
+                }
+              }}
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="relative bg-white w-full max-w-sm rounded-[2rem] shadow-2xl p-8 text-center"
+              className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2rem] shadow-2xl p-8 text-center border border-slate-100 dark:border-slate-800"
             >
-              <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <div className="w-16 h-16 bg-rose-100 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
                 <Trash2 size={32} />
               </div>
-              <h3 className="text-xl font-black text-slate-900 mb-2">Confirmar Exclusão</h3>
-              <p className="text-slate-500 text-sm leading-relaxed mb-8">
-                Tem certeza que deseja excluir esta ação? Esta operação não poderá ser desfeita.
+              <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">Confirmar Exclusão</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed mb-6">
+                {actionToDelete.status === 'Concluído' ? (
+                  <>
+                    Deseja realmente excluir esta ação concluída <span className="font-bold text-slate-700 dark:text-slate-200">"{actionToDelete.action}"</span>? Esta ação será removida do Histórico de Ações.
+                  </>
+                ) : (
+                  <>
+                    Tem certeza que deseja excluir a ação <span className="font-bold text-slate-700 dark:text-slate-200">"{actionToDelete.action}"</span>? Esta operação não poderá ser desfeita.
+                  </>
+                )}
               </p>
+
+              {deleteError && (
+                <div className="mb-6 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl text-xs font-bold text-rose-700 dark:text-rose-300 text-left flex items-start gap-2">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                  <span>{deleteError}</span>
+                </div>
+              )}
+
               <div className="flex gap-3">
                 <button 
-                  onClick={() => setActionToDelete(null)}
-                  className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all cursor-pointer"
+                  disabled={isDeletingAction}
+                  onClick={() => {
+                    setActionToDelete(null);
+                    setDeleteError(null);
+                  }}
+                  className="flex-1 px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-200 transition-all cursor-pointer disabled:opacity-50"
                 >
-                  Não, voltar
+                  Cancelar
                 </button>
                 <button 
+                  disabled={isDeletingAction}
                   onClick={handleConfirmDelete}
-                  className="flex-1 px-6 py-3 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-all shadow-lg shadow-rose-100 cursor-pointer"
+                  className="flex-1 px-6 py-3 bg-rose-600 text-white rounded-xl font-bold hover:bg-rose-700 transition-all shadow-lg shadow-rose-100 dark:shadow-none cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  Sim, excluir
+                  {isDeletingAction ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      <span>Excluindo...</span>
+                    </>
+                  ) : (
+                    <span>Sim, excluir</span>
+                  )}
                 </button>
               </div>
             </motion.div>
@@ -1483,34 +1661,53 @@ export default function OperationalActionsTab({
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              onClick={() => setActionToSave(null)}
+              onClick={() => {
+                if (!isSavingConfirmation) setActionToSave(null);
+              }}
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="relative bg-white w-full max-w-sm rounded-[2rem] shadow-2xl p-8 text-center"
+              className="relative bg-white dark:bg-slate-900 w-full max-w-sm rounded-[2rem] shadow-2xl p-8 text-center border border-slate-100 dark:border-slate-800"
             >
-              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
                 <Save size={32} />
               </div>
-              <h3 className="text-xl font-black text-slate-900 mb-2">Salvar Alterações</h3>
-              <p className="text-slate-500 text-sm leading-relaxed mb-8">
+              <h3 className="text-xl font-black text-slate-900 dark:text-white mb-2">Salvar Alterações</h3>
+              <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed mb-6">
                 Deseja realmente salvar as alterações feitas nesta ação?
               </p>
+
+              {saveConfirmationError && (
+                <div className="mb-6 p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-xl text-xs font-bold text-rose-700 dark:text-rose-300 text-left flex items-start gap-2">
+                  <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                  <span>{saveConfirmationError}</span>
+                </div>
+              )}
+
               <div className="flex gap-3">
                 <button 
+                  disabled={isSavingConfirmation}
                   onClick={() => setActionToSave(null)}
-                  className="flex-1 px-6 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold hover:bg-slate-200 transition-all cursor-pointer"
+                  className="flex-1 px-6 py-3 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-xl font-bold hover:bg-slate-200 transition-all cursor-pointer disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button 
+                  disabled={isSavingConfirmation}
                   onClick={onConfirmSave}
-                  className="flex-1 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 cursor-pointer"
+                  className="flex-1 px-6 py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-100 dark:shadow-none cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  Confirmar
+                  {isSavingConfirmation ? (
+                    <>
+                      <Loader2 size={18} className="animate-spin" />
+                      <span>Salvando...</span>
+                    </>
+                  ) : (
+                    <span>Confirmar</span>
+                  )}
                 </button>
               </div>
             </motion.div>
@@ -1567,8 +1764,8 @@ function SearchableProjectSelect({
     <div ref={containerRef} className="relative w-full">
       <div 
         className={cn(
-          "w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-700 focus-within:ring-2 focus-within:ring-indigo-500 flex items-center gap-2 cursor-pointer transition-all",
-          isOpen && "ring-2 ring-indigo-500 bg-white"
+          "w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-slate-700 dark:text-slate-200 focus-within:ring-2 focus-within:ring-indigo-500 flex items-center gap-2 cursor-pointer transition-all",
+          isOpen && "ring-2 ring-indigo-500 bg-white dark:bg-slate-800"
         )}
         onClick={() => setIsOpen(true)}
       >
@@ -1585,7 +1782,7 @@ function SearchableProjectSelect({
             setSearchQuery('');
           }}
           placeholder="Buscar ou selecionar projeto..."
-          className="w-full bg-transparent outline-none text-slate-700 text-sm font-medium placeholder:text-slate-400"
+          className="w-full bg-transparent outline-none text-slate-700 dark:text-slate-100 text-sm font-medium placeholder:text-slate-400"
         />
         {value && (
           <button
@@ -1595,7 +1792,7 @@ function SearchableProjectSelect({
               onChange('');
               setSearchQuery('');
             }}
-            className="p-1 hover:bg-slate-200 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
+            className="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-slate-400 hover:text-slate-600 transition-colors"
             title="Limpar seleção"
           >
             <X size={14} />
@@ -1605,7 +1802,7 @@ function SearchableProjectSelect({
       </div>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-2xl shadow-xl z-[120] max-h-60 overflow-y-auto py-2 divide-y divide-slate-100">
+        <div className="absolute top-full left-0 right-0 mt-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-xl z-[120] max-h-60 overflow-y-auto py-2 divide-y divide-slate-100 dark:divide-slate-700/60">
           {filteredProjects.length > 0 ? (
             filteredProjects.map(p => (
               <button
@@ -1617,12 +1814,12 @@ function SearchableProjectSelect({
                   setIsOpen(false);
                 }}
                 className={cn(
-                  "w-full text-left px-4 py-2.5 text-sm font-medium transition-colors hover:bg-indigo-50 hover:text-indigo-600 flex items-center justify-between cursor-pointer",
-                  p.id === value ? "bg-indigo-50/70 text-indigo-600 font-bold" : "text-slate-700"
+                  "w-full text-left px-4 py-2.5 text-sm font-medium transition-colors hover:bg-indigo-50 dark:hover:bg-indigo-950/40 hover:text-indigo-600 flex items-center justify-between cursor-pointer",
+                  p.id === value ? "bg-indigo-50/70 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-bold" : "text-slate-700 dark:text-slate-200"
                 )}
               >
                 <span className="truncate">{p.name}</span>
-                {p.id === value && <CheckCircle2 size={16} className="text-indigo-600 shrink-0 ml-2" />}
+                {p.id === value && <CheckCircle2 size={16} className="text-indigo-600 dark:text-indigo-400 shrink-0 ml-2" />}
               </button>
             ))
           ) : (
@@ -1636,21 +1833,37 @@ function SearchableProjectSelect({
   );
 }
 
-function CreateActionModal({ isOpen, onClose, projects, users }: { isOpen: boolean, onClose: () => void, projects: Project[], users: User[] }) {
+function CreateActionModal({ 
+  isOpen, 
+  onClose, 
+  projects, 
+  users,
+  onSuccess
+}: { 
+  isOpen: boolean;
+  onClose: () => void;
+  projects: Project[];
+  users: User[];
+  onSuccess?: (msg: string) => void;
+}) {
   const [projectId, setProjectId] = useState('');
   const [subtaskId, setSubtaskId] = useState('');
   const [action, setAction] = useState('');
   const [responsibleId, setResponsibleId] = useState('');
   const [priority, setPriority] = useState<ProjectPriority>('Média');
   const [forecastDate, setForecastDate] = useState(new Date().toISOString().split('T')[0]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const selectedProject = projects.find(p => p.id === projectId);
   const subtasks = selectedProject?.subtasks || [];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!projectId || !action || !responsibleId) {
-      alert('Por favor, preencha todos os campos obrigatórios (Projeto, Ação e Responsável).');
+    setErrorMessage(null);
+
+    if (!projectId || !action.trim() || !responsibleId || !forecastDate) {
+      setErrorMessage('Por favor, preencha todos os campos obrigatórios (Projeto, Ação, Responsável e Previsão).');
       return;
     }
 
@@ -1663,7 +1876,7 @@ function CreateActionModal({ isOpen, onClose, projects, users }: { isOpen: boole
       projectName: selectedProject?.name || '',
       subtaskId: subtaskId || '',
       subtaskTitle: selectedSubtask ? selectedSubtask.title : 'Sem Subtarefa',
-      action,
+      action: action.trim(),
       responsibleId,
       responsibleName: selectedResponsible?.name || '',
       priority,
@@ -1672,8 +1885,12 @@ function CreateActionModal({ isOpen, onClose, projects, users }: { isOpen: boole
       createdAt: new Date().toISOString()
     };
 
+    setIsSubmitting(true);
+
     try {
-      await setDoc(doc(db, 'operationalActions', newAction.id), newAction);
+      // Gravação real e persistente no backend via setDoc
+      await setDoc(doc(db, 'operationalActions', newAction.id), cleanObject(newAction));
+      
       notifyActionChanges(null, newAction, auth.currentUser?.uid);
 
       logUserActivity({
@@ -1686,16 +1903,30 @@ function CreateActionModal({ isOpen, onClose, projects, users }: { isOpen: boole
         entityId: newAction.id,
         entityName: newAction.action
       });
-      onClose();
-      // Reset form
+
+      // Notifica o componente pai sobre o sucesso
+      if (onSuccess) {
+        onSuccess(`Ação "${newAction.action}" criada e gravada com sucesso!`);
+      }
+
+      // Limpa os campos somente após o sucesso real da persistência
       setProjectId('');
       setSubtaskId('');
       setAction('');
       setResponsibleId('');
       setPriority('Média');
       setForecastDate(new Date().toISOString().split('T')[0]);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, `operationalActions/${newAction.id}`);
+      setErrorMessage(null);
+      
+      // Fecha o modal
+      onClose();
+    } catch (error: any) {
+      console.error('Erro ao criar ação operacional:', error);
+      const msg = error.message || 'Falha ao salvar a ação no servidor. Verifique sua conexão e tente novamente.';
+      setErrorMessage(msg);
+      // O formulário permanece aberto com todos os dados preenchidos
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1707,34 +1938,50 @@ function CreateActionModal({ isOpen, onClose, projects, users }: { isOpen: boole
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={onClose}
+            onClick={() => {
+              if (!isSubmitting) onClose();
+            }}
             className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
           />
           <motion.div 
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
-            className="relative bg-white w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden"
+            className="relative bg-white dark:bg-slate-900 w-full max-w-xl rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 dark:border-slate-800"
           >
-            <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+            <div className="p-8 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-100">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-100 dark:shadow-none">
                   <Plus size={24} />
                 </div>
                 <div>
-                  <h3 className="text-xl font-black text-slate-900">Nova Ação Operacional</h3>
-                  <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-0.5">Registro de Tratativa</p>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white">Nova Ação Operacional</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest mt-0.5">Registro de Tratativa</p>
                 </div>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-white rounded-xl transition-all text-slate-400 hover:text-slate-600 shadow-sm border border-transparent hover:border-slate-100 cursor-pointer">
+              <button 
+                disabled={isSubmitting}
+                onClick={onClose} 
+                className="p-2 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shadow-sm border border-transparent hover:border-slate-100 dark:hover:border-slate-700 cursor-pointer disabled:opacity-50"
+              >
                 <X size={20} />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="p-8 space-y-6">
+              {errorMessage && (
+                <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-2xl text-xs font-bold text-rose-700 dark:text-rose-300 flex items-start gap-2.5">
+                  <AlertCircle size={18} className="shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
+                  <div>
+                    <p className="font-black text-rose-800 dark:text-rose-200 mb-0.5">Erro na gravação</p>
+                    <p className="font-normal">{errorMessage}</p>
+                  </div>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Projeto *</label>
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">Projeto *</label>
                   <SearchableProjectSelect
                     projects={projects}
                     value={projectId}
@@ -1746,14 +1993,14 @@ function CreateActionModal({ isOpen, onClose, projects, users }: { isOpen: boole
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">
                     Subtarefa <span className="text-slate-400 font-normal lowercase">(opcional)</span>
                   </label>
                   <select 
-                    disabled={!projectId}
+                    disabled={!projectId || isSubmitting}
                     value={subtaskId}
                     onChange={(e) => setSubtaskId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-slate-700 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium text-sm disabled:opacity-50"
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium text-sm disabled:opacity-50"
                   >
                     <option value="">Sem Subtarefa (Geral do Projeto)</option>
                     {subtasks.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
@@ -1762,24 +2009,26 @@ function CreateActionModal({ isOpen, onClose, projects, users }: { isOpen: boole
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Ação a ser realizada *</label>
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">Ação a ser realizada *</label>
                 <textarea 
                   required
+                  disabled={isSubmitting}
                   value={action}
                   onChange={(e) => setAction(e.target.value)}
                   placeholder="Descreva detalhadamente a ação..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium min-h-[100px]"
+                  className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium min-h-[100px] disabled:opacity-50"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Responsável *</label>
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">Responsável *</label>
                   <select 
                     required
+                    disabled={isSubmitting}
                     value={responsibleId}
                     onChange={(e) => setResponsibleId(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium"
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium disabled:opacity-50"
                   >
                     <option value="">Selecionar Responsável</option>
                     {[...users].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).map(u => (
@@ -1789,11 +2038,12 @@ function CreateActionModal({ isOpen, onClose, projects, users }: { isOpen: boole
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Prioridade *</label>
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">Prioridade *</label>
                   <select 
+                    disabled={isSubmitting}
                     value={priority}
                     onChange={(e) => setPriority(e.target.value as any)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium"
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium disabled:opacity-50"
                   >
                     <option value="Baixa">Baixa</option>
                     <option value="Média">Média</option>
@@ -1804,29 +2054,402 @@ function CreateActionModal({ isOpen, onClose, projects, users }: { isOpen: boole
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide ml-1">Previsão de Conclusão *</label>
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">Previsão de Conclusão *</label>
                 <input 
                   type="date"
                   required
+                  disabled={isSubmitting}
                   value={forecastDate}
                   onChange={(e) => setForecastDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-slate-700 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium"
+                  className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium disabled:opacity-50"
                 />
               </div>
 
               <div className="pt-4 flex gap-3">
                 <button 
                   type="button"
+                  disabled={isSubmitting}
                   onClick={onClose}
-                  className="flex-1 px-6 py-4 bg-slate-100 text-slate-600 rounded-2xl font-bold hover:bg-slate-200 transition-all cursor-pointer"
+                  className="flex-1 px-6 py-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer disabled:opacity-50"
                 >
                   Cancelar
                 </button>
                 <button 
                   type="submit"
-                  className="flex-[2] px-6 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 cursor-pointer"
+                  disabled={isSubmitting}
+                  className="flex-[2] px-6 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 dark:shadow-none cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  Criar Ação
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin" />
+                      <span>Gravando Ação...</span>
+                    </>
+                  ) : (
+                    <span>Criar Ação</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        </div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function EditActionModal({
+  isOpen,
+  action,
+  onClose,
+  projects,
+  users,
+  onSuccess
+}: {
+  isOpen: boolean;
+  action: OperationalAction | null;
+  onClose: () => void;
+  projects: Project[];
+  users: User[];
+  onSuccess?: (msg: string) => void;
+}) {
+  const [projectId, setProjectId] = useState('');
+  const [subtaskId, setSubtaskId] = useState('');
+  const [actionText, setActionText] = useState('');
+  const [responsibleId, setResponsibleId] = useState('');
+  const [priority, setPriority] = useState<ProjectPriority>('Média');
+  const [forecastDate, setForecastDate] = useState('');
+  const [status, setStatus] = useState<'Pendente' | 'Em andamento' | 'Concluído' | 'Pausado'>('Pendente');
+  const [completionDate, setCompletionDate] = useState('');
+  const [feedback, setFeedback] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (action) {
+      setProjectId(action.projectId || '');
+      setSubtaskId(action.subtaskId || '');
+      setActionText(action.action || '');
+      setResponsibleId(action.responsibleId || '');
+      setPriority(action.priority || 'Média');
+      setForecastDate(action.forecastDate || '');
+      setStatus(action.status || 'Pendente');
+      setCompletionDate(action.completionDate || '');
+      setFeedback(action.feedback || '');
+      setErrorMessage(null);
+    }
+  }, [action]);
+
+  const selectedProject = projects.find(p => p.id === projectId);
+  const subtasks = selectedProject?.subtasks || [];
+
+  const handleStatusChange = (newStatus: 'Pendente' | 'Em andamento' | 'Concluído' | 'Pausado') => {
+    setStatus(newStatus);
+    if (newStatus === 'Concluído' && !completionDate) {
+      const today = new Date().toISOString().split('T')[0];
+      setCompletionDate(today);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!action) return;
+    setErrorMessage(null);
+
+    if (!projectId || !actionText.trim() || !responsibleId || !forecastDate) {
+      setErrorMessage('Por favor, preencha todos os campos obrigatórios (Projeto, Ação, Responsável e Previsão).');
+      return;
+    }
+
+    const selectedSubtask = subtasks.find(s => s.id === subtaskId);
+    const selectedResponsible = users.find(u => u.id === responsibleId);
+
+    // Gerar histórico de tratativas se feedback foi alterado
+    const originalFeedback = action.feedback || '';
+    const newFeedback = feedback.trim();
+    let updatedHistory = action.historicoTratativas ? [...action.historicoTratativas] : [];
+    
+    if (originalFeedback.trim() !== '' && newFeedback !== originalFeedback.trim()) {
+      const loggedInUser = users.find(u => u.id === auth.currentUser?.uid);
+      const currentUserName = loggedInUser?.name || auth.currentUser?.email || 'Usuário';
+      
+      updatedHistory.push({
+        texto: originalFeedback,
+        usuario: currentUserName,
+        data: new Date().toISOString()
+      });
+    }
+
+    const updatedAction: OperationalAction = {
+      ...action,
+      projectId,
+      projectName: selectedProject?.name || action.projectName,
+      subtaskId: subtaskId || '',
+      subtaskTitle: selectedSubtask ? selectedSubtask.title : (subtaskId ? action.subtaskTitle : 'Sem Subtarefa'),
+      action: actionText.trim(),
+      responsibleId,
+      responsibleName: selectedResponsible?.name || action.responsibleName,
+      priority,
+      status,
+      forecastDate,
+      completionDate: status === 'Concluído' ? (completionDate || new Date().toISOString().split('T')[0]) : (completionDate || undefined),
+      feedback: newFeedback,
+      ...(updatedHistory.length > 0 ? { historicoTratativas: updatedHistory } : {})
+    };
+
+    setIsSubmitting(true);
+
+    try {
+      // Gravação real e persistente no backend via setDoc
+      await setDoc(doc(db, 'operationalActions', updatedAction.id), cleanObject(updatedAction));
+      
+      notifyActionChanges(action, updatedAction, auth.currentUser?.uid);
+
+      logUserActivity({
+        userId: auth.currentUser?.uid || '',
+        userName: auth.currentUser?.displayName || 'Usuário',
+        userEmail: auth.currentUser?.email || '',
+        actionType: 'operational_action',
+        actionName: 'Atualização Completa de Ação Operacional',
+        details: `Atualizou a ação operacional '${updatedAction.action}'`,
+        entityId: updatedAction.id,
+        entityName: updatedAction.action
+      });
+
+      if (onSuccess) {
+        onSuccess(`Ação "${updatedAction.action}" atualizada e salva com sucesso!`);
+      }
+
+      setErrorMessage(null);
+      onClose();
+    } catch (error: any) {
+      console.error('Erro ao atualizar ação operacional:', error);
+      const msg = error.message || 'Falha ao salvar as alterações no servidor. Verifique sua conexão e tente novamente.';
+      setErrorMessage(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && action && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => {
+              if (!isSubmitting) onClose();
+            }}
+            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+          />
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+            className="relative bg-white dark:bg-slate-900 w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-100 dark:border-slate-800 max-h-[90vh] flex flex-col"
+          >
+            <div className="p-6 sm:p-8 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/50 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-100 dark:shadow-none">
+                  <Edit3 size={22} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black text-slate-900 dark:text-white">Editar Ação Operacional</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-widest mt-0.5">Atualização de Registro</p>
+                </div>
+              </div>
+              <button 
+                disabled={isSubmitting}
+                onClick={onClose} 
+                className="p-2 hover:bg-white dark:hover:bg-slate-800 rounded-xl transition-all text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 shadow-sm border border-transparent hover:border-slate-100 dark:hover:border-slate-700 cursor-pointer disabled:opacity-50"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6 overflow-y-auto flex-1">
+              {errorMessage && (
+                <div className="p-4 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 rounded-2xl text-xs font-bold text-rose-700 dark:text-rose-300 flex items-start gap-2.5">
+                  <AlertCircle size={18} className="shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
+                  <div>
+                    <p className="font-black text-rose-800 dark:text-rose-200 mb-0.5">Erro na gravação</p>
+                    <p className="font-normal">{errorMessage}</p>
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">Projeto *</label>
+                  <SearchableProjectSelect
+                    projects={projects}
+                    value={projectId}
+                    onChange={(id) => {
+                      setProjectId(id);
+                      setSubtaskId('');
+                    }}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">
+                    Subtarefa <span className="text-slate-400 font-normal lowercase">(opcional)</span>
+                  </label>
+                  <select 
+                    disabled={!projectId || isSubmitting}
+                    value={subtaskId}
+                    onChange={(e) => setSubtaskId(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-slate-700 dark:text-slate-200 focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium text-sm disabled:opacity-50"
+                  >
+                    <option value="">Sem Subtarefa (Geral do Projeto)</option>
+                    {subtasks.map(s => <option key={s.id} value={s.id}>{s.title}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">Ação a ser realizada *</label>
+                <textarea 
+                  required
+                  disabled={isSubmitting}
+                  value={actionText}
+                  onChange={(e) => setActionText(e.target.value)}
+                  placeholder="Descreva detalhadamente a ação..."
+                  className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium min-h-[90px] disabled:opacity-50"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">Responsável *</label>
+                  <select 
+                    required
+                    disabled={isSubmitting}
+                    value={responsibleId}
+                    onChange={(e) => setResponsibleId(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium disabled:opacity-50"
+                  >
+                    <option value="">Selecionar Responsável</option>
+                    {[...users].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR')).map(u => (
+                      <option key={u.id} value={u.id}>{u.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">Prioridade *</label>
+                  <select 
+                    disabled={isSubmitting}
+                    value={priority}
+                    onChange={(e) => setPriority(e.target.value as any)}
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium disabled:opacity-50"
+                  >
+                    <option value="Baixa">Baixa</option>
+                    <option value="Média">Média</option>
+                    <option value="Alta">Alta</option>
+                    <option value="Urgente">Urgente</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">Status *</label>
+                  <select 
+                    disabled={isSubmitting}
+                    value={status}
+                    onChange={(e) => handleStatusChange(e.target.value as any)}
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium disabled:opacity-50"
+                  >
+                    <option value="Pendente">Pendente</option>
+                    <option value="Em andamento">Em andamento</option>
+                    <option value="Concluído">Concluído</option>
+                    <option value="Pausado">Pausado</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">Previsão *</label>
+                  <input 
+                    type="date"
+                    required
+                    disabled={isSubmitting}
+                    value={forecastDate}
+                    onChange={(e) => setForecastDate(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium disabled:opacity-50"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">
+                    Conclusão {status !== 'Concluído' && <span className="text-slate-400 font-normal lowercase">(opcional)</span>}
+                  </label>
+                  <input 
+                    type="date"
+                    disabled={isSubmitting}
+                    value={completionDate}
+                    onChange={(e) => setCompletionDate(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide ml-1">
+                  Retorno da Tratativa / Feedback
+                </label>
+                <textarea 
+                  disabled={isSubmitting}
+                  value={feedback}
+                  onChange={(e) => setFeedback(e.target.value)}
+                  placeholder="Descreva o retorno ou andamento da tratativa..."
+                  className="w-full bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-slate-700 dark:text-slate-200 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all font-medium min-h-[90px] disabled:opacity-50"
+                />
+              </div>
+
+              {action.historicoTratativas && action.historicoTratativas.length > 0 && (
+                <div className="space-y-2 border-t border-slate-100 dark:border-slate-800 pt-4">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+                    <History size={14} className="text-indigo-600" />
+                    <span>Histórico de Tratativas Anteriores ({action.historicoTratativas.length})</span>
+                  </h4>
+                  <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
+                    {action.historicoTratativas.map((item, idx) => (
+                      <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-100 dark:border-slate-800 text-xs">
+                        <div className="flex items-center justify-between text-[11px] font-bold text-slate-600 dark:text-slate-300 mb-1">
+                          <span>{item.usuario}</span>
+                          <span className="text-slate-400 font-normal">{item.data ? format(new Date(item.data), 'dd/MM/yyyy HH:mm') : ''}</span>
+                        </div>
+                        <p className="text-slate-600 dark:text-slate-300 italic">{item.texto}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2 flex gap-3">
+                <button 
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={onClose}
+                  className="flex-1 px-6 py-4 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-2xl font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="flex-[2] px-6 py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 dark:shadow-none cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin" />
+                      <span>Salvando Alterações...</span>
+                    </>
+                  ) : (
+                    <span>Salvar Alterações</span>
+                  )}
                 </button>
               </div>
             </form>

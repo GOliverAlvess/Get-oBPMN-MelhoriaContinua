@@ -46,7 +46,12 @@ class MockAuth {
     }
 
     // Restore session from sessionStorage if available (tab-scoped)
-    const saved = sessionStorage.getItem('pdca_auth_user');
+    let saved: string | null = null;
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        saved = sessionStorage.getItem('pdca_auth_user');
+      }
+    } catch (e) {}
     if (saved) {
       try {
         this.currentUser = JSON.parse(saved);
@@ -71,8 +76,14 @@ class MockAuth {
 
   public signOut() {
     this.currentUser = null;
-    sessionStorage.removeItem('pdca_auth_user');
-    localStorage.removeItem('pdca_auth_user');
+    try {
+      if (typeof sessionStorage !== 'undefined') {
+        sessionStorage.removeItem('pdca_auth_user');
+      }
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('pdca_auth_user');
+      }
+    } catch (e) {}
     this.emitChange();
     return Promise.resolve();
   }
@@ -764,6 +775,47 @@ export async function addDoc(colRef: CollectionReference, data: any) {
   return { id: result.id };
 }
 
+export interface AtomicUserActivityParams {
+  userId: string;
+  userName: string;
+  userEmail?: string;
+  date: string;
+  dailyInc?: {
+    activeSeconds?: number;
+    actionsCount?: number;
+    sessionsCount?: number;
+  };
+  dailySet?: {
+    lastActiveAt?: string;
+    [key: string]: any;
+  };
+  userInc?: {
+    totalActiveSeconds?: number;
+    actionCount?: number;
+    loginCount?: number;
+  };
+  userSet?: {
+    lastActiveAt?: string;
+    lastPresenceAt?: string;
+    lastAccess?: string;
+    lastLoginAt?: string;
+    isOnline?: boolean;
+    status?: 'Ativo' | 'Inativo';
+    [key: string]: any;
+  };
+}
+
+export async function atomicUpdateUserActivity(params: AtomicUserActivityParams): Promise<void> {
+  const url = getApiUrl('/api/user-activity/atomic-update');
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(params),
+  });
+  await handleResponse(response, `Failed to atomically update user activity: ${response.statusText}`);
+  return Promise.resolve();
+}
+
 // Document Snapshots helpers
 class MockDocumentSnapshot {
   constructor(public id: string, private _data: any) {}
@@ -890,7 +942,7 @@ const activeListeners = new Set<ActiveListener>();
 let eventSource: EventSource | null = null;
 let reconnectTimeout: any = null;
 
-function handleIncomingMutation(payload: { collection: string; id: string; type: "set" | "update" | "delete"; data: any }) {
+export function handleIncomingMutation(payload: { collection: string; id: string; type: "set" | "update" | "delete"; data: any }) {
   const { collection, id, type, data } = payload;
 
   for (const listener of activeListeners) {
@@ -913,7 +965,7 @@ function handleIncomingMutation(payload: { collection: string; id: string; type:
           continue;
         }
       } else {
-        const docWithNewData = index !== -1 ? { ...updatedDocs[index], ...data } : data;
+        const docWithNewData = data && typeof data === 'object' ? (data.id ? data : { ...data, id }) : data;
         const constraints = target.type === 'query' ? (target as QueryReference).constraints : [];
         const matches = matchesConstraints(docWithNewData, constraints);
 
@@ -958,7 +1010,7 @@ function handleIncomingMutation(payload: { collection: string; id: string; type:
         listener.currentDoc = null;
         listener.callback(new MockDocumentSnapshot(id, null));
       } else {
-        listener.currentDoc = { ...listener.currentDoc, ...data };
+        listener.currentDoc = data && typeof data === 'object' ? (data.id ? data : { ...data, id }) : data;
         listener.callback(new MockDocumentSnapshot(id, listener.currentDoc));
       }
     }

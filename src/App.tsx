@@ -102,6 +102,7 @@ import NotificationBell from './components/NotificationBell';
 import UserActivityMonitoringTab from './components/UserActivityMonitoringTab';
 import ContextHelp from './components/ContextHelp';
 import { logUserActivity } from './lib/activityLogger';
+import { initUserActivityTracker, clearUserSessionTracker } from './lib/userActivityTracker';
 import { notifyProjectChanges, notifySubtaskChanges, checkAndNotifyActionDeadlines } from './lib/notificationService';
 import { calculateProjectProgress, calculateProjectStatus, calculateSubtaskStatus, getCardProgress, hasPendingSubtasksOrPDCA } from './lib/projectUtils';
 import { calculateActionAlert } from './utils/calculations';
@@ -247,6 +248,7 @@ export default function App() {
 
   const hasChangesRef = useRef(hasChanges);
   const selectedProjectIdRef = useRef(selectedProjectId);
+  const persistedProjectsRef = useRef<Project[]>([]);
 
   useEffect(() => {
     hasChangesRef.current = hasChanges;
@@ -275,13 +277,13 @@ export default function App() {
 
   const currentUserProfile = users.find(u => u.id === user?.uid);
 
-  // Prevent accidental close
+  // Prevent accidental close (AUD-004)
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (hasChanges) {
         e.preventDefault();
-        e.returnValue = "Salve as últimas alterações para que não sejam perdidas";
-        return e.returnValue;
+        e.returnValue = '';
+        return '';
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -314,6 +316,17 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Rastreamento contínuo de tempo ativo, foco de aba e inatividade de 10 min
+  useEffect(() => {
+    if (!user) return;
+    const cleanupTracker = initUserActivityTracker({
+      id: user.uid,
+      name: user.displayName || currentUserProfile?.name || user.email || 'Usuário',
+      email: user.email || currentUserProfile?.email || '',
+    });
+    return () => cleanupTracker();
+  }, [user, currentUserProfile?.name, currentUserProfile?.email]);
+
   // Firestore Data Listeners
   useEffect(() => {
     if (!user) return;
@@ -327,6 +340,7 @@ export default function App() {
     // Listen for Projects
     const projectsUnsubscribe = onSnapshot(collection(db, 'projects'), (snapshot) => {
       const projectsData = snapshot.docs.map(doc => doc.data() as Project);
+      persistedProjectsRef.current = projectsData;
       setProjects(prevProjects => {
         return projectsData.map(dbProj => {
           if (dbProj.id === selectedProjectIdRef.current && hasChangesRef.current) {
@@ -428,7 +442,12 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => auth.signOut();
+  const handleLogout = () => {
+    if (user?.uid) {
+      clearUserSessionTracker(user.uid);
+    }
+    auth.signOut();
+  };
 
   const updateProjectInFirestore = async (updatedProjects: Project[] | ((prev: Project[]) => Project[])) => {
     // If it's a function, we need to get the current state
@@ -450,20 +469,9 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
   const handleConfirmNavigation = () => {
-    setHasChanges(false);
-    setShowUnsavedModal(false);
-    if (pendingNavigationAction) {
-      pendingNavigationAction();
-      setPendingNavigationAction(null);
-    }
-  };
-
-  const handleSaveAndExitNavigation = async () => {
-    if (selectedProjectId) {
-      const proj = projects.find(p => p.id === selectedProjectId);
-      if (proj) {
-        await persistProject(proj, true);
-      }
+    // Reverte o estado dos projetos para a versão persistida em banco de dados
+    if (persistedProjectsRef.current.length > 0) {
+      setProjects(persistedProjectsRef.current);
     }
     setHasChanges(false);
     setShowUnsavedModal(false);
@@ -608,10 +616,12 @@ export default function App() {
   };
 
   const handleProjectClick = (id: string) => {
-    setSelectedProjectId(id);
-    setActiveTab('scope');
-    setTargetSubtaskId(null);
-    setTargetProjectId(null);
+    handleNavigation(() => {
+      setSelectedProjectId(id);
+      setActiveTab('scope');
+      setTargetSubtaskId(null);
+      setTargetProjectId(null);
+    });
   };
 
   const handleCreateProject = async (data: { name: string, description: string, assignedTo: string, priority: ProjectPriority }) => {
@@ -689,55 +699,50 @@ export default function App() {
   const selectedProject = projects.find(p => p.id === selectedProjectId);
 
   const handleSelectNotification = (item: NotificationItem) => {
-    if (item.tipo === 'card') {
-      setActiveView('kanban');
-      setSelectedProjectId(null);
-      if (item.referencia_id) {
-        setTargetProjectId(item.referencia_id);
-      }
-    } else if (item.tipo === 'acao') {
-      const isDeadlineAlert =
-        item.subtask_id === 'daily_deadline_alert' ||
-        item.referencia_id === 'all_deadline_actions' ||
-        (item.mensagem && (
-          item.mensagem.toLowerCase().includes('vencer') ||
-          item.mensagem.toLowerCase().includes('prazo')
-        ));
+    handleNavigation(() => {
+      if (item.tipo === 'card') {
+        setActiveView('kanban');
+        setSelectedProjectId(null);
+        if (item.referencia_id) {
+          setTargetProjectId(item.referencia_id);
+        }
+      } else if (item.tipo === 'acao') {
+        const isDeadlineAlert =
+          item.subtask_id === 'daily_deadline_alert' ||
+          item.referencia_id === 'all_deadline_actions' ||
+          (item.mensagem && (
+            item.mensagem.toLowerCase().includes('vencer') ||
+            item.mensagem.toLowerCase().includes('prazo')
+          ));
 
-      if (isDeadlineAlert) {
-        setTargetActionId(null);
-        setIsDeadlineAlertFilter(true);
-        setActionsNavSource('notification_deadline');
-      } else {
-        setTargetActionId(item.referencia_id || null);
-        setIsDeadlineAlertFilter(false);
-        setActionsNavSource('notification_action');
+        if (isDeadlineAlert) {
+          setTargetActionId(null);
+          setIsDeadlineAlertFilter(true);
+          setActionsNavSource('notification_deadline');
+        } else {
+          setTargetActionId(item.referencia_id || null);
+          setIsDeadlineAlertFilter(false);
+          setActionsNavSource('notification_action');
+        }
+        setActiveView('actions');
+        setSelectedProjectId(null);
+      } else if (item.tipo === 'tarefa') {
+        setActiveView('kanban');
+        setSelectedProjectId(item.referencia_id);
+        if (item.subtask_id) {
+          setTargetSubtaskId(item.subtask_id);
+        } else {
+          setTargetSubtaskId(null);
+        }
+        setActiveTab('scope');
       }
-      setActiveView('actions');
-    } else if (item.tipo === 'tarefa') {
-      setActiveView('kanban');
-      setSelectedProjectId(item.referencia_id);
-      if (item.subtask_id) {
-        setTargetSubtaskId(item.subtask_id);
-      } else {
-        setTargetSubtaskId(null);
-      }
-      setActiveTab('scope');
-    }
+    });
   };
 
   const handleBackToKanban = () => {
     handleNavigation(() => {
       setSelectedProjectId(null);
-      setHasChanges(false);
     });
-  };
-
-  const confirmNavigation = () => {
-    if (hasChanges) {
-      return confirm("Salve as últimas alterações para que não sejam perdidas");
-    }
-    return true;
   };
 
   if (!isAuthReady) {
@@ -1005,7 +1010,7 @@ export default function App() {
                 <LogOut 
                   size={18} 
                   className="text-slate-400 hover:text-red-500 cursor-pointer shrink-0 transition-colors" 
-                  onClick={handleLogout}
+                  onClick={() => handleNavigation(() => handleLogout())}
                 />
               )}
             </div>
@@ -1128,44 +1133,36 @@ export default function App() {
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-200"
+              className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800"
             >
               <div className="p-8 space-y-6">
-                <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <div className="w-16 h-16 bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
                   <AlertCircle size={32} />
                 </div>
                 
                 <div className="text-center space-y-2">
-                  <h3 className="text-xl font-black text-slate-900 tracking-tight">Alterações não salvas</h3>
-                  <p className="text-slate-500 font-medium leading-relaxed">
-                    Salve as últimas alterações para que não sejam perdidas
+                  <h3 className="text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight">Alterações não salvas</h3>
+                  <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+                    Existem alterações que ainda não foram salvas. Se você sair agora, essas alterações serão perdidas.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3">
                   <button 
-                    onClick={handleSaveAndExitNavigation}
-                    className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
-                  >
-                    <Save size={18} />
-                    Salvar e Sair
-                  </button>
-                  
-                  <button 
-                    onClick={handleConfirmNavigation}
-                    className="w-full bg-slate-50 text-slate-600 py-3 rounded-2xl font-bold hover:bg-slate-100 transition-all border border-slate-200"
-                  >
-                    Sair sem Salvar
-                  </button>
-
-                  <button 
                     onClick={() => {
                       setShowUnsavedModal(false);
                       setPendingNavigationAction(null);
                     }}
-                    className="w-full text-slate-400 py-2 rounded-2xl font-bold hover:text-slate-600 transition-all text-sm"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 rounded-2xl font-bold transition-all shadow-lg shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2"
                   >
-                    Permanecer na Tela
+                    Continuar editando
+                  </button>
+                  
+                  <button 
+                    onClick={handleConfirmNavigation}
+                    className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 py-3 rounded-2xl font-bold transition-all border border-slate-200 dark:border-slate-700"
+                  >
+                    Sair sem salvar
                   </button>
                 </div>
               </div>

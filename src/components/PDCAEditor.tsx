@@ -2124,7 +2124,7 @@ export default function PDCAEditor({
       setSaveFeedback("PDF gerado com sucesso!");
     } catch (error) {
       console.error("Erro ao gerar PDF:", error);
-      setSaveFeedback("Erro na geração do PDF.");
+      setSaveFeedback("Não foi possível gerar o PDF. Tente novamente.");
     } finally {
       setIsExportingPDF(false);
     }

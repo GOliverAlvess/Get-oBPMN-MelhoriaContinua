@@ -128,8 +128,9 @@ export const HELP_CONTENT: Record<string, HelpItemContent> = {
   monitoramento: {
     key: 'monitoramento',
     title: 'Monitoramento de Usuários',
-    whatIs: 'Esta área permite acompanhar a utilização do GIP Flow pelos usuários autorizados.',
-    whatToDo: 'Consulte informações de acesso e atividades relevantes registradas pelo sistema.',
-    objective: 'Entender a utilização da ferramenta e apoiar o acompanhamento da adoção do GIP Flow.',
+    whatIs: 'Painel gerencial e auditável para acompanhamento de utilização efetiva, tempo ativo real, acessos e operações no GIP Flow.',
+    whatToDo: 'Consulte quem está ativo agora (interação nos últimos 5 min), tempo ativo acumulado, dias ativos, sessões válidas e histórico de ações.',
+    objective: 'Medir a adoção e utilização real do GIP Flow com base em critérios objetivos e transparentes, diferenciando presença ativa de simples tela aberta.',
+    tip: 'O sistema pausa a contagem de tempo ativo automaticamente se o usuário ficar mais de 5 minutos sem interagir ou se a aba for para segundo plano.',
   }
 };

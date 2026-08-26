@@ -1,8 +1,9 @@
-import { db, setDoc, doc, updateDoc, getDoc } from '../firebase';
-import { UserActivityLog, User } from '../types';
+import { db, setDoc, doc, atomicUpdateUserActivity } from '../firebase';
+import { UserActivityLog, User, UserDailyActivity } from '../types';
+import { getTodayDateString } from './userActivityTracker';
 
 /**
- * Whitelist de ações relevantes que representam interações e alterações reais de dados.
+ * Whitelist de ações relevantes que representam operações e alterações reais de dados.
  * Ações passivas (como navegação, visualizações ou abertura de modais sem alteração)
  * são desconsideradas para garantir a confiabilidade da auditoria.
  */
@@ -21,7 +22,7 @@ export const RELEVANT_ACTION_TYPES: ReadonlyArray<UserActivityLog['actionType']>
 
 /**
  * Registra uma ação relevante de atividade de usuário na coleção 'userActivityLogs'
- * e atualiza estatísticas no registro do usuário em 'users'.
+ * e atualiza estatísticas e data de última atividade real.
  */
 export async function logUserActivity(params: {
   userId: string;
@@ -41,6 +42,7 @@ export async function logUserActivity(params: {
   }
 
   const timestamp = new Date().toISOString();
+  const todayStr = getTodayDateString();
   const logId = `act_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
   const logData: UserActivityLog = {
@@ -57,44 +59,30 @@ export async function logUserActivity(params: {
   };
 
   try {
-    // 1. Grava o log individual de atividade
+    // 1. Grava o log individual de atividade para auditoria
     await setDoc(doc(db, 'userActivityLogs', logId), logData);
-
-    // 2. Atualiza os contadores no cadastro do usuário
-    const userRef = doc(db, 'users', params.userId);
-    const userSnap = await getDoc(userRef);
 
     const isLogin = params.actionType === 'login';
 
-    if (userSnap.exists()) {
-      const userData = userSnap.data() as User;
-      const currentLogins = userData.loginCount || 0;
-      const currentActions = userData.actionCount || 0;
-      const currentUsageMinutes = userData.totalUsageMinutes || 0;
-
-      // Estimativa: 5 minutos por login, 2 minutos por ação relevante efetuada
-      const usageIncrement = isLogin ? 5 : 2;
-
-      await updateDoc(userRef, {
-        lastAccess: timestamp,
-        loginCount: isLogin ? currentLogins + 1 : currentLogins,
-        // Incrementa o contador de ações apenas para ações reais (não login)
-        actionCount: isLogin ? currentActions : currentActions + 1,
-        totalUsageMinutes: currentUsageMinutes + usageIncrement,
-        status: 'Ativo',
-      });
-    } else {
-      await setDoc(userRef, {
-        id: params.userId,
+    // 2. Atualiza atomicamente a coleção diária 'userDailyActivity' e os contadores de 'users' (AUD-001)
+    await atomicUpdateUserActivity({
+      userId: params.userId,
+      userName: params.userName || 'Usuário',
+      userEmail: params.userEmail || '',
+      date: todayStr,
+      dailyInc: isLogin ? { sessionsCount: 1 } : { actionsCount: 1 },
+      dailySet: {
+        lastActiveAt: timestamp,
+      },
+      userInc: isLogin ? { loginCount: 1 } : { actionCount: 1 },
+      userSet: {
         name: params.userName,
-        email: params.userEmail,
-        lastAccess: timestamp,
-        loginCount: isLogin ? 1 : 0,
-        actionCount: isLogin ? 0 : 1,
-        totalUsageMinutes: isLogin ? 5 : 2,
+        email: params.userEmail || '',
+        lastActiveAt: timestamp,
         status: 'Ativo',
-      }, { merge: true });
-    }
+        ...(isLogin ? { lastAccess: timestamp, lastLoginAt: timestamp } : {}),
+      },
+    });
   } catch (err) {
     console.warn('Erro ao salvar log de atividade de usuário:', err);
   }

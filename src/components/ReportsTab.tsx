@@ -11,7 +11,9 @@ import {
   Search,
   CheckCircle2,
   Clock,
-  User as UserIcon
+  User as UserIcon,
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
@@ -332,6 +334,16 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
   const [reportLogs, setReportLogs] = useState<ReportLog[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [toastNotification, setToastNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  useEffect(() => {
+    if (toastNotification) {
+      const timer = setTimeout(() => {
+        setToastNotification(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastNotification]);
 
   // Hidden ref for report generation
   const printRef = React.useRef<HTMLDivElement>(null);
@@ -1390,7 +1402,13 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
 
     } catch (error) {
       console.error('Erro ao gerar relatório:', error);
-      alert('Erro ao gerar relatório. Verifique os logs do console.');
+      const isPDF = reportType === 'Relatório Completo';
+      setToastNotification({
+        type: 'error',
+        message: isPDF 
+          ? 'Não foi possível gerar o PDF. Tente novamente.' 
+          : 'Não foi possível gerar o relatório. Tente novamente.'
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -1896,6 +1914,35 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
           )}
         </div>
       </div>
+
+      {/* Toast Notification Flutuante */}
+      <AnimatePresence>
+        {toastNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-6 right-6 z-[300] max-w-md shadow-2xl"
+          >
+            <div className={cn(
+              "px-5 py-4 rounded-2xl border flex items-center gap-3 font-bold text-sm backdrop-blur-md",
+              toastNotification.type === 'error' && "bg-rose-600 text-white border-rose-500 shadow-rose-500/20",
+              toastNotification.type === 'success' && "bg-emerald-600 text-white border-emerald-500 shadow-emerald-500/20"
+            )}>
+              {toastNotification.type === 'error' && <AlertCircle size={20} className="shrink-0 text-rose-100" />}
+              {toastNotification.type === 'success' && <CheckCircle2 size={20} className="shrink-0 text-emerald-100" />}
+              <span className="flex-1 text-xs sm:text-sm font-medium">{toastNotification.message}</span>
+              <button 
+                type="button" 
+                onClick={() => setToastNotification(null)}
+                className="p-1 hover:bg-white/20 rounded-lg transition-colors text-white/80 hover:text-white cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

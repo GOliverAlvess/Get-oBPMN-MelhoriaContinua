@@ -3,6 +3,7 @@ import { db } from '../firebase';
 import { NotificationItem, Project, OperationalAction, Subtask } from '../types';
 import { logFeature } from './changelogService';
 import { calculateActionAlert } from '../utils/calculations';
+import { getApiUrl } from '../utils/apiUrl';
 
 export async function createNotification(params: {
   usuario_id: string;
@@ -66,55 +67,53 @@ export async function clearAllNotifications(
   currentUserEmail?: string
 ) {
   const todayStr = new Date().toISOString().substring(0, 10);
-  // Mark daily deadline check in localStorage so clearing notifications doesn't trigger immediate resurrection
+  // Mark daily deadline check in localStorage for all user identifier permutations
+  // so clearing notifications doesn't trigger immediate resurrection
   try {
-    if (currentUserId) {
-      localStorage.setItem(`daily_deadline_alert_${todayStr}_${currentUserId}`, 'true');
-    }
+    const idsToMark = new Set<string>();
+    if (currentUserId) idsToMark.add(currentUserId);
     if (currentUserEmail) {
-      localStorage.setItem(`daily_deadline_alert_${todayStr}_${currentUserEmail.toLowerCase()}`, 'true');
+      idsToMark.add(currentUserEmail);
+      idsToMark.add(currentUserEmail.toLowerCase());
     }
+    notifications.forEach((n) => {
+      if (n.usuario_id) {
+        idsToMark.add(n.usuario_id);
+        idsToMark.add(n.usuario_id.toLowerCase());
+      }
+    });
+    idsToMark.forEach((k) => {
+      localStorage.setItem(`daily_deadline_alert_${todayStr}_${k}`, 'true');
+    });
   } catch (e) {}
 
   const notificationIds = notifications.map((n) => n.id);
 
-  try {
-    const authHeaders: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (currentUserEmail) {
-      authHeaders['x-user-email'] = currentUserEmail;
-    }
-    if (currentUserId) {
-      authHeaders['x-user-uid'] = currentUserId;
-    }
+  const authHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (currentUserEmail) {
+    authHeaders['x-user-email'] = currentUserEmail;
+  }
+  if (currentUserId) {
+    authHeaders['x-user-uid'] = currentUserId;
+  }
 
-    const response = await fetch('/api/notifications/clear-all', {
-      method: 'POST',
-      headers: authHeaders,
-      body: JSON.stringify({ notificationIds }),
-    });
+  const url = getApiUrl('/api/notifications/clear-all');
 
-    if (!response.ok) {
-      // Fallback via deleteDoc individual
-      const userNotifs = notifications.filter(n => {
-        if (currentUserId && n.usuario_id === currentUserId) return true;
-        if (currentUserEmail && n.usuario_id?.toLowerCase() === currentUserEmail.toLowerCase()) return true;
-        return true; // if user matches current list
-      });
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ notificationIds }),
+  });
 
-      await Promise.all(userNotifs.map(notif => deleteDoc(doc(db, 'notifications', notif.id))));
-    }
-  } catch (error) {
-    console.error('Erro ao limpar todas as notificações:', error);
-    // Fallback via deleteDoc individual
-    const userNotifs = notifications.filter(n => {
-      if (currentUserId && n.usuario_id === currentUserId) return true;
-      if (currentUserEmail && n.usuario_id?.toLowerCase() === currentUserEmail.toLowerCase()) return true;
-      return true;
-    });
-
-    await Promise.all(userNotifs.map(notif => deleteDoc(doc(db, 'notifications', notif.id))));
+  if (!response.ok) {
+    let errorMsg = 'Falha ao limpar notificações no servidor';
+    try {
+      const errData = await response.json();
+      if (errData?.error) errorMsg = errData.error;
+    } catch (_) {}
+    throw new Error(errorMsg);
   }
 }
 
@@ -213,14 +212,19 @@ export async function checkAndNotifyActionDeadlines(
   if (!userId && !userEmail) return;
 
   const todayStr = new Date().toISOString().substring(0, 10);
-  const userKey = userId || userEmail || 'user';
+
+  const keysToCheck = [
+    userId,
+    userEmail,
+    userEmail?.toLowerCase(),
+  ].filter(Boolean) as string[];
 
   // Check localStorage if this user was already processed for daily deadline alert today
   try {
-    if (
-      (userId && localStorage.getItem(`daily_deadline_alert_${todayStr}_${userId}`) === 'true') ||
-      (userEmail && localStorage.getItem(`daily_deadline_alert_${todayStr}_${userEmail.toLowerCase()}`) === 'true')
-    ) {
+    const alreadyProcessed = keysToCheck.some(
+      (k) => localStorage.getItem(`daily_deadline_alert_${todayStr}_${k}`) === 'true'
+    );
+    if (alreadyProcessed) {
       return;
     }
   } catch (e) {}
@@ -236,8 +240,9 @@ export async function checkAndNotifyActionDeadlines(
 
   if (alreadyNotifiedToday) {
     try {
-      if (userId) localStorage.setItem(`daily_deadline_alert_${todayStr}_${userId}`, 'true');
-      if (userEmail) localStorage.setItem(`daily_deadline_alert_${todayStr}_${userEmail.toLowerCase()}`, 'true');
+      keysToCheck.forEach((k) => {
+        localStorage.setItem(`daily_deadline_alert_${todayStr}_${k}`, 'true');
+      });
     } catch (e) {}
     return;
   }
@@ -270,8 +275,9 @@ export async function checkAndNotifyActionDeadlines(
 
   // Mark in localStorage before creating to prevent race condition
   try {
-    if (userId) localStorage.setItem(`daily_deadline_alert_${todayStr}_${userId}`, 'true');
-    if (userEmail) localStorage.setItem(`daily_deadline_alert_${todayStr}_${userEmail.toLowerCase()}`, 'true');
+    keysToCheck.forEach((k) => {
+      localStorage.setItem(`daily_deadline_alert_${todayStr}_${k}`, 'true');
+    });
   } catch (e) {}
 
   await createNotification({

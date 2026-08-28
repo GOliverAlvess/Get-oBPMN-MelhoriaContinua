@@ -50,6 +50,18 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
     }
   }, [selectedCollaborators, selectedStatuses, selectedProjectIds]);
 
+  const collaboratorOptions = useMemo(() => {
+    return users.map(u => ({ id: u.id, label: u.name }));
+  }, [users]);
+
+  const statusOptions = useMemo(() => {
+    return ['Pendente', 'Em andamento', 'Concluído'].map(s => ({ id: s, label: s }));
+  }, []);
+
+  const projectOptions = useMemo(() => {
+    return projects.map(p => ({ id: p.id, label: p.name }));
+  }, [projects]);
+
   const filteredActions = useMemo(() => {
     return actions.filter(a => {
       const matchCollab = selectedCollaborators.length === 0 || selectedCollaborators.includes(a.responsibleId);
@@ -151,7 +163,7 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
           <FilterDropdown
             label="Colaboradores"
             placeholder="Todos os colaboradores"
-            options={users.map(u => ({ id: u.id, label: u.name }))}
+            options={collaboratorOptions}
             selected={selectedCollaborators}
             onToggle={(id) => toggleFilter(selectedCollaborators, id, setSelectedCollaborators)}
             onClear={() => setSelectedCollaborators([])}
@@ -162,7 +174,7 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
           <FilterDropdown
             label="Status"
             placeholder="Todos os status"
-            options={['Pendente', 'Em andamento', 'Concluído'].map(s => ({ id: s, label: s }))}
+            options={statusOptions}
             selected={selectedStatuses}
             onToggle={(id) => toggleFilter(selectedStatuses, id, setSelectedStatuses)}
             onClear={() => setSelectedStatuses([])}
@@ -173,7 +185,7 @@ export default function ActionsDashboardView({ actions, users, projects }: Actio
           <FilterDropdown
             label="Projetos"
             placeholder="Todos os projetos"
-            options={projects.map(p => ({ id: p.id, label: p.name }))}
+            options={projectOptions}
             selected={selectedProjectIds}
             onToggle={(id) => toggleFilter(selectedProjectIds, id, setSelectedProjectIds)}
             onClear={() => setSelectedProjectIds([])}

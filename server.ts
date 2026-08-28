@@ -20,7 +20,13 @@ interface MulterRequest extends Request {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3004;
+  const portEnv = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
+  const PORT =
+    portEnv && portEnv !== 8080
+      ? portEnv
+      : process.env.NODE_ENV === "production"
+        ? 3004
+        : 3000;
 
   app.use(express.json({ limit: "100mb" }));
   app.use(express.urlencoded({ limit: "100mb", extended: true }));

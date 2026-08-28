@@ -226,6 +226,56 @@ const getNormalizedAlertLabel = (action: { status: string; forecastDate: string;
   return alert;
 };
 
+export interface PersistedOperationalFilters {
+  searchTerm?: string;
+  filterProjects?: string[];
+  filterResponsibles?: string[];
+  filterStatuses?: string[];
+  filterPriorities?: string[];
+  filterDeadlineAlertOnly?: boolean;
+  filterAlertStatuses?: string[];
+  forecastStartDate?: string;
+  forecastEndDate?: string;
+  forecastShortcut?: 'all' | 'today' | 'next_7' | 'next_15' | 'next_30' | 'overdue' | 'custom';
+  viewMode?: 'overview' | 'list';
+  scopeMode?: 'my_actions' | 'all_actions';
+}
+
+export const getSafeSessionStorage = (): Storage | null => {
+  if (typeof window !== 'undefined' && window.sessionStorage) {
+    return window.sessionStorage;
+  }
+  if (typeof sessionStorage !== 'undefined') {
+    return sessionStorage;
+  }
+  return null;
+};
+
+export const getOperationalFiltersStorageKey = (userId?: string) => {
+  const uid = userId || auth.currentUser?.uid || 'guest';
+  return `gipflow_operational_actions_filters_${uid}`;
+};
+
+export const loadPersistedOperationalFilters = (userId?: string): PersistedOperationalFilters | null => {
+  const storage = getSafeSessionStorage();
+  if (!storage) return null;
+  const key = getOperationalFiltersStorageKey(userId);
+  try {
+    const raw = storage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed === 'object' && parsed !== null) {
+      return parsed;
+    }
+  } catch (e) {
+    console.warn('[OperationalActionsTab] Erro ao recuperar filtros do sessionStorage:', e);
+    try {
+      storage.removeItem(key);
+    } catch {}
+  }
+  return null;
+};
+
 export default function OperationalActionsTab({ 
   actions, 
   projects, 
@@ -234,29 +284,45 @@ export default function OperationalActionsTab({
   isDeadlineAlertFilter = false,
   navigationSource = 'menu'
 }: OperationalActionsTabProps) {
+  const isNotificationEntry = navigationSource === 'notification_deadline' || navigationSource === 'notification_action' || isDeadlineAlertFilter;
+
+  const savedFilters = useMemo(() => {
+    if (isNotificationEntry) return null;
+    return loadPersistedOperationalFilters();
+  }, [isNotificationEntry]);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => (savedFilters && typeof savedFilters.searchTerm === 'string') ? savedFilters.searchTerm : '');
   const [actionToDelete, setActionToDelete] = useState<OperationalAction | null>(null);
   const [showBlockedMessage, setShowBlockedMessage] = useState(false);
   
   // Multi-select filters (OR logic within filter, AND between filters)
-  const [filterProjects, setFilterProjects] = useState<string[]>([]);
-  const [filterResponsibles, setFilterResponsibles] = useState<string[]>([]);
-  const [filterStatuses, setFilterStatuses] = useState<string[]>([]);
-  const [filterPriorities, setFilterPriorities] = useState<string[]>([]);
-  const [filterDeadlineAlertOnly, setFilterDeadlineAlertOnly] = useState<boolean>(isDeadlineAlertFilter);
+  const [filterProjects, setFilterProjects] = useState<string[]>(() => (savedFilters && Array.isArray(savedFilters.filterProjects)) ? savedFilters.filterProjects : []);
+  const [filterResponsibles, setFilterResponsibles] = useState<string[]>(() => (savedFilters && Array.isArray(savedFilters.filterResponsibles)) ? savedFilters.filterResponsibles : []);
+  const [filterStatuses, setFilterStatuses] = useState<string[]>(() => (savedFilters && Array.isArray(savedFilters.filterStatuses)) ? savedFilters.filterStatuses : []);
+  const [filterPriorities, setFilterPriorities] = useState<string[]>(() => (savedFilters && Array.isArray(savedFilters.filterPriorities)) ? savedFilters.filterPriorities : []);
+  const [filterDeadlineAlertOnly, setFilterDeadlineAlertOnly] = useState<boolean>(() => {
+    if (isDeadlineAlertFilter || navigationSource === 'notification_deadline') return true;
+    if (savedFilters && typeof savedFilters.filterDeadlineAlertOnly === 'boolean') return savedFilters.filterDeadlineAlertOnly;
+    return false;
+  });
 
-  // NOVO MODO DE VISUALIZAÇÃO: Visão Geral vs Lista de Ações
-  const [viewMode, setViewMode] = useState<'overview' | 'list'>('overview');
-  const [scopeMode, setScopeMode] = useState<'my_actions' | 'all_actions'>('my_actions');
+  // MODO DE VISUALIZAÇÃO: Visão Geral vs Lista de Ações
+  const [viewMode, setViewMode] = useState<'overview' | 'list'>(() => (savedFilters && savedFilters.viewMode === 'list') ? 'list' : 'overview');
+  const [scopeMode, setScopeMode] = useState<'my_actions' | 'all_actions'>(() => (savedFilters && savedFilters.scopeMode === 'all_actions') ? 'all_actions' : 'my_actions');
 
-  // NOVO FILTRO: Alerta de Prazo
-  const [filterAlertStatuses, setFilterAlertStatuses] = useState<string[]>([]);
+  // FILTRO: Alerta de Prazo
+  const [filterAlertStatuses, setFilterAlertStatuses] = useState<string[]>(() => (savedFilters && Array.isArray(savedFilters.filterAlertStatuses)) ? savedFilters.filterAlertStatuses : []);
 
-  // NOVO FILTRO: Previsão (Data de Previsão de Conclusão)
-  const [forecastStartDate, setForecastStartDate] = useState<string>('');
-  const [forecastEndDate, setForecastEndDate] = useState<string>('');
-  const [forecastShortcut, setForecastShortcut] = useState<'all' | 'today' | 'next_7' | 'next_15' | 'next_30' | 'overdue' | 'custom'>('all');
+  // FILTRO: Previsão (Data de Previsão de Conclusão)
+  const [forecastStartDate, setForecastStartDate] = useState<string>(() => (savedFilters && typeof savedFilters.forecastStartDate === 'string') ? savedFilters.forecastStartDate : '');
+  const [forecastEndDate, setForecastEndDate] = useState<string>(() => (savedFilters && typeof savedFilters.forecastEndDate === 'string') ? savedFilters.forecastEndDate : '');
+  const [forecastShortcut, setForecastShortcut] = useState<'all' | 'today' | 'next_7' | 'next_15' | 'next_30' | 'overdue' | 'custom'>(() => {
+    if (savedFilters && ['all', 'today', 'next_7', 'next_15', 'next_30', 'overdue', 'custom'].includes(savedFilters.forecastShortcut as string)) {
+      return savedFilters.forecastShortcut!;
+    }
+    return 'all';
+  });
 
   const [editingActionId, setEditingActionId] = useState<string | null>(null);
   const [tempUpdates, setTempUpdates] = useState<Partial<OperationalAction>>({});
@@ -300,6 +366,15 @@ export default function OperationalActionsTab({
     setForecastStartDate('');
     setForecastEndDate('');
     setForecastShortcut('all');
+    const storage = getSafeSessionStorage();
+    if (storage) {
+      try {
+        const key = getOperationalFiltersStorageKey();
+        storage.removeItem(key);
+      } catch (e) {
+        console.warn('[OperationalActionsTab] Erro ao limpar filtros do sessionStorage:', e);
+      }
+    }
   };
 
   const handleSelectForecastShortcut = (shortcut: 'all' | 'today' | 'next_7' | 'next_15' | 'next_30' | 'overdue') => {
@@ -327,6 +402,45 @@ export default function OperationalActionsTab({
     }
   };
 
+  // Salvar estado no sessionStorage sempre que os filtros mudarem
+  useEffect(() => {
+    const storage = getSafeSessionStorage();
+    if (!storage) return;
+    try {
+      const key = getOperationalFiltersStorageKey();
+      const dataToSave: PersistedOperationalFilters = {
+        searchTerm,
+        filterProjects,
+        filterResponsibles,
+        filterStatuses,
+        filterPriorities,
+        filterDeadlineAlertOnly,
+        filterAlertStatuses,
+        forecastStartDate,
+        forecastEndDate,
+        forecastShortcut,
+        viewMode,
+        scopeMode
+      };
+      storage.setItem(key, JSON.stringify(dataToSave));
+    } catch (e) {
+      console.warn('[OperationalActionsTab] Erro ao salvar filtros no sessionStorage:', e);
+    }
+  }, [
+    searchTerm,
+    filterProjects,
+    filterResponsibles,
+    filterStatuses,
+    filterPriorities,
+    filterDeadlineAlertOnly,
+    filterAlertStatuses,
+    forecastStartDate,
+    forecastEndDate,
+    forecastShortcut,
+    viewMode,
+    scopeMode
+  ]);
+
   useEffect(() => {
     const prev = prevNavRef.current;
     const navChanged =
@@ -341,11 +455,9 @@ export default function OperationalActionsTab({
         isDeadline: isDeadlineAlertFilter
       };
 
-      // Always clear search input when coming from navigation or notification
-      setSearchTerm('');
-
       if (navigationSource === 'notification_deadline' || isDeadlineAlertFilter) {
-        // Notification for deadline alert: switch to 'my_actions', reset project filter (global view) & show actions near deadline
+        // Notification for deadline alert: switch to 'my_actions', reset other filters & show actions near deadline
+        setSearchTerm('');
         setScopeMode('my_actions');
         setFilterProjects([]);
         setFilterResponsibles([]);
@@ -358,17 +470,7 @@ export default function OperationalActionsTab({
         setForecastShortcut('all');
       } else if (navigationSource === 'notification_action') {
         // Notification for specific action: reset filters and scroll to target
-        setFilterProjects([]);
-        setFilterResponsibles([]);
-        setFilterStatuses([]);
-        setFilterPriorities([]);
-        setFilterDeadlineAlertOnly(false);
-        setFilterAlertStatuses([]);
-        setForecastStartDate('');
-        setForecastEndDate('');
-        setForecastShortcut('all');
-      } else {
-        // Menu or clean entry: reset all filters completely
+        setSearchTerm('');
         setFilterProjects([]);
         setFilterResponsibles([]);
         setFilterStatuses([]);

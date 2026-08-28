@@ -67,6 +67,24 @@ export default function DashboardView({ projects, users, actions, onProjectClick
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [showAllSectors, setShowAllSectors] = useState(false);
 
+  const userMap = useMemo(() => {
+    const map = new Map<string, User>();
+    users.forEach(u => map.set(u.id, u));
+    return map;
+  }, [users]);
+
+  const collaboratorOptions = useMemo(() => {
+    return users.map(u => ({ id: u.id, label: u.name }));
+  }, [users]);
+
+  const statusOptions = useMemo(() => {
+    return ['Planejamento', 'Em andamento', 'Em melhoria', 'Concluído'].map(s => ({ id: s, label: s }));
+  }, []);
+
+  const projectOptions = useMemo(() => {
+    return projects.map(p => ({ id: p.id, label: p.name }));
+  }, [projects]);
+
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
       const matchCollab = selectedCollaborators.length === 0 || selectedCollaborators.includes(p.assignedTo);
@@ -94,7 +112,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
     }> = [];
 
     filteredProjects.forEach(p => {
-      const user = users.find(u => u.id === p.assignedTo);
+      const user = userMap.get(p.assignedTo);
       let pRealGain = 0;
       let pRealHours = 0;
       let hasTangible = false;
@@ -528,7 +546,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                 <FilterDropdown
                   label="Colaboradores"
                   placeholder="Selecionar colaboradores"
-                  options={users.map(u => ({ id: u.id, label: u.name }))}
+                  options={collaboratorOptions}
                   selected={selectedCollaborators}
                   onToggle={(id) => toggleFilter(selectedCollaborators, id, setSelectedCollaborators)}
                   onClear={() => setSelectedCollaborators([])}
@@ -539,7 +557,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                 <FilterDropdown
                   label="Status"
                   placeholder="Selecionar status"
-                  options={['Planejamento', 'Em andamento', 'Em melhoria', 'Concluído'].map(s => ({ id: s, label: s }))}
+                  options={statusOptions}
                   selected={selectedStatuses}
                   onToggle={(id) => toggleFilter(selectedStatuses, id as ProjectStatus, setSelectedStatuses)}
                   onClear={() => setSelectedStatuses([])}
@@ -550,7 +568,7 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                 <FilterDropdown
                   label="Projetos"
                   placeholder="Selecionar projetos"
-                  options={projects.map(p => ({ id: p.id, label: p.name }))}
+                  options={projectOptions}
                   selected={selectedProjectIds}
                   onToggle={(id) => toggleFilter(selectedProjectIds, id, setSelectedProjectIds)}
                   onClear={() => setSelectedProjectIds([])}

@@ -10,7 +10,7 @@ export const HEARTBEAT_INTERVAL_MS = 30 * 1000; // Intervalo de 30s para heartbe
 export const THROTTLE_INTERACTION_MS = 1000; // Throttle de 1s para registrar interações de mouse/teclado
 
 // Identificador único da aba atual para coordenação multi-abas
-const TAB_ID = `tab_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+export const TAB_ID = `tab_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
 interface TrackerState {
   userId: string | null;
@@ -69,32 +69,189 @@ export function recordUserInteraction() {
   state.isWindowFocused = true;
 }
 
-/**
- * Verifica se a aba atual tem autorização para registrar o tempo deste segundo
- * para evitar duplicação quando múltiplas abas do GIP Flow estiverem abertas simultaneamente.
- */
-function acquireTabLock(userId: string): boolean {
-  if (typeof localStorage === 'undefined') return true;
+// Mensagem de coordenação entre abas via BroadcastChannel
+interface TabCoordinationMessage {
+  type: 'claim' | 'release';
+  tabId: string;
+  userId: string;
+  timestamp: number;
+}
+
+let activeBroadcastChannel: BroadcastChannel | null = null;
+let activeBroadcastUserId: string | null = null;
+let remoteLeaderTabId: string | null = null;
+let remoteLeaderTimestamp = 0;
+
+function setupBroadcastChannel(userId: string): BroadcastChannel | null {
+  if (typeof BroadcastChannel === 'undefined') return null;
+  if (activeBroadcastChannel && activeBroadcastUserId === userId) {
+    return activeBroadcastChannel;
+  }
+  if (activeBroadcastChannel) {
+    try {
+      activeBroadcastChannel.close();
+    } catch {}
+    activeBroadcastChannel = null;
+    activeBroadcastUserId = null;
+  }
 
   try {
-    const lockKey = `gip_active_tab_${userId}`;
-    const rawLock = localStorage.getItem(lockKey);
-    const now = Date.now();
+    const channelName = `gip_tab_channel_${userId}`;
+    const channel = new BroadcastChannel(channelName);
+    activeBroadcastChannel = channel;
+    activeBroadcastUserId = userId;
 
-    if (rawLock) {
-      const lockData = JSON.parse(rawLock);
-      // Se outra aba atualizou o lock há menos de 2.5 segundos e não é esta aba, cede a contagem
-      if (lockData.tabId !== TAB_ID && now - lockData.timestamp < 2500) {
-        return false;
+    channel.onmessage = (event: MessageEvent<TabCoordinationMessage>) => {
+      const msg = event.data;
+      if (!msg || msg.userId !== userId) return;
+
+      if (msg.type === 'claim') {
+        if (msg.tabId !== TAB_ID) {
+          remoteLeaderTabId = msg.tabId;
+          remoteLeaderTimestamp = msg.timestamp || Date.now();
+        }
+      } else if (msg.type === 'release') {
+        if (remoteLeaderTabId === msg.tabId) {
+          remoteLeaderTabId = null;
+          remoteLeaderTimestamp = 0;
+        }
       }
-    }
+    };
+    return channel;
+  } catch (e) {
+    console.warn('[userActivityTracker] BroadcastChannel indisponível ou bloqueado:', e);
+    return null;
+  }
+}
 
-    // Esta aba assume o lock de contagem ativa
-    localStorage.setItem(lockKey, JSON.stringify({ tabId: TAB_ID, timestamp: now }));
-    return true;
-  } catch {
+/**
+ * Libera o lock desta aba explicitamente ao fechar, minimizar ou deslogar.
+ * Permite sucessão imediata por outra aba sem aguardar o timeout de 2.5s.
+ */
+export function releaseTabLock(userId: string, customTabId?: string): void {
+  if (!userId) return;
+  const currentTabId = customTabId || TAB_ID;
+
+  // 1. Libera no localStorage se formos o líder atual
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const lockKey = `gip_active_tab_${userId}`;
+      const rawLock = localStorage.getItem(lockKey);
+      if (rawLock) {
+        const lockData = JSON.parse(rawLock);
+        if (lockData.tabId === currentTabId) {
+          localStorage.removeItem(lockKey);
+        }
+      }
+    } catch {}
+  }
+
+  // 2. Notifica outras abas via BroadcastChannel
+  if (activeBroadcastChannel && activeBroadcastUserId === userId) {
+    try {
+      activeBroadcastChannel.postMessage({
+        type: 'release',
+        tabId: currentTabId,
+        userId,
+        timestamp: Date.now()
+      });
+    } catch {}
+  }
+
+  if (remoteLeaderTabId === currentTabId) {
+    remoteLeaderTabId = null;
+    remoteLeaderTimestamp = 0;
+  }
+}
+
+/**
+ * Verifica se a aba atual tem autorização para registrar o tempo deste segundo
+ * para evitar duplicação quando múltiplas abas do GIP Flow estiverem abertas simultaneamente (AUD-009).
+ */
+export function acquireTabLock(userId: string, customTabId?: string): boolean {
+  if (!userId) return false;
+  const currentTabId = customTabId || TAB_ID;
+  const now = Date.now();
+
+  let localStorageUsable = false;
+
+  // Tentativa 1: localStorage (mecanismo primário síncrono isolado por usuário)
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const lockKey = `gip_active_tab_${userId}`;
+      const rawLock = localStorage.getItem(lockKey);
+
+      if (rawLock) {
+        const lockData = JSON.parse(rawLock);
+        // Se outra aba atualizou o lock há menos de 2.5 segundos e não é esta aba, cede a contagem
+        if (lockData.tabId !== currentTabId && (now - lockData.timestamp) < 2500) {
+          return false;
+        }
+      }
+
+      // Esta aba assume/renova o lock no localStorage
+      localStorage.setItem(lockKey, JSON.stringify({ tabId: currentTabId, timestamp: now }));
+      localStorageUsable = true;
+    } catch {
+      localStorageUsable = false;
+    }
+  }
+
+  // Se o localStorage funcionou com sucesso, notifica o canal auxiliar e confirma liderança
+  if (localStorageUsable) {
+    const channel = setupBroadcastChannel(userId);
+    if (channel) {
+      try {
+        channel.postMessage({
+          type: 'claim',
+          tabId: currentTabId,
+          userId,
+          timestamp: now
+        });
+      } catch {}
+    }
     return true;
   }
+
+  // Tentativa 2: Fallback via BroadcastChannel em memória caso localStorage esteja indisponível/bloqueado
+  const channel = setupBroadcastChannel(userId);
+  if (channel) {
+    try {
+      // Se há um líder remoto ativo recente (< 2.5s) que não seja esta aba, cede
+      if (remoteLeaderTabId && remoteLeaderTabId !== currentTabId && (now - remoteLeaderTimestamp) < 2500) {
+        return false;
+      }
+
+      // Assume liderança via BroadcastChannel
+      remoteLeaderTabId = currentTabId;
+      remoteLeaderTimestamp = now;
+      channel.postMessage({
+        type: 'claim',
+        tabId: currentTabId,
+        userId,
+        timestamp: now
+      });
+      return true;
+    } catch {
+      // BroadcastChannel falhou
+    }
+  }
+
+  // Tentativa 3: Fallback de Segurança Máxima (Zero Storage / Zero IPC)
+  // Em ambientes com restrições extremas (sem storage e sem IPC):
+  // Só permite contabilizar se esta aba possuir o foco exclusivo da janela e estiver visível.
+  // Como o sistema operacional/navegador garante que no máximo 1 janela possui focus ativo,
+  // isso impede matematicamente a contagem simultânea em múltiplas abas abertas.
+  if (typeof document !== 'undefined' && typeof document.hasFocus === 'function') {
+    try {
+      return document.hasFocus() && !document.hidden;
+    } catch {
+      return false;
+    }
+  }
+
+  // Se nenhuma garantia de liderança exclusiva puder ser confirmada, rejeita por segurança
+  return false;
 }
 
 /**
@@ -233,8 +390,11 @@ export function initUserActivityTracker(user: { id: string; name: string; email?
   const handleVisibilityChange = () => {
     state.isTabVisible = !document.hidden;
     if (!state.isTabVisible) {
-      // Quando a aba vai para segundo plano ou minimizada, faz flush imediato do que acumulou e pausa
+      // Quando a aba vai para segundo plano ou minimizada, faz flush imediato do que acumulou, libera o lock e pausa
       flushActiveTime('Inativo');
+      if (state.userId) {
+        releaseTabLock(state.userId);
+      }
     } else {
       // Quando retorna ao primeiro plano, atualiza o timestamp de interação
       recordUserInteraction();
@@ -254,7 +414,10 @@ export function initUserActivityTracker(user: { id: string; name: string; email?
   };
 
   const handleBeforeUnload = () => {
-    // Flush imediato e marca como offline/inativo ao fechar
+    // Flush imediato, libera lock e marca como offline/inativo ao fechar
+    if (state.userId) {
+      releaseTabLock(state.userId);
+    }
     flushActiveTime('Inativo');
   };
 
@@ -293,6 +456,9 @@ export function initUserActivityTracker(user: { id: string; name: string; email?
       state.wasPreviouslyActive = false;
       // Usuário ultrapassou o limite de 5 minutos: faz flush e marca Inativo imediatamente
       flushActiveTime('Inativo');
+      if (state.userId) {
+        releaseTabLock(state.userId);
+      }
       return;
     }
 
@@ -326,6 +492,10 @@ export function initUserActivityTracker(user: { id: string; name: string; email?
       state.intervalId = null;
     }
 
+    if (state.userId) {
+      releaseTabLock(state.userId);
+    }
+
     if (typeof window !== 'undefined') {
       window.removeEventListener('mousedown', handleInteraction);
       window.removeEventListener('keydown', handleInteraction);
@@ -353,6 +523,9 @@ export function initUserActivityTracker(user: { id: string; name: string; email?
  * Limpa o rastreamento de sessão do usuário no logout
  */
 export function clearUserSessionTracker(userId?: string) {
+  if (userId) {
+    releaseTabLock(userId);
+  }
   if (typeof sessionStorage !== 'undefined' && userId) {
     sessionStorage.removeItem(`gip_session_started_${userId}`);
   }

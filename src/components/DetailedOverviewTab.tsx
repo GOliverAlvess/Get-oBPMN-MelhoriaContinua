@@ -102,6 +102,24 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
     return Array.from(new Set(computedData.map(d => d.setor_atual).filter(Boolean))).map(name => ({ id: name, label: name }));
   }, [computedData]);
 
+  const alertOptions = useMemo(() => [
+    { id: 'Muito crítico', label: 'Muito crítico (Crítico)' },
+    { id: 'Crítico', label: 'Crítico (Alto)' },
+    { id: 'Parado', label: 'Parado (Médio)' },
+    { id: 'Normal', label: 'Normal (Baixo)' },
+    { id: 'Finalizado', label: 'Finalizado' }
+  ], []);
+
+  const statusFilterOptions = useMemo(() => [
+    { id: 'Planejamento', label: 'Planejamento' },
+    { id: 'Em mapeamento', label: 'Em mapeamento' },
+    { id: 'Análise do problema', label: 'Análise do problema' },
+    { id: 'Plano de ação', label: 'Plano de ação' },
+    { id: 'Período de teste', label: 'Período de teste' },
+    { id: 'Em implantação', label: 'Em implantação' },
+    { id: 'Concluído', label: 'Concluído' }
+  ], []);
+
   // Aplicar filtros e busca
   const filteredData = useMemo(() => {
     return filterComputedData(computedData, searchQuery, selectedStatuses, selectedResponsibles, selectedSectors, selectedAlerts);
@@ -565,13 +583,7 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
           <FilterDropdown
             label="Criticidade (Alerta)"
             placeholder="Escolher criticidade"
-            options={[
-              { id: 'Muito crítico', label: 'Muito crítico (Crítico)' },
-              { id: 'Crítico', label: 'Crítico (Alto)' },
-              { id: 'Parado', label: 'Parado (Médio)' },
-              { id: 'Normal', label: 'Normal (Baixo)' },
-              { id: 'Finalizado', label: 'Finalizado' }
-            ]}
+            options={alertOptions}
             selected={selectedAlerts}
             onToggle={(id) => toggleFilter(selectedAlerts, id, setSelectedAlerts)}
             onClear={() => setSelectedAlerts([])}
@@ -582,15 +594,7 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
           <FilterDropdown
             label="Mapeamento Geral"
             placeholder="Escolher status"
-            options={[
-              { id: 'Planejamento', label: 'Planejamento' },
-              { id: 'Em mapeamento', label: 'Em mapeamento' },
-              { id: 'Análise do problema', label: 'Análise do problema' },
-              { id: 'Plano de ação', label: 'Plano de ação' },
-              { id: 'Período de teste', label: 'Período de teste' },
-              { id: 'Em implantação', label: 'Em implantação' },
-              { id: 'Concluído', label: 'Concluído' }
-            ]}
+            options={statusFilterOptions}
             selected={selectedStatuses}
             onToggle={(id) => toggleFilter(selectedStatuses, id, setSelectedStatuses)}
             onClear={() => setSelectedStatuses([])}

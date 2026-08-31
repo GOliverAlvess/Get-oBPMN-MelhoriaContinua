@@ -61,6 +61,15 @@ import { logFeature, logFix, logMelhoria, logAjuste } from "../lib/changelogServ
 import { SYSTEM_LOGO_PATH } from "../constants/pdfLogo";
 import { getBase64ImageFromUrl } from "../lib/utils";
 import { auth } from "../firebase";
+import { getPDCAFinancialResult } from "../utils/pdcaFinancialUtils";
+
+const formatValueBrl = (val: any): string => {
+  if (val === undefined || val === null || val === '') return 'R$ 0,00';
+  if (typeof val === 'string' && val.includes('R$')) return val;
+  const num = Number(val);
+  if (isNaN(num)) return `R$ ${val}`;
+  return `R$ ${num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
 
 const STATUS_MAP: Record<string, string> = {
   pending: "Pendente",
@@ -4304,20 +4313,92 @@ export default function PDCAEditor({
                                     </div>
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                       <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Perda financeira estimada (R$)</label>
+                                        <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest flex items-center justify-between">
+                                          <span>Impacto Financeiro Atual (R$)</span>
+                                          <span className="text-[10px] font-normal text-slate-400 normal-case">Quanto o problema custa / impacta atualmente</span>
+                                        </label>
+                                        <p className="text-[11px] text-slate-500">Informe o impacto financeiro atual do problema, quando aplicável.</p>
                                         <input
                                           type="number"
                                           placeholder="0.00"
-                                          value={activeCycle.plan.impact.tangibleFinancialLoss ?? ''}
-                                          onChange={(e) => updatePlan({
-                                            impact: {
-                                              ...activeCycle.plan.impact,
-                                              tangibleFinancialLoss: parseFloat(e.target.value) || 0,
-                                              value: parseFloat(e.target.value) || activeCycle.plan.impact.value || 0
-                                            }
-                                          })}
+                                          value={activeCycle.plan.impact.financialCurrentLoss ?? activeCycle.plan.impact.tangibleFinancialLoss ?? ''}
+                                          onChange={(e) => {
+                                            const val = parseFloat(e.target.value) || 0;
+                                            updatePlan({
+                                              impact: {
+                                                ...activeCycle.plan.impact,
+                                                financialCurrentLoss: val,
+                                                tangibleFinancialLoss: val,
+                                                value: val || activeCycle.plan.impact.value || 0,
+                                                financialType: activeCycle.plan.impact.financialType || 'Recorrente',
+                                                financialPeriodicity: activeCycle.plan.impact.financialPeriodicity || 'Mensal'
+                                              }
+                                            });
+                                          }}
                                           className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
                                         />
+                                        {((activeCycle.plan.impact.financialCurrentLoss ?? activeCycle.plan.impact.tangibleFinancialLoss ?? 0) > 0 || !!activeCycle.plan.impact.financialType) && (
+                                          <div className="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 gap-3 animate-in fade-in">
+                                            <div className="space-y-1">
+                                              <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Tipo do Impacto</label>
+                                              <div className="grid grid-cols-2 gap-1.5">
+                                                {(['Recorrente', 'Único'] as const).map((t) => {
+                                                  const currentType = activeCycle.plan.impact.financialType || 'Recorrente';
+                                                  const isSel = currentType === t;
+                                                  return (
+                                                    <button
+                                                      key={t}
+                                                      type="button"
+                                                      onClick={() => updatePlan({ impact: { ...activeCycle.plan.impact, financialType: t } })}
+                                                      className={cn(
+                                                        "p-2 rounded-xl border text-[11px] font-bold transition-all text-center cursor-pointer",
+                                                        isSel ? "bg-indigo-50 border-indigo-500 text-indigo-700 shadow-sm" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                                                      )}
+                                                    >
+                                                      {t}
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
+                                            </div>
+                                            {(activeCycle.plan.impact.financialType || 'Recorrente') === 'Recorrente' && (
+                                              <div className="space-y-1">
+                                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Periodicidade</label>
+                                                <div className="grid grid-cols-3 gap-1">
+                                                  {(['Mensal', 'Anual', 'Outro'] as const).map((p) => {
+                                                    const currentP = activeCycle.plan.impact.financialPeriodicity || 'Mensal';
+                                                    const isSel = currentP === p;
+                                                    return (
+                                                      <button
+                                                        key={p}
+                                                        type="button"
+                                                        onClick={() => updatePlan({ impact: { ...activeCycle.plan.impact, financialPeriodicity: p } })}
+                                                        className={cn(
+                                                          "p-1.5 rounded-lg border text-[10px] font-bold transition-all text-center cursor-pointer",
+                                                          isSel ? "bg-indigo-50 border-indigo-500 text-indigo-700 shadow-sm" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
+                                                        )}
+                                                      >
+                                                        {p}
+                                                      </button>
+                                                    );
+                                                  })}
+                                                </div>
+                                              </div>
+                                            )}
+                                            {(activeCycle.plan.impact.financialType || 'Recorrente') === 'Recorrente' && activeCycle.plan.impact.financialPeriodicity === 'Outro' && (
+                                              <div className="sm:col-span-2 space-y-1">
+                                                <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Descrição do Período</label>
+                                                <input
+                                                  type="text"
+                                                  placeholder="Ex: Por operação, Por safra, Por contrato"
+                                                  value={activeCycle.plan.impact.financialPeriodicityOther ?? ''}
+                                                  onChange={(e) => updatePlan({ impact: { ...activeCycle.plan.impact, financialPeriodicityOther: e.target.value } })}
+                                                  className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                                />
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
                                       </div>
                                       <div className="space-y-2">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Tempo desperdiçado (horas/mês)</label>
@@ -5902,23 +5983,112 @@ export default function PDCAEditor({
                             </span>
                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                               <div className="space-y-1.5">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                  Redução de custo real (R$)
+                                <label className="text-[10px] font-black text-slate-700 uppercase tracking-widest flex items-center justify-between">
+                                  <span>Impacto Financeiro Após a Melhoria (R$)</span>
+                                  <span className="text-[10px] font-normal text-slate-400 normal-case">Quanto passou a custar após as ações</span>
                                 </label>
+                                <p className="text-[11px] text-slate-500">Informe o valor após a implementação. O sistema calculará o resultado (Ganho/Perda).</p>
                                 <input
                                   type="number"
                                   placeholder="0.00"
-                                  value={activeCycle.check?.realCostReduction ?? ''}
-                                  onChange={(e) =>
+                                  value={activeCycle.check?.financialPostImprovement ?? (activeCycle.check?.realCostReduction !== undefined ? Math.max(0, (activeCycle.plan.impact.financialCurrentLoss ?? activeCycle.plan.impact.tangibleFinancialLoss ?? activeCycle.plan.impact.value ?? 0) - (activeCycle.check?.realCostReduction || 0)) : '')}
+                                  onChange={(e) => {
+                                    const postVal = parseFloat(e.target.value) || 0;
+                                    const initialVal = activeCycle.plan.impact.financialCurrentLoss ?? activeCycle.plan.impact.tangibleFinancialLoss ?? activeCycle.plan.impact.value ?? 0;
+                                    const calcResult = initialVal - postVal;
                                     updateCycle({
                                       check: {
                                         ...activeCycle.check,
-                                        realCostReduction: parseFloat(e.target.value) || 0,
+                                        financialPostImprovement: postVal,
+                                        financialResult: calcResult,
+                                        realCostReduction: calcResult,
+                                        financialType: activeCycle.check?.financialType || activeCycle.plan.impact.financialType || 'Recorrente',
+                                        financialPeriodicity: activeCycle.check?.financialPeriodicity || activeCycle.plan.impact.financialPeriodicity || 'Mensal',
+                                        financialPeriodicityOther: activeCycle.check?.financialPeriodicityOther || activeCycle.plan.impact.financialPeriodicityOther,
                                       },
-                                    })
-                                  }
+                                    });
+                                  }}
                                   className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
                                 />
+
+                                {/* Card de Calculo Automatico do Resultado Financeiro */}
+                                {(() => {
+                                  const initialVal = activeCycle.plan.impact.financialCurrentLoss ?? activeCycle.plan.impact.tangibleFinancialLoss ?? activeCycle.plan.impact.value ?? 0;
+                                  const postVal = activeCycle.check?.financialPostImprovement !== undefined
+                                    ? activeCycle.check.financialPostImprovement
+                                    : (activeCycle.check?.realCostReduction !== undefined ? initialVal - (activeCycle.check?.realCostReduction || 0) : undefined);
+                                  
+                                  if (postVal === undefined && (activeCycle.check?.realCostReduction === undefined || activeCycle.check?.realCostReduction === 0)) return null;
+                                  
+                                  const effectivePost = postVal ?? 0;
+                                  const result = initialVal - effectivePost;
+                                  const isGain = result > 0;
+                                  const isLoss = result < 0;
+                                  const isZero = result === 0;
+
+                                  const fType = activeCycle.check?.financialType || activeCycle.plan.impact.financialType || 'Recorrente';
+                                  const fPer = activeCycle.check?.financialPeriodicity || activeCycle.plan.impact.financialPeriodicity || 'Mensal';
+                                  const fPerOther = activeCycle.check?.financialPeriodicityOther || activeCycle.plan.impact.financialPeriodicityOther;
+                                  const perLabel = fType === 'Único' ? 'Único' : (fPer === 'Outro' && fPerOther ? fPerOther : fPer);
+
+                                  return (
+                                    <div className={cn(
+                                      "mt-3 p-4 rounded-2xl border space-y-3 animate-in fade-in duration-200",
+                                      isGain ? "bg-emerald-50/70 border-emerald-200 text-emerald-900" :
+                                      isLoss ? "bg-rose-50/70 border-rose-200 text-rose-900" :
+                                      "bg-slate-50 border-slate-200 text-slate-800"
+                                    )}>
+                                      <div className="flex items-center justify-between flex-wrap gap-2">
+                                        <div className="flex items-center gap-2">
+                                          <span className={cn(
+                                            "px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider",
+                                            isGain ? "bg-emerald-200 text-emerald-800" :
+                                            isLoss ? "bg-rose-200 text-rose-800" :
+                                            "bg-slate-200 text-slate-700"
+                                          )}>
+                                            {isGain ? 'GANHO' : isLoss ? 'PERDA' : 'SEM VARIAÇÃO FINANCEIRA'}
+                                          </span>
+                                          <span className="text-xs font-bold">
+                                            Resultado: {isGain ? '+' : ''}{result.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}{fType === 'Recorrente' ? (' / ' + perLabel) : ' (Único)'}
+                                          </span>
+                                        </div>
+                                        <span className="text-[10px] text-slate-500">
+                                          (Antes: {initialVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} → Depois: {effectivePost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })})
+                                        </span>
+                                      </div>
+
+                                      {/* Periodicidade e Data de Inicio no CHECK */}
+                                      <div className="pt-2 border-t border-slate-200/60 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                          <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">
+                                            Início do Resultado {!isZero && <span className="text-rose-500">*</span>}
+                                          </label>
+                                          <input
+                                            type="date"
+                                            value={activeCycle.check?.financialStartDate ?? ''}
+                                            onChange={(e) => updateCycle({
+                                              check: {
+                                                ...activeCycle.check,
+                                                financialStartDate: e.target.value,
+                                              },
+                                            })}
+                                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500"
+                                          />
+                                          <p className="text-[9px] text-slate-400">Informe a partir de quando este ganho ou perda passou a ocorrer.</p>
+                                        </div>
+
+                                        <div className="space-y-1">
+                                          <label className="text-[9px] font-black text-slate-500 uppercase tracking-wider">Tipo / Periodicidade</label>
+                                          <div className="flex items-center gap-2 pt-1">
+                                            <span className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-700">
+                                              {fType} {fType === 'Recorrente' ? ('(' + perLabel + ')') : ''}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </div>
                               <div className="space-y-1.5">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
@@ -6683,20 +6853,31 @@ export default function PDCAEditor({
                                   ?.identifiedRootCause || "Não informada"
                               }
                             />
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              <ReportField
-                                label="Impacto: Descrição"
-                                value={cycle.plan?.impact?.description}
-                              />
-                              <ReportField
-                                label="Impacto: Valor Atual"
-                                value={`R$ ${cycle.plan?.impact?.value || 0}`}
-                              />
-                              <ReportField
-                                label="Impacto: Meta (%)"
-                                value={`${cycle.plan?.impact?.improvementPercentage ?? cycle.plan?.impact?.goal ?? 0}%`}
-                              />
-                            </div>
+                            {(() => {
+                              const planLossRaw = cycle.plan?.impact?.financialCurrentLoss ?? cycle.plan?.impact?.tangibleFinancialLoss ?? cycle.plan?.impact?.value;
+                              const numLoss = typeof planLossRaw === 'number' ? planLossRaw : (planLossRaw ? Number(planLossRaw) : undefined);
+                              const hasPlanFinancial = numLoss !== undefined && !isNaN(numLoss) && (numLoss > 0 || cycle.plan?.impact?.financialCurrentLoss !== undefined);
+                              
+                              const fType = cycle.plan?.impact?.financialType || 'Recorrente';
+                              const fPer = cycle.plan?.impact?.financialPeriodicity || 'Mensal';
+                              const fPerOther = cycle.plan?.impact?.financialPeriodicityOther;
+                              const perSuffix = fType === 'Único' ? ' (Único)' : ` / ${fPer === 'Outro' && fPerOther ? fPerOther : fPer.toLowerCase()}`;
+
+                              return (
+                                <div className={cn("grid gap-4", hasPlanFinancial ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1")}>
+                                  <ReportField
+                                    label="Impacto: Descrição"
+                                    value={cycle.plan?.impact?.description || "Não informado"}
+                                  />
+                                  {hasPlanFinancial && (
+                                    <ReportField
+                                      label="Impacto Financeiro Atual"
+                                      value={`${formatValueBrl(numLoss)}${perSuffix}`}
+                                    />
+                                  )}
+                                </div>
+                              );
+                            })()}
                             <ReportField
                               label="Método Utilizado"
                               value={(() => {
@@ -6896,87 +7077,117 @@ export default function PDCAEditor({
                             color="emerald"
                           >
                             <div className="space-y-4">
+                              {(() => {
+                                const finRes = getPDCAFinancialResult(cycle);
+                                if (!finRes.hasFinancialData) return null;
+
+                                const isGain = finRes.resultClassification === 'GANHO';
+                                const isLoss = finRes.resultClassification === 'PERDA';
+                                let periodicityText = finRes.financialType === 'Único' ? 'Único' : (finRes.financialPeriodicity === 'Outro' && finRes.financialPeriodicityOther ? finRes.financialPeriodicityOther : finRes.financialPeriodicity.toLowerCase());
+
+                                return (
+                                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 shadow-sm space-y-3">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                      Resultado Financeiro do Ciclo
+                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                                      <div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Impacto Financeiro Atual</p>
+                                        <p className="font-bold text-slate-700">
+                                          {formatValueBrl(finRes.financialCurrentLoss)}
+                                          {finRes.financialType === 'Recorrente' ? ` / ${periodicityText}` : ''}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Impacto Financeiro Após a Melhoria</p>
+                                        <p className="font-bold text-slate-700">
+                                          {formatValueBrl(finRes.financialPostImprovement)}
+                                          {finRes.financialType === 'Recorrente' ? ` / ${periodicityText}` : ''}
+                                        </p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase">Resultado Financeiro</p>
+                                        <p className={cn("font-bold text-sm", isGain ? "text-emerald-600" : isLoss ? "text-rose-600" : "text-slate-600")}>
+                                          {isGain ? '+ ' : isLoss ? '- ' : ''}
+                                          {formatValueBrl(Math.abs(finRes.financialResult))}
+                                          {finRes.financialType === 'Recorrente' ? ` / ${periodicityText}` : ''}
+                                          {finRes.resultClassification === 'SEM_VARIACAO' ? ' (Sem variação)' : ` (${finRes.resultClassification})`}
+                                        </p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+
                               {(cycle.plan?.actionPlan || [])
                                 .filter(
                                   (item) =>
                                     item.status !== "Cancelado" &&
                                     item.ativo !== false,
                                 )
-                                .map((item, idx) => (
-                                  <div
-                                    key={item.id}
-                                    className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3"
-                                  >
-                                    <p className="font-bold text-slate-800">
-                                      {idx + 1}. {item.what}
-                                    </p>
-                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-[10px]">
-                                      <div>
-                                        <p className="font-black text-slate-400 uppercase">
-                                          Observações do Acompanhamento
-                                        </p>
-                                        <p className="font-bold text-slate-600 whitespace-pre-wrap">
-                                          {item.monitoringPeriod && item.monitoringMode ? `${item.monitoringPeriod} ${item.monitoringMode}` : ''}
-                                          {item.monitoringTool ? (item.monitoringPeriod ? ` – ${item.monitoringTool}` : item.monitoringTool) : '---'}
-                                        </p>
-                                      </div>
-                                      <div>
-                                        <p className="font-black text-slate-400 uppercase">
-                                          Funcionou?
-                                        </p>
-                                        <p
-                                          className={cn(
-                                            "font-bold",
-                                            item.worked === "Sim"
-                                              ? "text-emerald-600"
-                                              : "text-rose-600",
-                                          )}
-                                        >
-                                          {item.worked}
-                                        </p>
-                                      </div>
-                                      {(item.worked === "Não" ||
-                                        item.worked === "Parcial") && (
-                                        <div className="col-span-2">
+                                .map((item, idx) => {
+                                  const itemTangibles = item.realGains?.tangible || [];
+                                  const hasTangibleGain = itemTangibles.length > 0 && itemTangibles.some((t: any) => Number(t.value) > 0);
+                                  const totalGain = itemTangibles.reduce((acc: number, t: any) => acc + (Number(t.value) || 0), 0);
+
+                                  return (
+                                    <div
+                                      key={item.id}
+                                      className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3"
+                                    >
+                                      <p className="font-bold text-slate-800">
+                                        {idx + 1}. {item.what}
+                                      </p>
+                                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-[10px]">
+                                        <div>
                                           <p className="font-black text-slate-400 uppercase">
-                                            Motivo
+                                            Observações do Acompanhamento
                                           </p>
-                                          <p className="font-bold text-slate-600">
-                                            {item.failureReason || "N/A"}
+                                          <p className="font-bold text-slate-600 whitespace-pre-wrap">
+                                            {item.monitoringPeriod && item.monitoringMode ? `${item.monitoringPeriod} ${item.monitoringMode}` : ''}
+                                            {item.monitoringTool ? (item.monitoringPeriod ? ` – ${item.monitoringTool}` : item.monitoringTool) : '---'}
                                           </p>
                                         </div>
-                                      )}
-                                      <div>
-                                        <p className="font-black text-slate-400 uppercase">
-                                          Impacto de Ganho
-                                        </p>
-                                        {(() => {
-                                          const totalGain = (
-                                            item.realGains?.tangible || []
-                                          ).reduce(
-                                            (acc, t) => acc + (t.value || 0),
-                                            0,
-                                          );
-                                          return (
-                                            <p
-                                              className={cn(
-                                                "font-bold",
-                                                totalGain < 0
-                                                  ? "text-rose-600 dark:text-rose-400"
-                                                  : "text-emerald-600 dark:text-emerald-400",
-                                              )}
-                                            >
-                                              R${" "}
-                                              {totalGain.toLocaleString("pt-BR", {
-                                                minimumFractionDigits: 2,
-                                              })}
+                                        <div>
+                                          <p className="font-black text-slate-400 uppercase">
+                                            Funcionou?
+                                          </p>
+                                          <p
+                                            className={cn(
+                                              "font-bold",
+                                              item.worked === "Sim"
+                                                ? "text-emerald-600"
+                                                : "text-rose-600",
+                                            )}
+                                          >
+                                            {item.worked}
+                                          </p>
+                                        </div>
+                                        {(item.worked === "Não" ||
+                                          item.worked === "Parcial") && (
+                                          <div className="col-span-2">
+                                            <p className="font-black text-slate-400 uppercase">
+                                              Motivo
                                             </p>
-                                          );
-                                        })()}
+                                            <p className="font-bold text-slate-600">
+                                              {item.failureReason || "N/A"}
+                                            </p>
+                                          </div>
+                                        )}
+                                        {hasTangibleGain && (
+                                          <div>
+                                            <p className="font-black text-slate-400 uppercase">
+                                              Ganho Real Apurado
+                                            </p>
+                                            <p className="font-bold text-emerald-600">
+                                              {formatValueBrl(totalGain)}
+                                            </p>
+                                          </div>
+                                        )}
                                       </div>
                                     </div>
-                                  </div>
-                                ))}
+                                  );
+                                })}
                             </div>
                           </ReportSection>
 

@@ -38,6 +38,7 @@ import {
   OperationType 
 } from '../firebase';
 import { Project, User, OperationalAction, ReportLog, GainsStructure } from '../types';
+import { getPDCAFinancialResult } from '../utils/pdcaFinancialUtils';
 
 const formatGains = (gains: GainsStructure | undefined): string => {
   if (!gains) return 'Sem registro';
@@ -818,14 +819,31 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                         }
                       ],
                       [
-                        { text: 'IMPACTO GERAL', style: 'tableHeaderTiny', alignment: 'left' },
-                        { text: cycle.plan.impact?.description || 'N/A', style: 'tableCellTiny', alignment: 'left' }
+                        { text: 'IMPACTO: DESCRIÇÃO', style: 'tableHeaderTiny', alignment: 'left' },
+                        { text: cycle.plan.impact?.description || 'Não informado', style: 'tableCellTiny', alignment: 'left' }
                       ],
-                      // Subitem correspondente ao Impacto Atual, exibindo seu valor financeiro corrente e a melhoria esperada
-                      [
-                        { text: 'IMPACTO ATUAL', style: 'tableHeaderTiny', alignment: 'left' },
-                        { text: `Valor Atual: ${formatValueBrl(cycle.plan.impact?.value)} | Melhoria Esperada: ${cycle.plan.impact?.improvementPercentage || 0}%`, style: 'tableCellTiny', alignment: 'left', bold: true, color: '#003489' }
-                      ]
+                      ...(() => {
+                        const planLossRaw = cycle.plan.impact?.financialCurrentLoss ?? cycle.plan.impact?.tangibleFinancialLoss ?? cycle.plan.impact?.value;
+                        const numLoss = typeof planLossRaw === 'number' ? planLossRaw : (planLossRaw ? Number(planLossRaw) : undefined);
+                        const hasPlanFinancial = numLoss !== undefined && !isNaN(numLoss) && (numLoss > 0 || cycle.plan.impact?.financialCurrentLoss !== undefined);
+                        if (!hasPlanFinancial) return [];
+
+                        const fType = cycle.plan.impact?.financialType || 'Recorrente';
+                        const fPer = cycle.plan.impact?.financialPeriodicity || 'Mensal';
+                        const fPerOther = cycle.plan.impact?.financialPeriodicityOther;
+                        const perStr = fType === 'Único' ? ' (Único)' : ` / ${fPer === 'Outro' && fPerOther ? fPerOther : fPer.toLowerCase()}`;
+
+                        return [[
+                          { text: 'IMPACTO FINANCEIRO ATUAL', style: 'tableHeaderTiny', alignment: 'left' },
+                          { 
+                            text: `${formatValueBrl(numLoss)}${perStr}`, 
+                            style: 'tableCellTiny', 
+                            alignment: 'left', 
+                            bold: true, 
+                            color: '#003489' 
+                          }
+                        ]];
+                      })()
                     ]
                   },
                   layout: {
@@ -1073,7 +1091,66 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                   margin: [0, 4, 0, 10]
                 });
 
-                // Ganhos Reais
+                // Resultado Financeiro Consolidado do Ciclo PDCA
+                const finRes = getPDCAFinancialResult(cycle);
+                if (finRes.hasFinancialData) {
+                  const isGain = finRes.resultClassification === 'GANHO';
+                  const isLoss = finRes.resultClassification === 'PERDA';
+
+                  const perUnit = finRes.financialType === 'Recorrente' 
+                    ? ` / ${finRes.financialPeriodicity === 'Outro' && finRes.financialPeriodicityOther ? finRes.financialPeriodicityOther : finRes.financialPeriodicity.toLowerCase()}` 
+                    : '';
+
+                  let periodicityText = finRes.financialType === 'Único' ? 'Único' : finRes.financialPeriodicity;
+                  if (finRes.financialPeriodicity === 'Outro' && finRes.financialPeriodicityOther) {
+                    periodicityText = `Outro (${finRes.financialPeriodicityOther})`;
+                  }
+
+                  checkItems.push({ text: 'RESULTADO FINANCEIRO DO CICLO', style: 'fieldLabel', margin: [0, 8, 0, 4] });
+                  checkItems.push({
+                    table: {
+                      widths: ['25%', '27%', '26%', '22%'],
+                      body: [
+                        [
+                          { text: 'IMPACTO FINANCEIRO ATUAL', style: 'tableHeaderTiny', alignment: 'center' },
+                          { text: 'IMPACTO APÓS A MELHORIA', style: 'tableHeaderTiny', alignment: 'center' },
+                          { text: 'RESULTADO FINANCEIRO', style: 'tableHeaderTiny', alignment: 'center' },
+                          { text: 'TIPO / INÍCIO', style: 'tableHeaderTiny', alignment: 'center' }
+                        ],
+                        [
+                          { text: `${formatValueBrl(finRes.financialCurrentLoss)}${perUnit}`, style: 'tableCellTiny', alignment: 'center' },
+                          { text: `${formatValueBrl(finRes.financialPostImprovement)}${perUnit}`, style: 'tableCellTiny', alignment: 'center' },
+                          { 
+                            text: `${isGain ? '+ ' : isLoss ? '- ' : ''}${formatValueBrl(Math.abs(finRes.financialResult))}${perUnit}\n(${finRes.resultClassification === 'SEM_VARIACAO' ? 'Sem variação' : finRes.resultClassification})`, 
+                            style: 'tableCellTiny', 
+                            alignment: 'center', 
+                            bold: true, 
+                            color: isGain ? '#059669' : isLoss ? '#dc2626' : '#64748b' 
+                          },
+                          { 
+                            text: `${finRes.financialType}${finRes.financialType === 'Recorrente' ? ` (${periodicityText})` : ''}${finRes.financialStartDate ? `\nInício: ${finRes.financialStartDate}` : ''}`, 
+                            style: 'tableCellTiny', 
+                            alignment: 'center' 
+                          }
+                        ]
+                      ]
+                    },
+                    layout: {
+                      hLineWidth: () => 1,
+                      vLineWidth: () => 1,
+                      hLineColor: () => '#e2e8f0',
+                      vLineColor: () => '#e2e8f0',
+                      fillColor: (rowIndex: number) => rowIndex === 0 ? '#f8fafc' : (isGain ? '#ecfdf5' : isLoss ? '#fff1f2' : '#ffffff'),
+                      paddingLeft: () => 4,
+                      paddingRight: () => 4,
+                      paddingTop: () => 4,
+                      paddingBottom: () => 4
+                    },
+                    margin: [0, 2, 0, 8]
+                  });
+                }
+
+                // Ganhos Reais Legados por Ação
                 const actionsWithRealGains = mappedActions.filter(
                   (item: any) => item.realGains && (item.realGains.tangible?.length > 0 || item.realGains.intangible?.length > 0)
                 );

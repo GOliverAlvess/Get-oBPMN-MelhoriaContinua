@@ -210,7 +210,11 @@ export interface PDCACycle {
 
       // Melhores estruturais aditivas na análise de Impacto
       impactType?: 'Tangível' | 'Intangível' | 'Ambos';
-      tangibleFinancialLoss?: number; // Perda financeira estimada (R$)
+      financialCurrentLoss?: number; // Impacto financeiro atual do problema (R$)
+      financialType?: 'Único' | 'Recorrente'; // Tipo do impacto financeiro
+      financialPeriodicity?: 'Mensal' | 'Anual' | 'Outro'; // Periodicidade se recorrente
+      financialPeriodicityOther?: string; // Descrição quando periodicidade for 'Outro'
+      tangibleFinancialLoss?: number; // Perda financeira estimada (R$) - legado/compatibilidade
       tangibleWastedTime?: number; // Tempo desperdiçado (horas/mês)
       tangibleRework?: number | string; // Retrabalho (horas ou %)
       tangibleOtherCosts?: string; // Outros custos
@@ -227,8 +231,14 @@ export interface PDCACycle {
   };
   check?: { // Avaliação de vínculo e resultados consolidados na etapa CHECK
     realResultType?: 'Tangível' | 'Intangível' | 'Ambos'; // Tipo de resultado obtido na prática
+    financialPostImprovement?: number; // Impacto financeiro após a melhoria (R$)
+    financialResult?: number; // Resultado financeiro líquido (calculado: atual - após melhoria)
+    financialType?: 'Único' | 'Recorrente'; // Tipo do resultado financeiro
+    financialPeriodicity?: 'Mensal' | 'Anual' | 'Outro'; // Periodicidade do resultado
+    financialPeriodicityOther?: string; // Descrição quando periodicidade for 'Outro'
+    financialStartDate?: string; // Data de início do resultado financeiro (YYYY-MM-DD)
     expectedGainAchieved?: 'Sim' | 'Parcial' | 'Não'; // Se o ganho esperado foi atingido
-    realCostReduction?: number; // Redução de custo real obtida (R$)
+    realCostReduction?: number; // Redução de custo real obtida (R$) - legado/compatibilidade
     realTimeGain?: number; // Ganho de tempo real obtido (horas/mês)
     realIndicatorResult?: number; // Resultado percentual obtido (%)
     realIntangibleNotes?: string; // Detalhamento dos resultados intangíveis obtidos

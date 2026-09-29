@@ -24,9 +24,11 @@ async function startServer() {
   const argPort = argPortIndex !== -1 && process.argv[argPortIndex + 1] ? parseInt(process.argv[argPortIndex + 1], 10) : undefined;
   const portEnv = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
   const PORT =
-    argPort ||
-    (portEnv && portEnv !== 8080 && portEnv !== 3004
-      ? portEnv
+  argPort ||
+  (portEnv && portEnv !== 8080
+    ? portEnv
+    : process.env.NODE_ENV === "production"
+      ? 3004
       : 3000);
 
   app.use(express.json({ limit: "100mb" }));

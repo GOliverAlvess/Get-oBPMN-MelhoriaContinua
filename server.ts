@@ -20,13 +20,14 @@ interface MulterRequest extends Request {
 
 async function startServer() {
   const app = express();
+  const argPortIndex = process.argv.indexOf("--port");
+  const argPort = argPortIndex !== -1 && process.argv[argPortIndex + 1] ? parseInt(process.argv[argPortIndex + 1], 10) : undefined;
   const portEnv = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
   const PORT =
-    portEnv && portEnv !== 8080
+    argPort ||
+    (portEnv && portEnv !== 8080 && portEnv !== 3004
       ? portEnv
-      : process.env.NODE_ENV === "production"
-        ? 3004
-        : 3000;
+      : 3000);
 
   app.use(express.json({ limit: "100mb" }));
   app.use(express.urlencoded({ limit: "100mb", extended: true }));
@@ -100,8 +101,8 @@ async function startServer() {
     const { MongoClient } = await import("mongodb");
     console.log("Connecting to MongoDB at:", MONGODB_URI);
     const mongoClient = new MongoClient(MONGODB_URI, {
-      serverSelectionTimeoutMS: 2000,
-      connectTimeoutMS: 2000,
+      serverSelectionTimeoutMS: 1000,
+      connectTimeoutMS: 1000,
     });
     await mongoClient.connect();
     db = mongoClient.db();
@@ -439,11 +440,23 @@ async function startServer() {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
     res.write(": open\n\n");
 
     sseClients.add(res);
 
+    // Heartbeat periódico (15s) para manter a conexão ativa em proxies e evitar timeout por inatividade
+    const heartbeatTimer = setInterval(() => {
+      try {
+        res.write(": ping\n\n");
+      } catch (err) {
+        clearInterval(heartbeatTimer);
+        sseClients.delete(res);
+      }
+    }, 15000);
+
     req.on("close", () => {
+      clearInterval(heartbeatTimer);
       sseClients.delete(res);
     });
   });
@@ -1200,7 +1213,7 @@ async function startServer() {
   // Vite middleware for development vs static production serving
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: "spa",
     });
     app.use(vite.middlewares);

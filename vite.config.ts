@@ -21,8 +21,8 @@ export default defineConfig(({mode}) => {
     },
     server: {
       host: true,
-      port: process.env.PORT ? parseInt(process.env.PORT, 10) : 3004,
-      strictPort: true,
+      port: 3000,
+      strictPort: false,
       hmr: false
     },
   };

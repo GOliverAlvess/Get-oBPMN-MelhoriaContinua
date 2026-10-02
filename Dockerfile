@@ -42,6 +42,8 @@ COPY --from=builder /app/node_modules ./node_modules
 # Copy compiled static assets and server code
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server.ts ./server.ts
+COPY --from=builder /app/serverPort.ts ./serverPort.ts
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
 
 # Expose the internal port of the Express server
 EXPOSE 3004

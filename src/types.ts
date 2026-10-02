@@ -246,6 +246,17 @@ export interface PDCACycle {
   };
 }
 
+// Interface para mapeamento de fluxogramas BPMN (AS-IS e TO-BE)
+export interface SubtaskMapping {
+  xml?: string; // Informação XML do bpmn-js que expressa o desenho gráfico
+  customData?: Record<string, Partial<BPMNTaskData>>; // Dados personalizados por nó (como responsáveis ou gravidades)
+  nodes?: any[]; // Entradas manuais de nós em sistemas antigos de representação visual
+  edges?: any[]; // Conectores geométricos de fluxos de decisão
+  orientation?: 'horizontal' | 'vertical'; // Alinhamento no painel de renderização
+  lastEdited?: string; // Horário da última atualização no diagrama
+  savedColors?: SavedColor[]; // Lista de cores de processos persistidas do usuário
+}
+
 // Subtarefas e processos ramificados que compõem o escopo do projeto
 export interface Subtask {
   id: string; // ID da subtarefa dentro do projeto
@@ -255,15 +266,8 @@ export interface Subtask {
   responsibleId?: string; // ID do colaborador responsável por conduzir as melhorias
   startDate?: string; // Data real de início agendada
   endDate?: string; // Data real de finalização da condução geral
-  mapping: { // Definições de desenhos e mapeamentos de valor para diagramas no fluxo BPMN
-    xml?: string; // Informação XML do bpmn-js que expressa o desenho gráfico
-    customData?: Record<string, Partial<BPMNTaskData>>; // Dados personalizados por nó (como responsáveis ou gravidades)
-    nodes: any[]; // Entradas manuais de nós em sistemas antigos de representação visual
-    edges: any[]; // Conectores geométricos de fluxos de decisão
-    orientation: 'horizontal' | 'vertical'; // Alinhamento no painel de renderização
-    lastEdited: string; // Horário da última atualização no diagrama
-    savedColors: SavedColor[]; // Lista de cores de processos persistidas do usuário
-  };
+  mapping: SubtaskMapping; // Definições de desenhos e mapeamentos de valor para diagramas no fluxo BPMN (AS-IS - Processo Atual)
+  mappingToBe?: SubtaskMapping; // Definições de desenhos e mapeamentos para o processo futuro (TO-BE - Processo Futuro, sem vínculo com PDCA)
   pdcaCycles: PDCACycle[]; // Ciclos PDCA paralelos vinculados a esta etapa
   progress?: number; // Evolução geral das rotinas
 }

@@ -7,6 +7,7 @@ import { google } from "googleapis";
 import { Readable } from "stream";
 import dotenv from "dotenv";
 import bcryptjs from "bcryptjs";
+import { resolveServerPort, extractArgPort } from "./serverPort";
 
 dotenv.config();
 
@@ -20,16 +21,11 @@ interface MulterRequest extends Request {
 
 async function startServer() {
   const app = express();
-  const argPortIndex = process.argv.indexOf("--port");
-  const argPort = argPortIndex !== -1 && process.argv[argPortIndex + 1] ? parseInt(process.argv[argPortIndex + 1], 10) : undefined;
-  const portEnv = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
-  const PORT =
-  argPort ||
-  (portEnv && portEnv !== 8080
-    ? portEnv
-    : process.env.NODE_ENV === "production"
-      ? 3004
-      : 3000);
+  const PORT = resolveServerPort({
+    argPort: extractArgPort(process.argv),
+    envPort: process.env.PORT,
+    nodeEnv: process.env.NODE_ENV,
+  });
 
   app.use(express.json({ limit: "100mb" }));
   app.use(express.urlencoded({ limit: "100mb", extended: true }));

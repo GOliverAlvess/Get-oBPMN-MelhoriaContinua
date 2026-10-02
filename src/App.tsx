@@ -224,9 +224,7 @@ export default function App() {
   const [operationalActions, setOperationalActions] = useState<OperationalAction[]>([]);
   const [targetSubtaskId, setTargetSubtaskId] = useState<string | null>(null);
   const [targetActionId, setTargetActionId] = useState<string | null>(null);
-  const [actionsNavSource, setActionsNavSource] = useState<'notification_deadline' | 'notification_action' | 'menu' | 'subtask' | null>(null);
-  const [actionsNavProjectId, setActionsNavProjectId] = useState<string | null>(null);
-  const [actionsNavSubtaskId, setActionsNavSubtaskId] = useState<string | null>(null);
+  const [actionsNavSource, setActionsNavSource] = useState<'notification_deadline' | 'notification_action' | 'menu' | null>(null);
   const [isDeadlineAlertFilter, setIsDeadlineAlertFilter] = useState<boolean>(false);
   const [targetProjectId, setTargetProjectId] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -722,8 +720,6 @@ export default function App() {
           setIsDeadlineAlertFilter(false);
           setActionsNavSource('notification_action');
         }
-        setActionsNavProjectId(null);
-        setActionsNavSubtaskId(null);
         setActiveView('actions');
         setSelectedProjectId(null);
       } else if (item.tipo === 'tarefa') {
@@ -736,19 +732,6 @@ export default function App() {
         }
         setActiveTab('scope');
       }
-    });
-  };
-
-  const handleViewSubtaskActions = (projectId: string, subtaskId: string) => {
-    handleNavigation(() => {
-      setActiveView('actions');
-      setActionsNavSource('subtask');
-      setActionsNavProjectId(projectId);
-      setActionsNavSubtaskId(subtaskId);
-      setTargetActionId(null);
-      setIsDeadlineAlertFilter(false);
-      setHasChanges(false);
-      setIsMobileMenuOpen(false);
     });
   };
 
@@ -984,8 +967,6 @@ export default function App() {
                 setTargetActionId(null);
                 setIsDeadlineAlertFilter(false);
                 setActionsNavSource('menu');
-                setActionsNavProjectId(null);
-                setActionsNavSubtaskId(null);
                 setHasChanges(false);
                 setIsMobileMenuOpen(false);
               })}
@@ -1090,18 +1071,6 @@ export default function App() {
                 targetActionId={targetActionId || undefined}
                 isDeadlineAlertFilter={isDeadlineAlertFilter}
                 navigationSource={actionsNavSource || 'menu'}
-                initialProjectId={actionsNavProjectId || undefined}
-                initialSubtaskId={actionsNavSubtaskId || undefined}
-                onReturnToProject={actionsNavProjectId ? () => {
-                  handleNavigation(() => {
-                    setSelectedProjectId(actionsNavProjectId);
-                    setActiveView('kanban');
-                    setActiveTab('scope');
-                    if (actionsNavSubtaskId) {
-                      setTargetSubtaskId(actionsNavSubtaskId);
-                    }
-                  });
-                } : undefined}
               />
             ) : !selectedProjectId ? (
               <KanbanView 
@@ -1132,7 +1101,6 @@ export default function App() {
                 initialSubtaskId={targetSubtaskId}
                 onClearInitialSubtask={() => setTargetSubtaskId(null)}
                 actions={operationalActions}
-                onViewSubtaskActions={handleViewSubtaskActions}
               />
             ) : (
               <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
@@ -1845,8 +1813,7 @@ function ProjectDetailView({
   saveStatus,
   initialSubtaskId,
   onClearInitialSubtask,
-  actions = [],
-  onViewSubtaskActions
+  actions = []
 }: { 
   project: Project, 
   activeTab: string, 
@@ -1864,8 +1831,7 @@ function ProjectDetailView({
   initialSubtaskId?: string | null,
   onClearInitialSubtask?: () => void,
   key?: string,
-  actions?: OperationalAction[],
-  onViewSubtaskActions?: (projectId: string, subtaskId: string) => void
+  actions?: OperationalAction[]
 }) {
   const [selectedSubtaskId, setSelectedSubtaskId] = useState<string | null>(
     activeTab !== 'scope' ? initialSubtaskId || null : null
@@ -2146,7 +2112,6 @@ function ProjectDetailView({
               setSelectedSubtaskId(taskId);
               setActiveTab('mapping');
             }}
-            onViewSubtaskActions={onViewSubtaskActions}
           />
         )}
       </div>
@@ -2372,8 +2337,7 @@ function ScopeTab({
   globalConfig,
   onSelectSubtask,
   actions = [],
-  targetSubtaskId,
-  onViewSubtaskActions
+  targetSubtaskId
 }: { 
   project: Project, 
   setProjects: (p: Project) => void, 
@@ -2381,8 +2345,7 @@ function ScopeTab({
   globalConfig: GlobalConfig,
   onSelectSubtask: (taskId: string) => void,
   actions?: OperationalAction[],
-  targetSubtaskId?: string | null,
-  onViewSubtaskActions?: (projectId: string, subtaskId: string) => void
+  targetSubtaskId?: string | null
 }) {
   const currentUserProfile = users.find(u => u.id === auth.currentUser?.uid);
   const profile = currentUserProfile?.profile || 'Usuário Analista';
@@ -3044,7 +3007,7 @@ function ScopeTab({
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-32">Prioridade</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-40">Status</th>
                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-48">Responsável</th>
-                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Ações</th>
+                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-24 text-right">Ações</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
@@ -3114,21 +3077,13 @@ function ScopeTab({
                               }
                               
                               return (
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    onViewSubtaskActions?.(project.id, subtask.id);
-                                  }}
-                                  title="Ver ações da subtarefa"
-                                  className={cn(
-                                    "inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-black shadow-sm select-none transition-all cursor-pointer hover:opacity-80",
-                                    textColor, bgColor
-                                  )}
-                                >
+                                <div className={cn(
+                                  "inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-black shadow-sm select-none transition-all",
+                                  textColor, bgColor
+                                )}>
                                   <span className={cn("w-1.5 h-1.5 rounded-full animate-pulse", dotColor)} />
                                   <span>{subtaskActions.length}</span>
-                                </button>
+                                </div>
                               );
                             })()}
                           </div>
@@ -3230,16 +3185,6 @@ function ScopeTab({
                           </>
                         ) : (
                           <>
-                            <button 
-                              type="button"
-                              onClick={() => onViewSubtaskActions?.(project.id, subtask.id)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-indigo-50 hover:text-indigo-600 dark:hover:bg-slate-700 dark:hover:text-indigo-400 rounded-xl font-bold text-xs border border-slate-200 dark:border-slate-700 hover:border-indigo-200 dark:hover:border-indigo-800 transition-all cursor-pointer shadow-2xs whitespace-nowrap"
-                              title="Ver ações"
-                            >
-                              <History size={14} className="text-slate-400 group-hover:text-indigo-600 shrink-0" />
-                              <span>Ver ações</span>
-                            </button>
-
                             <button 
                               onClick={() => onSelectSubtask(subtask.id)}
                               className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-all"

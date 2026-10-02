@@ -13,52 +13,6 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export interface ResolveServerPortOptions {
-  argPort?: number | string | null;
-  envPort?: number | string | null;
-  nodeEnv?: string | null;
-}
-
-export function extractArgPort(argv: string[] = process.argv): number | undefined {
-  const argPortIndex = argv.indexOf("--port");
-  if (argPortIndex !== -1 && argv[argPortIndex + 1]) {
-    const parsed = parseInt(argv[argPortIndex + 1], 10);
-    return !isNaN(parsed) && parsed > 0 ? parsed : undefined;
-  }
-  return undefined;
-}
-
-export function resolveServerPort(options: ResolveServerPortOptions = {}): number {
-  const { argPort, envPort, nodeEnv } = options;
-
-  // 1. Argumento explícito CLI --port possui a maior prioridade
-  const parsedArg =
-    typeof argPort === "string"
-      ? parseInt(argPort, 10)
-      : typeof argPort === "number"
-      ? argPort
-      : undefined;
-
-  if (parsedArg !== undefined && !isNaN(parsedArg) && parsedArg > 0) {
-    return parsedArg;
-  }
-
-  // 2. Variável de ambiente PORT (respeita 3004 da VPS, ignora 8080 de preview)
-  const parsedEnv =
-    typeof envPort === "string"
-      ? parseInt(envPort, 10)
-      : typeof envPort === "number"
-      ? envPort
-      : undefined;
-
-  if (parsedEnv !== undefined && !isNaN(parsedEnv) && parsedEnv > 0 && parsedEnv !== 8080) {
-    return parsedEnv;
-  }
-
-  // 3. Fallback contextual por ambiente: Produção = 3004 (compatível com Nginx VPS), Dev = 3000
-  return nodeEnv === "production" ? 3004 : 3000;
-}
-
 // Define type for Request with file
 interface MulterRequest extends Request {
   file?: Express.Multer.File;
@@ -66,11 +20,13 @@ interface MulterRequest extends Request {
 
 async function startServer() {
   const app = express();
-  const PORT = resolveServerPort({
-    argPort: extractArgPort(process.argv),
-    envPort: process.env.PORT,
-    nodeEnv: process.env.NODE_ENV,
-  });
+  const portEnv = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
+  const PORT =
+    portEnv && portEnv !== 8080
+      ? portEnv
+      : process.env.NODE_ENV === "production"
+        ? 3004
+        : 3000;
 
   app.use(express.json({ limit: "100mb" }));
   app.use(express.urlencoded({ limit: "100mb", extended: true }));
@@ -144,8 +100,8 @@ async function startServer() {
     const { MongoClient } = await import("mongodb");
     console.log("Connecting to MongoDB at:", MONGODB_URI);
     const mongoClient = new MongoClient(MONGODB_URI, {
-      serverSelectionTimeoutMS: 1000,
-      connectTimeoutMS: 1000,
+      serverSelectionTimeoutMS: 2000,
+      connectTimeoutMS: 2000,
     });
     await mongoClient.connect();
     db = mongoClient.db();
@@ -483,23 +439,11 @@ async function startServer() {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
     res.write(": open\n\n");
 
     sseClients.add(res);
 
-    // Heartbeat periódico (15s) para manter a conexão ativa em proxies e evitar timeout por inatividade
-    const heartbeatTimer = setInterval(() => {
-      try {
-        res.write(": ping\n\n");
-      } catch (err) {
-        clearInterval(heartbeatTimer);
-        sseClients.delete(res);
-      }
-    }, 15000);
-
     req.on("close", () => {
-      clearInterval(heartbeatTimer);
       sseClients.delete(res);
     });
   });
@@ -1256,7 +1200,7 @@ async function startServer() {
   // Vite middleware for development vs static production serving
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
-      server: { middlewareMode: true, hmr: false },
+      server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
@@ -1270,10 +1214,6 @@ async function startServer() {
       res.status(404).send("Arquivo não encontrado");
     });
 
-    app.get(["/health", "/api/health"], (req, res) => {
-      res.status(200).json({ status: "ok", port: PORT, uptime: process.uptime() });
-    });
-
     app.get("*", (req, res) => {
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.setHeader("Pragma", "no-cache");
@@ -1282,16 +1222,9 @@ async function startServer() {
     });
   }
 
-  const server = app.listen(PORT, "0.0.0.0", () => {
+  app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
-  });
-
-  server.on("error", (err: any) => {
-    console.error(`FATAL: Server listen error on port ${PORT}:`, err);
   });
 }
 
-startServer().catch((err) => {
-  console.error("FATAL: Failed to start server:", err);
-  process.exit(1);
-});
+startServer();

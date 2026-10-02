@@ -12,8 +12,7 @@ import {
   Presentation,
   FileSpreadsheet,
   FileImage,
-  FileArchive,
-  FolderOpen
+  FileArchive
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Project, ProjectFile } from '../types';
@@ -27,7 +26,6 @@ import {
   MAX_FILE_SIZE_BYTES,
   getFileExtension 
 } from '../lib/fileValidation';
-import { getDriveFolderUrl, NO_DRIVE_FOLDER_WARNING_MESSAGE } from '../utils/driveFolderUrl';
 import ContextHelp from './ContextHelp';
 
 // Propriedades recebidas pelo componente de lista de anexos do projeto (ProjectFilesSection)
@@ -44,11 +42,9 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
   const [isDragging, setIsDragging] = useState(false); // Estado ativado durante a ação de arrastar arquivos
   const [loadingFiles, setLoadingFiles] = useState(true); // Controla a exibição de spin/loader antes dos arquivos serem baixados do Firestore
   const [uploadError, setUploadError] = useState<string | null>(null); // Armazena mensagens decorrentes de erros de envio
-  const [driveWarning, setDriveWarning] = useState<string | null>(null); // Mensagem informativa/alerta quando a pasta do Drive não estiver vinculada
 
   // Carrega e atualiza em tempo real a listagem de arquivos anexados ao projeto consultando a coleção projectFiles do Firestore
   useEffect(() => {
-    setDriveWarning(null);
     if (!project.id) return;
 
     setLoadingFiles(true);
@@ -246,17 +242,6 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
     }
   };
 
-  // Abre a pasta correspondente ao projeto no Google Drive caso driveFolderId exista
-  const handleOpenDriveFolder = () => {
-    const driveUrl = getDriveFolderUrl(project.driveFolderId);
-    if (!driveUrl) {
-      setDriveWarning(NO_DRIVE_FOLDER_WARNING_MESSAGE);
-      return;
-    }
-    setDriveWarning(null);
-    window.open(driveUrl, '_blank', 'noopener,noreferrer');
-  };
-
   // Formata o tamanho em bytes do documento para uma string amigável ao usuário (KB, MB, GB, etc)
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return '0 B';
@@ -311,8 +296,8 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
         </div>
       )}
 
-      {/* Cabeçalho da Seção contendo botão de envio e atalho para abrir pasta no Drive */}
-      <div className="p-6 border-b border-slate-50 flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-50/30">
+      {/* Cabeçalho da Seção contendo botão de envio */}
+      <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600">
             <Paperclip size={20} />
@@ -328,64 +313,34 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Botão secundário para abrir diretamente a pasta do projeto no Google Drive */}
-          <button
-            type="button"
-            onClick={handleOpenDriveFolder}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-xl text-xs font-black uppercase tracking-tight transition-all shadow-sm shrink-0"
-            title="Abrir pasta no Google Drive"
-          >
-            <FolderOpen size={14} className="text-slate-500" />
-            <span>Abrir pasta no Drive</span>
-          </button>
-
-          {/* Componente Label atuando como elemento clicável atrelado ao input oculto de file upload */}
-          <label className={cn(
-            "flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-tight cursor-pointer hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 shrink-0",
-            isUploading && "opacity-60 cursor-not-allowed"
-          )}>
-            {isUploading ? (
-              <>
-                <Loader2 size={14} className="animate-spin" />
-                <span className="truncate max-w-[180px]">{uploadProgress || "Enviando..."}</span>
-              </>
-            ) : (
-              <>
-                <Upload size={14} />
-                Enviar Arquivos
-              </>
-            )}
-            <input 
-              type="file" 
-              multiple
-              className="hidden" 
-              onChange={handleFileUpload}
-              disabled={isUploading}
-              accept={ACCEPT_FILE_STRING}
-            />
-          </label>
-        </div>
+        {/* Componente Label atuando como elemento clicável atrelado ao input oculto de file upload */}
+        <label className={cn(
+          "flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-tight cursor-pointer hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 shrink-0",
+          isUploading && "opacity-60 cursor-not-allowed"
+        )}>
+          {isUploading ? (
+            <>
+              <Loader2 size={14} className="animate-spin" />
+              <span className="truncate max-w-[180px]">{uploadProgress || "Enviando..."}</span>
+            </>
+          ) : (
+            <>
+              <Upload size={14} />
+              Enviar Arquivos
+            </>
+          )}
+          <input 
+            type="file" 
+            multiple
+            className="hidden" 
+            onChange={handleFileUpload}
+            disabled={isUploading}
+            accept={ACCEPT_FILE_STRING}
+          />
+        </label>
       </div>
 
       <div className="p-6">
-        {/* Painel informativo/alerta caso a pasta do Google Drive ainda não esteja vinculada ao projeto */}
-        {driveWarning && (
-          <div className="mb-6 p-4 bg-amber-50 border border-amber-200/80 rounded-2xl flex items-center justify-between gap-3 text-amber-800 animate-fade-in">
-            <div className="flex items-center gap-3 min-w-0">
-              <AlertCircle size={18} className="shrink-0 text-amber-600" />
-              <p className="text-xs font-bold leading-tight">{driveWarning}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setDriveWarning(null)}
-              className="text-xs font-black text-amber-700 hover:text-amber-900 px-2 py-1 rounded-lg hover:bg-amber-100/60 transition-all shrink-0"
-            >
-              Fechar
-            </button>
-          </div>
-        )}
-
         {/* Painel de erros de upload caso ocorram durante o envio multipart */}
         {uploadError && (
           <div className="mb-6 p-4 bg-rose-50 border border-rose-100 rounded-2xl flex items-center gap-3 text-rose-600">

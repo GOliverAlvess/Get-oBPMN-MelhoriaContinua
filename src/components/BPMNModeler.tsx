@@ -574,7 +574,6 @@ const customTranslateModule = {
 };
 
 interface BPMNModelerProps {
-  key?: React.Key;
   mapping: any;
   onUpdateMapping: (mapping: any) => void;
   onDeletePdcaCycleForTask?: (taskId: string, updatedCustomData?: any) => void;
@@ -583,7 +582,6 @@ interface BPMNModelerProps {
   onSaveGlobalColor: (color: SavedColor) => void;
   onDeleteGlobalColor: (id: string) => void;
   readOnly?: boolean;
-  isToBe?: boolean; // Se true, modo TO-BE (Processo Futuro, sem etapas problema ou vínculos com PDCA)
 }
 
 const INITIAL_XML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -832,8 +830,7 @@ export default function BPMNModeler({
   savedColors,
   onSaveGlobalColor,
   onDeleteGlobalColor,
-  readOnly = false,
-  isToBe = false
+  readOnly = false
 }: BPMNModelerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const modelerRef = useRef<Modeler | null>(null);
@@ -1261,17 +1258,7 @@ export default function BPMNModeler({
         
         // Reidratação dos metadados customizados com tratamento de segurança
         try {
-          let pastedCustomData = copiedData.customData || {};
-          if (isToBe) {
-            const cleanData: Record<string, Partial<BPMNTaskData>> = {};
-            Object.keys(pastedCustomData).forEach(k => {
-              cleanData[k] = {
-                ...pastedCustomData[k],
-                isProblemStep: false
-              };
-            });
-            pastedCustomData = cleanData;
-          }
+          const pastedCustomData = copiedData.customData || {};
           console.log('[handlePasteDiagram] Reidratando metadados customizados:', Object.keys(pastedCustomData).length, 'itens');
           setCustomData(pastedCustomData);
           customDataRef.current = pastedCustomData;
@@ -1441,7 +1428,7 @@ export default function BPMNModeler({
         const data = customData[element.id] || {};
         const isProblem = !!data.isProblemStep;
         
-        if (!isToBe && isProblem) {
+        if (isProblem) {
           overlays.add(element.id, 'problem-indicator', {
             position: {
               top: -10,
@@ -1454,7 +1441,7 @@ export default function BPMNModeler({
         }
       }
     });
-  }, [customData, isDiagramReady, isToBe]);
+  }, [customData, isDiagramReady]);
 
   const exportAsPng = async () => {
     if (!modelerRef.current) return;
@@ -1464,7 +1451,7 @@ export default function BPMNModeler({
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `processo-${isToBe ? 'TO-BE' : 'AS-IS'}-${projectName}.svg`;
+      link.download = `processo-${projectName}.svg`;
       link.click();
     } catch (err) {
       console.error('Error exporting SVG', err);
@@ -1540,20 +1527,8 @@ export default function BPMNModeler({
               />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-none">{projectName}</h3>
-                <span className={cn(
-                  "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border",
-                  isToBe 
-                    ? "bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
-                    : "bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800"
-                )}>
-                  {isToBe ? "TO-BE (Futuro)" : "AS-IS (Atual)"}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-400 dark:text-white font-bold uppercase tracking-wider mt-1">
-                {isToBe ? "Mapeamento BPMN • Processo Futuro" : "Mapeamento BPMN • Processo Atual"}
-              </p>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white leading-none">{projectName}</h3>
+              <p className="text-[10px] text-slate-400 dark:text-white font-bold uppercase tracking-wider mt-1">Mapeamento BPMN</p>
             </div>
           </div>
 
@@ -1844,53 +1819,38 @@ export default function BPMNModeler({
                   );
                 })()}
 
-                {!isToBe ? (
-                  <div className="pt-6 border-t border-slate-100 dark:border-slate-700 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-700 dark:text-white">Etapa Problema</span>
-                          <span className="text-[10px] text-slate-400 dark:text-white/60 font-medium">Marcar como gargalo</span>
-                        </div>
-                        <ContextHelp contentKey="etapaProblema" size="xs" />
+                <div className="pt-6 border-t border-slate-100 dark:border-slate-700 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-slate-700 dark:text-white">Etapa Problema</span>
+                        <span className="text-[10px] text-slate-400 dark:text-white/60 font-medium">Marcar como gargalo</span>
                       </div>
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          if (readOnly || !selectedElement) return;
-                          if (currentElementData?.isProblemStep) {
-                            setShowRemoveProblemModal(true);
-                          } else {
-                            updateElementData(selectedElement.id, { isProblemStep: true });
-                          }
-                        }}
-                        disabled={readOnly}
-                        className={cn(
-                          "w-10 h-5 rounded-full p-1 transition-all",
-                          currentElementData?.isProblemStep ? "bg-[#FF6B6B]" : "bg-slate-200 dark:bg-slate-700",
-                          readOnly && "opacity-50"
-                        )}
-                      >
-                        <div className={cn(
-                          "w-3 h-3 rounded-full transition-all", 
-                          currentElementData?.isProblemStep ? "bg-white translate-x-5" : "bg-slate-400 dark:bg-slate-500 translate-x-0"
-                        )} />
-                      </button>
+                      <ContextHelp contentKey="etapaProblema" size="xs" />
                     </div>
+                    <button 
+                      onClick={() => {
+                        if (readOnly || !selectedElement) return;
+                        if (currentElementData?.isProblemStep) {
+                          setShowRemoveProblemModal(true);
+                        } else {
+                          updateElementData(selectedElement.id, { isProblemStep: true });
+                        }
+                      }}
+                      disabled={readOnly}
+                      className={cn(
+                        "w-10 h-5 rounded-full p-1 transition-all",
+                        currentElementData?.isProblemStep ? "bg-[#FF6B6B]" : "bg-slate-200 dark:bg-slate-700",
+                        readOnly && "opacity-50"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-3 h-3 rounded-full transition-all", 
+                        currentElementData?.isProblemStep ? "bg-white translate-x-5" : "bg-slate-400 dark:bg-slate-500 translate-x-0"
+                      )} />
+                    </button>
                   </div>
-                ) : (
-                  <div className="pt-6 border-t border-slate-100 dark:border-slate-700">
-                    <div className="p-3 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl space-y-1 text-xs text-emerald-800 dark:text-emerald-300">
-                      <div className="flex items-center gap-1.5 font-bold text-emerald-900 dark:text-emerald-200">
-                        <Sparkles size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        <span>Processo Futuro (TO-BE)</span>
-                      </div>
-                      <p className="text-[11px] opacity-90 leading-relaxed">
-                        Este fluxograma documenta o processo futuro planejado após a implantação das melhorias. Não possui indicação de gargalos ou vínculo com ciclos PDCA.
-                      </p>
-                    </div>
-                  </div>
-                )}
+                </div>
 
                 {!readOnly && (
                   <>

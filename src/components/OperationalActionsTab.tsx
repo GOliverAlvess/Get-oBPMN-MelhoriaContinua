@@ -20,8 +20,7 @@ import {
   Sparkles,
   Edit3,
   Loader2,
-  Check,
-  ArrowLeft
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { v4 as uuidv4 } from 'uuid';
@@ -42,10 +41,7 @@ interface OperationalActionsTabProps {
   users: User[];
   targetActionId?: string;
   isDeadlineAlertFilter?: boolean;
-  navigationSource?: 'notification_deadline' | 'notification_action' | 'menu' | 'subtask' | string;
-  initialProjectId?: string;
-  initialSubtaskId?: string;
-  onReturnToProject?: () => void;
+  navigationSource?: 'notification_deadline' | 'notification_action' | 'menu' | string;
   key?: string;
 }
 
@@ -233,7 +229,6 @@ const getNormalizedAlertLabel = (action: { status: string; forecastDate: string;
 export interface PersistedOperationalFilters {
   searchTerm?: string;
   filterProjects?: string[];
-  filterSubtasks?: string[];
   filterResponsibles?: string[];
   filterStatuses?: string[];
   filterPriorities?: string[];
@@ -287,19 +282,14 @@ export default function OperationalActionsTab({
   users, 
   targetActionId,
   isDeadlineAlertFilter = false,
-  navigationSource = 'menu',
-  initialProjectId,
-  initialSubtaskId,
-  onReturnToProject
+  navigationSource = 'menu'
 }: OperationalActionsTabProps) {
   const isNotificationEntry = navigationSource === 'notification_deadline' || navigationSource === 'notification_action' || isDeadlineAlertFilter;
-  const isSubtaskEntry = navigationSource === 'subtask' && (!!initialProjectId || !!initialSubtaskId);
-  const isExplicitNavigation = isNotificationEntry || isSubtaskEntry;
 
   const savedFilters = useMemo(() => {
-    if (isExplicitNavigation) return null;
+    if (isNotificationEntry) return null;
     return loadPersistedOperationalFilters();
-  }, [isExplicitNavigation]);
+  }, [isNotificationEntry]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState(() => (savedFilters && typeof savedFilters.searchTerm === 'string') ? savedFilters.searchTerm : '');
@@ -307,16 +297,7 @@ export default function OperationalActionsTab({
   const [showBlockedMessage, setShowBlockedMessage] = useState(false);
   
   // Multi-select filters (OR logic within filter, AND between filters)
-  const [filterProjects, setFilterProjects] = useState<string[]>(() => {
-    if (isSubtaskEntry && initialProjectId) return [initialProjectId];
-    if (savedFilters && Array.isArray(savedFilters.filterProjects)) return savedFilters.filterProjects;
-    return [];
-  });
-  const [filterSubtasks, setFilterSubtasks] = useState<string[]>(() => {
-    if (isSubtaskEntry && initialSubtaskId) return [initialSubtaskId];
-    if (savedFilters && Array.isArray(savedFilters.filterSubtasks)) return savedFilters.filterSubtasks;
-    return [];
-  });
+  const [filterProjects, setFilterProjects] = useState<string[]>(() => (savedFilters && Array.isArray(savedFilters.filterProjects)) ? savedFilters.filterProjects : []);
   const [filterResponsibles, setFilterResponsibles] = useState<string[]>(() => (savedFilters && Array.isArray(savedFilters.filterResponsibles)) ? savedFilters.filterResponsibles : []);
   const [filterStatuses, setFilterStatuses] = useState<string[]>(() => (savedFilters && Array.isArray(savedFilters.filterStatuses)) ? savedFilters.filterStatuses : []);
   const [filterPriorities, setFilterPriorities] = useState<string[]>(() => (savedFilters && Array.isArray(savedFilters.filterPriorities)) ? savedFilters.filterPriorities : []);
@@ -327,16 +308,8 @@ export default function OperationalActionsTab({
   });
 
   // MODO DE VISUALIZAÇÃO: Visão Geral vs Lista de Ações
-  const [viewMode, setViewMode] = useState<'overview' | 'list'>(() => {
-    if (isSubtaskEntry) return 'list';
-    if (savedFilters && savedFilters.viewMode === 'list') return 'list';
-    return 'overview';
-  });
-  const [scopeMode, setScopeMode] = useState<'my_actions' | 'all_actions'>(() => {
-    if (isSubtaskEntry) return 'all_actions';
-    if (savedFilters && savedFilters.scopeMode === 'all_actions') return 'all_actions';
-    return 'my_actions';
-  });
+  const [viewMode, setViewMode] = useState<'overview' | 'list'>(() => (savedFilters && savedFilters.viewMode === 'list') ? 'list' : 'overview');
+  const [scopeMode, setScopeMode] = useState<'my_actions' | 'all_actions'>(() => (savedFilters && savedFilters.scopeMode === 'all_actions') ? 'all_actions' : 'my_actions');
 
   // FILTRO: Alerta de Prazo
   const [filterAlertStatuses, setFilterAlertStatuses] = useState<string[]>(() => (savedFilters && Array.isArray(savedFilters.filterAlertStatuses)) ? savedFilters.filterAlertStatuses : []);
@@ -376,24 +349,15 @@ export default function OperationalActionsTab({
     }
   }, [toastNotification]);
 
-  const prevNavRef = useRef<{ 
-    source: string; 
-    targetId?: string; 
-    isDeadline?: boolean;
-    projectId?: string;
-    subtaskId?: string;
-  }>({
+  const prevNavRef = useRef<{ source: string; targetId?: string; isDeadline?: boolean }>({
     source: navigationSource,
     targetId: targetActionId,
-    isDeadline: isDeadlineAlertFilter,
-    projectId: initialProjectId,
-    subtaskId: initialSubtaskId
+    isDeadline: isDeadlineAlertFilter
   });
 
   const resetAllFilters = () => {
     setSearchTerm('');
     setFilterProjects([]);
-    setFilterSubtasks([]);
     setFilterResponsibles([]);
     setFilterStatuses([]);
     setFilterPriorities([]);
@@ -438,11 +402,8 @@ export default function OperationalActionsTab({
     }
   };
 
-  // Salvar estado no sessionStorage sempre que os filtros mudarem (exceto em navegação explícita por atalho de subtarefa)
+  // Salvar estado no sessionStorage sempre que os filtros mudarem
   useEffect(() => {
-    if (navigationSource === 'subtask' && (!!initialProjectId || !!initialSubtaskId)) {
-      return;
-    }
     const storage = getSafeSessionStorage();
     if (!storage) return;
     try {
@@ -450,7 +411,6 @@ export default function OperationalActionsTab({
       const dataToSave: PersistedOperationalFilters = {
         searchTerm,
         filterProjects,
-        filterSubtasks,
         filterResponsibles,
         filterStatuses,
         filterPriorities,
@@ -467,12 +427,8 @@ export default function OperationalActionsTab({
       console.warn('[OperationalActionsTab] Erro ao salvar filtros no sessionStorage:', e);
     }
   }, [
-    navigationSource,
-    initialProjectId,
-    initialSubtaskId,
     searchTerm,
     filterProjects,
-    filterSubtasks,
     filterResponsibles,
     filterStatuses,
     filterPriorities,
@@ -490,40 +446,20 @@ export default function OperationalActionsTab({
     const navChanged =
       prev.source !== navigationSource ||
       prev.targetId !== targetActionId ||
-      prev.isDeadline !== isDeadlineAlertFilter ||
-      prev.projectId !== initialProjectId ||
-      prev.subtaskId !== initialSubtaskId;
+      prev.isDeadline !== isDeadlineAlertFilter;
 
     if (navChanged) {
       prevNavRef.current = {
         source: navigationSource,
         targetId: targetActionId,
-        isDeadline: isDeadlineAlertFilter,
-        projectId: initialProjectId,
-        subtaskId: initialSubtaskId
+        isDeadline: isDeadlineAlertFilter
       };
 
-      if (navigationSource === 'subtask') {
-        // Atalho Ver Ações: Prioridade explícita sobre filtros salvos
-        setSearchTerm('');
-        setScopeMode('all_actions');
-        setViewMode('list');
-        setFilterProjects(initialProjectId ? [initialProjectId] : []);
-        setFilterSubtasks(initialSubtaskId ? [initialSubtaskId] : []);
-        setFilterResponsibles([]);
-        setFilterPriorities([]);
-        setFilterStatuses([]);
-        setFilterDeadlineAlertOnly(false);
-        setFilterAlertStatuses([]);
-        setForecastStartDate('');
-        setForecastEndDate('');
-        setForecastShortcut('all');
-      } else if (navigationSource === 'notification_deadline' || isDeadlineAlertFilter) {
+      if (navigationSource === 'notification_deadline' || isDeadlineAlertFilter) {
         // Notification for deadline alert: switch to 'my_actions', reset other filters & show actions near deadline
         setSearchTerm('');
         setScopeMode('my_actions');
         setFilterProjects([]);
-        setFilterSubtasks([]);
         setFilterResponsibles([]);
         setFilterPriorities([]);
         setFilterStatuses([]);
@@ -536,7 +472,6 @@ export default function OperationalActionsTab({
         // Notification for specific action: reset filters and scroll to target
         setSearchTerm('');
         setFilterProjects([]);
-        setFilterSubtasks([]);
         setFilterResponsibles([]);
         setFilterStatuses([]);
         setFilterPriorities([]);
@@ -545,26 +480,6 @@ export default function OperationalActionsTab({
         setForecastStartDate('');
         setForecastEndDate('');
         setForecastShortcut('all');
-      } else if (navigationSource === 'menu') {
-        // Acesso normal pelo menu: restaura os filtros persistidos do usuário
-        const restored = loadPersistedOperationalFilters();
-        if (restored) {
-          setSearchTerm(restored.searchTerm || '');
-          setFilterProjects(Array.isArray(restored.filterProjects) ? restored.filterProjects : []);
-          setFilterSubtasks(Array.isArray(restored.filterSubtasks) ? restored.filterSubtasks : []);
-          setFilterResponsibles(Array.isArray(restored.filterResponsibles) ? restored.filterResponsibles : []);
-          setFilterStatuses(Array.isArray(restored.filterStatuses) ? restored.filterStatuses : []);
-          setFilterPriorities(Array.isArray(restored.filterPriorities) ? restored.filterPriorities : []);
-          setFilterDeadlineAlertOnly(!!restored.filterDeadlineAlertOnly);
-          setFilterAlertStatuses(Array.isArray(restored.filterAlertStatuses) ? restored.filterAlertStatuses : []);
-          setForecastStartDate(restored.forecastStartDate || '');
-          setForecastEndDate(restored.forecastEndDate || '');
-          setForecastShortcut(restored.forecastShortcut || 'all');
-          setViewMode(restored.viewMode === 'list' ? 'list' : 'overview');
-          setScopeMode(restored.scopeMode === 'all_actions' ? 'all_actions' : 'my_actions');
-        } else {
-          resetAllFilters();
-        }
       }
     }
 
@@ -577,7 +492,7 @@ export default function OperationalActionsTab({
       }, 300);
       return () => clearTimeout(timer);
     }
-  }, [navigationSource, isDeadlineAlertFilter, targetActionId, initialProjectId, initialSubtaskId, actions]);
+  }, [navigationSource, isDeadlineAlertFilter, targetActionId, actions]);
 
   const matchesArr = (arr: string[], val: string) => arr.length === 0 || arr.includes(val);
 
@@ -615,58 +530,6 @@ export default function OperationalActionsTab({
   };
 
   // Dynamic filter options (Excel style - based on other filters)
-  const availableSubtasks = useMemo(() => {
-    const relevantProjects = filterProjects.length > 0 
-      ? projects.filter(p => filterProjects.includes(p.id))
-      : projects;
-
-    const subtaskMap = new Map<string, string>();
-    relevantProjects.forEach(p => {
-      (p.subtasks || []).forEach(s => {
-        subtaskMap.set(s.id, s.title);
-      });
-    });
-
-    actions.forEach(a => {
-      if (a.subtaskId && a.subtaskTitle && (filterProjects.length === 0 || filterProjects.includes(a.projectId))) {
-        if (!subtaskMap.has(a.subtaskId)) {
-          subtaskMap.set(a.subtaskId, a.subtaskTitle);
-        }
-      }
-    });
-
-    filterSubtasks.forEach(id => {
-      if (!subtaskMap.has(id)) {
-        for (const p of projects) {
-          const s = (p.subtasks || []).find(st => st.id === id);
-          if (s) {
-            subtaskMap.set(s.id, s.title);
-            break;
-          }
-        }
-      }
-    });
-
-    return Array.from(subtaskMap.entries()).map(([id, label]) => ({
-      id,
-      label
-    })).sort((a, b) => a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' }));
-  }, [projects, filterProjects, actions, filterSubtasks]);
-
-  const matchesSubtask = useCallback((action: OperationalAction) => {
-    if (filterSubtasks.length === 0) return true;
-    if (action.subtaskId && filterSubtasks.includes(action.subtaskId)) return true;
-    
-    const selectedTitles = availableSubtasks
-      .filter(s => filterSubtasks.includes(s.id))
-      .map(s => s.label.toLowerCase().trim());
-      
-    if (action.subtaskTitle && selectedTitles.includes(action.subtaskTitle.toLowerCase().trim())) {
-      return true;
-    }
-    return false;
-  }, [filterSubtasks, availableSubtasks]);
-
   const availableProjects = useMemo(() => {
     const sorted = [...projects].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
     if (actions.length === 0) return sorted;
@@ -676,18 +539,17 @@ export default function OperationalActionsTab({
           a.action.toLowerCase().includes(searchTerm.toLowerCase()) ||
           a.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           (a.subtaskTitle || '').toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesSub = matchesSubtask(a);
         const matchesResponsible = matchesArr(filterResponsibles, a.responsibleId);
         const matchesStatus = matchesArr(filterStatuses, a.status);
         const matchesPriority = matchesArr(filterPriorities, a.priority);
         const matchesAlert = isAlertMatch(a);
         const matchesForecast = isForecastMatch(a);
-        return matchesSearch && matchesSub && matchesResponsible && matchesStatus && matchesPriority && matchesAlert && matchesForecast;
+        return matchesSearch && matchesResponsible && matchesStatus && matchesPriority && matchesAlert && matchesForecast;
       }).map(a => a.projectId)
     );
     filterProjects.forEach(id => ids.add(id));
     return sorted.filter(p => ids.has(p.id));
-  }, [actions, searchTerm, filterProjects, filterSubtasks, matchesSubtask, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut, projects]);
+  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut, projects]);
 
   const availableResponsibles = useMemo(() => {
     const sorted = [...users].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR', { sensitivity: 'base' }));
@@ -699,17 +561,16 @@ export default function OperationalActionsTab({
           a.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           (a.subtaskTitle || '').toLowerCase().includes(searchTerm.toLowerCase());
         const matchesProject = matchesArr(filterProjects, a.projectId);
-        const matchesSub = matchesSubtask(a);
         const matchesStatus = matchesArr(filterStatuses, a.status);
         const matchesPriority = matchesArr(filterPriorities, a.priority);
         const matchesAlert = isAlertMatch(a);
         const matchesForecast = isForecastMatch(a);
-        return matchesSearch && matchesProject && matchesSub && matchesStatus && matchesPriority && matchesAlert && matchesForecast;
+        return matchesSearch && matchesProject && matchesStatus && matchesPriority && matchesAlert && matchesForecast;
       }).map(a => a.responsibleId)
     );
     filterResponsibles.forEach(id => ids.add(id));
     return sorted.filter(u => ids.has(u.id));
-  }, [actions, searchTerm, filterProjects, filterSubtasks, matchesSubtask, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut, users]);
+  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut, users]);
 
   const availableStatuses = useMemo(() => {
     const allPossible = ['Pendente', 'Em andamento', 'Concluído', 'Pausado'];
@@ -721,17 +582,16 @@ export default function OperationalActionsTab({
           a.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           (a.subtaskTitle || '').toLowerCase().includes(searchTerm.toLowerCase());
         const matchesProject = matchesArr(filterProjects, a.projectId);
-        const matchesSub = matchesSubtask(a);
         const matchesResponsible = matchesArr(filterResponsibles, a.responsibleId);
         const matchesPriority = matchesArr(filterPriorities, a.priority);
         const matchesAlert = isAlertMatch(a);
         const matchesForecast = isForecastMatch(a);
-        return matchesSearch && matchesProject && matchesSub && matchesResponsible && matchesPriority && matchesAlert && matchesForecast;
+        return matchesSearch && matchesProject && matchesResponsible && matchesPriority && matchesAlert && matchesForecast;
       }).map(a => a.status)
     );
     filterStatuses.forEach(s => statuses.add(s));
     return allPossible.filter(s => statuses.has(s));
-  }, [actions, searchTerm, filterProjects, filterSubtasks, matchesSubtask, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut]);
+  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut]);
 
   const availablePriorities = useMemo(() => {
     const allPossible = ['Baixa', 'Média', 'Alta', 'Urgente'];
@@ -743,17 +603,16 @@ export default function OperationalActionsTab({
           a.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           (a.subtaskTitle || '').toLowerCase().includes(searchTerm.toLowerCase());
         const matchesProject = matchesArr(filterProjects, a.projectId);
-        const matchesSub = matchesSubtask(a);
         const matchesResponsible = matchesArr(filterResponsibles, a.responsibleId);
         const matchesStatus = matchesArr(filterStatuses, a.status);
         const matchesAlert = isAlertMatch(a);
         const matchesForecast = isForecastMatch(a);
-        return matchesSearch && matchesProject && matchesSub && matchesResponsible && matchesStatus && matchesAlert && matchesForecast;
+        return matchesSearch && matchesProject && matchesResponsible && matchesStatus && matchesAlert && matchesForecast;
       }).map(a => a.priority)
     );
     filterPriorities.forEach(p => priorities.add(p));
     return allPossible.filter(p => priorities.has(p));
-  }, [actions, searchTerm, filterProjects, filterSubtasks, matchesSubtask, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut]);
+  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut]);
 
   const availableAlertStatuses = useMemo(() => {
     const allPossible = [
@@ -771,19 +630,18 @@ export default function OperationalActionsTab({
         a.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (a.subtaskTitle || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesProject = matchesArr(filterProjects, a.projectId);
-      const matchesSub = matchesSubtask(a);
       const matchesResponsible = matchesArr(filterResponsibles, a.responsibleId);
       const matchesStatus = matchesArr(filterStatuses, a.status);
       const matchesPriority = matchesArr(filterPriorities, a.priority);
       const matchesForecast = isForecastMatch(a);
 
-      if (matchesSearch && matchesProject && matchesSub && matchesResponsible && matchesStatus && matchesPriority && matchesForecast) {
+      if (matchesSearch && matchesProject && matchesResponsible && matchesStatus && matchesPriority && matchesForecast) {
         found.add(getNormalizedAlertLabel(a));
       }
     });
     filterAlertStatuses.forEach(s => found.add(s));
     return allPossible.filter(s => found.has(s));
-  }, [actions, searchTerm, filterProjects, filterSubtasks, matchesSubtask, filterResponsibles, filterStatuses, filterPriorities, forecastStartDate, forecastEndDate, forecastShortcut, filterAlertStatuses]);
+  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, forecastStartDate, forecastEndDate, forecastShortcut, filterAlertStatuses]);
 
   const filteredActions = useMemo(() => {
     return actions.filter(a => {
@@ -792,16 +650,15 @@ export default function OperationalActionsTab({
         a.projectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (a.subtaskTitle || '').toLowerCase().includes(searchTerm.toLowerCase());
       const matchesProject = matchesArr(filterProjects, a.projectId);
-      const matchesSub = matchesSubtask(a);
       const matchesResponsible = matchesArr(filterResponsibles, a.responsibleId);
       const matchesStatus = matchesArr(filterStatuses, a.status);
       const matchesPriority = matchesArr(filterPriorities, a.priority);
       const matchesAlert = isAlertMatch(a);
       const matchesForecast = isForecastMatch(a);
       
-      return matchesSearch && matchesProject && matchesSub && matchesResponsible && matchesStatus && matchesPriority && matchesAlert && matchesForecast;
+      return matchesSearch && matchesProject && matchesResponsible && matchesStatus && matchesPriority && matchesAlert && matchesForecast;
     }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [actions, searchTerm, filterProjects, filterSubtasks, matchesSubtask, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut]);
+  }, [actions, searchTerm, filterProjects, filterResponsibles, filterStatuses, filterPriorities, filterDeadlineAlertOnly, filterAlertStatuses, forecastStartDate, forecastEndDate, forecastShortcut]);
 
   // Usuário atualmente autenticado
   const currentLoggedInUser = useMemo(() => {
@@ -1149,16 +1006,6 @@ export default function OperationalActionsTab({
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2.5">
-              {onReturnToProject && (
-                <button
-                  type="button"
-                  onClick={onReturnToProject}
-                  className="p-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:text-indigo-600 hover:border-indigo-300 transition-all shadow-xs cursor-pointer mr-1"
-                  title="Voltar ao Projeto"
-                >
-                  <ArrowLeft size={18} />
-                </button>
-              )}
               <h2 className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">Histórico de Ações</h2>
               <ContextHelp contentKey="historicoAcoes" size="sm" />
             </div>
@@ -1235,7 +1082,7 @@ export default function OperationalActionsTab({
                 <span>Próximas do Vencimento / Atrasadas</span>
               </button>
             </div>
-            {(filterProjects.length > 0 || filterSubtasks.length > 0 || filterResponsibles.length > 0 || filterStatuses.length > 0 || filterPriorities.length > 0 || filterAlertStatuses.length > 0 || searchTerm || filterDeadlineAlertOnly || forecastStartDate || forecastEndDate || forecastShortcut !== 'all') && (
+            {(filterProjects.length > 0 || filterResponsibles.length > 0 || filterStatuses.length > 0 || filterPriorities.length > 0 || filterAlertStatuses.length > 0 || searchTerm || filterDeadlineAlertOnly || forecastStartDate || forecastEndDate || forecastShortcut !== 'all') && (
               <button
                 type="button"
                 onClick={resetAllFilters}
@@ -1265,29 +1112,8 @@ export default function OperationalActionsTab({
             </div>
           )}
 
-          {navigationSource === 'subtask' && (
-            <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 bg-indigo-500/10 border border-indigo-500/30 rounded-2xl text-indigo-900 dark:text-indigo-200 text-xs font-bold shadow-sm">
-              <div className="flex items-center gap-2">
-                <History size={16} className="text-indigo-600 dark:text-indigo-400 shrink-0" />
-                <span>
-                  Contexto da Subtarefa: <strong>{availableProjects.find(p => filterProjects.includes(p.id))?.name || 'Projeto'}</strong> &gt; <strong>{availableSubtasks.find(s => filterSubtasks.includes(s.id))?.label || 'Subtarefa'}</strong>
-                </span>
-              </div>
-              {onReturnToProject && (
-                <button
-                  type="button"
-                  onClick={onReturnToProject}
-                  className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-xl transition-colors cursor-pointer font-bold flex items-center gap-1 shadow-xs"
-                >
-                  <ArrowLeft size={12} />
-                  <span>Voltar ao Projeto</span>
-                </button>
-              )}
-            </div>
-          )}
-
           {/* Grid de Filtros Principais */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 min-w-0">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 min-w-0">
             <div className="relative min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input 
@@ -1305,15 +1131,6 @@ export default function OperationalActionsTab({
               options={availableProjects.map(p => ({ id: p.id, label: p.name }))}
               selectedValues={filterProjects}
               onChange={setFilterProjects}
-              searchable={true}
-            />
-
-            <MultiSelectFilter 
-              label="Subtarefas"
-              placeholder="Todas as Subtarefas"
-              options={availableSubtasks}
-              selectedValues={filterSubtasks}
-              onChange={setFilterSubtasks}
               searchable={true}
             />
 

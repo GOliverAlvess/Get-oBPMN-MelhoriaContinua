@@ -1225,6 +1225,10 @@ async function startServer() {
       res.status(404).send("Arquivo não encontrado");
     });
 
+    app.get(["/health", "/api/health"], (req, res) => {
+      res.status(200).json({ status: "ok", port: PORT, uptime: process.uptime() });
+    });
+
     app.get("*", (req, res) => {
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.setHeader("Pragma", "no-cache");
@@ -1233,9 +1237,16 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+  });
+
+  server.on("error", (err: any) => {
+    console.error(`FATAL: Server listen error on port ${PORT}:`, err);
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error("FATAL: Failed to start server:", err);
+  process.exit(1);
+});

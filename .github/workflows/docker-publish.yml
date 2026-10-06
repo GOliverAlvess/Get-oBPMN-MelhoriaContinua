@@ -3,7 +3,16 @@ name: Build and Push to Docker Hub
 on:
   push:
     branches:
-      - main-master # Ativa a pipeline apenas para envios na branch main-master e não na dev
+      - main-master # Publicação para o Docker Hub EXCLUSIVAMENTE ao mesclar/enviar na branch main-master
+  pull_request:
+    branches:
+      - main-master # Executa validação de lint e testes ao abrir/atualizar PR direcionada para main-master
+  workflow_dispatch:
+
+# Cancela execuções redundantes se novos commits forem enviados rapidamente
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test-and-lint:
@@ -36,6 +45,8 @@ jobs:
   build-and-push:
     name: Build & Push Docker Image
     needs: test-and-lint # Garante que os testes passem com sucesso ANTES de gerar a imagem Docker
+    # Publica no Docker Hub SOMENTE em push/merge na main-master ou disparo manual aprovado
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:

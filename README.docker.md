@@ -18,7 +18,9 @@ Este documento contém todas as instruções necessárias para rodar o projeto e
 
 ## ⚡ Automação com GitHub Actions (Docker Hub)
 
-Foi configurada uma pipeline que compila a imagem Docker e a envia automaticamente para o seu repositório no **Docker Hub** a cada alteração aprovada nas branches `main` ou `master`.
+Foi configurada uma pipeline que valida a aplicação e publica a imagem Docker no **Docker Hub** com governança e controle de versão:
+- **Ao abrir Pull Request (de `main` para `main-master`):** O GitHub Actions executa a etapa de validação (`test-and-lint`) rodando `npm ci`, checagem de tipos TypeScript (`tsc --noEmit`) e todos os testes automatizados com Vitest.
+- **Ao aprovar e mesclar (Merge na branch `main-master`):** Após os testes passarem, a etapa `build-and-push` é autorizada, compilando e publicando automaticamente a imagem atualizada no Docker Hub. Nenhuma publicação para o Docker Hub ocorre antes da aprovação do merge na `main-master`.
 
 ### Como Configurar em 3 Passos Simples:
 
@@ -37,11 +39,11 @@ No seu repositório do GitHub onde este código está hospedado:
    * **`DOCKERHUB_USERNAME`**: Insira o seu nome de usuário (ID) do Docker Hub.
    * **`DOCKERHUB_TOKEN`**: Cole o Access Token gerado no passo 1.
 
-#### 3. Pronto! Como testar:
-Sempre que você fizer um `git push` para as branches `main` ou `master`, o GitHub Actions irá disparar automaticamente. Você pode acompanhar o progresso em tempo real na aba **Actions** do seu repositório no GitHub.
-
-Ao concluir com sucesso, a imagem estará disponível no Docker Hub sob o nome:
-`seu-usuario-do-dockerhub/pdca-system-app:latest` e `seu-usuario-do-dockerhub/pdca-system-app:<short-sha-do-commit>`
+#### 3. Pronto! Fluxo de trabalho:
+1. As alterações são sincronizadas na branch `main`.
+2. Você abre uma Pull Request da `main` para a `main-master`. O GitHub Actions executa os testes para garantir a integridade.
+3. Ao aprovar e realizar o merge na branch `main-master`, o GitHub Actions compila e envia a nova imagem para o Docker Hub:
+   `seu-usuario-do-dockerhub/pdca-system-app:latest` e `seu-usuario-do-dockerhub/pdca-system-app:<short-sha-do-commit>`
 
 ---
 

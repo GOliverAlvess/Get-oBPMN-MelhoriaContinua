@@ -11,7 +11,9 @@ import {
   Search,
   CheckCircle2,
   Clock,
-  User as UserIcon
+  User as UserIcon,
+  AlertCircle,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { format, isWithinInterval, parseISO, startOfDay, endOfDay } from 'date-fns';
@@ -36,6 +38,7 @@ import {
   OperationType 
 } from '../firebase';
 import { Project, User, OperationalAction, ReportLog, GainsStructure } from '../types';
+import { getPDCAFinancialResult } from '../utils/pdcaFinancialUtils';
 
 const formatGains = (gains: GainsStructure | undefined): string => {
   if (!gains) return 'Sem registro';
@@ -234,16 +237,6 @@ if (pdfFonts && (pdfFonts as any).pdfMake) {
   (pdfMake as any).vfs = (pdfFonts as any).vfs;
 }
 
-const formatExpectedTangibleGains = (gains: GainsStructure | undefined): string => {
-  if (!gains || !gains.tangible || gains.tangible.length === 0) return '';
-  return gains.tangible.map(t => `${t.type || ''}: ${t.unit || ''} ${t.value ?? ''}`).filter(Boolean).join(' | ');
-};
-
-const formatExpectedIntangibleGains = (gains: GainsStructure | undefined): string => {
-  if (!gains || !gains.intangible || gains.intangible.length === 0) return '';
-  return gains.intangible.map(i => `${i.type || ''} (${i.impactLevel || ''})${i.description ? ` - ${i.description}` : ''}`).filter(Boolean).join(' | ');
-};
-
 const formatRealGainsStr = (gains: GainsStructure | undefined): string => {
   if (!gains) return '';
   const tangible = (gains.tangible || []).map(t => `${t.type || ''}: ${t.unit || ''} ${t.value ?? ''}`).filter(Boolean).join(' | ');
@@ -283,8 +276,6 @@ const HEADERS_PDCA = [
   "PLAN - Impacto - Descrição",
   "PLAN - Impacto - Valor Atual",
   "PLAN - Meta (%)",
-  "PLAN - Impacto - Ganhos Esperados Tangíveis",
-  "PLAN - Impacto - Ganhos Esperados Intangíveis",
   "ODS",
   "ODS (Descrição)",
   "ESG",
@@ -344,6 +335,16 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
   const [reportLogs, setReportLogs] = useState<ReportLog[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [toastNotification, setToastNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  useEffect(() => {
+    if (toastNotification) {
+      const timer = setTimeout(() => {
+        setToastNotification(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastNotification]);
 
   // Hidden ref for report generation
   const printRef = React.useRef<HTMLDivElement>(null);
@@ -818,14 +819,31 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                         }
                       ],
                       [
-                        { text: 'IMPACTO GERAL', style: 'tableHeaderTiny', alignment: 'left' },
-                        { text: cycle.plan.impact?.description || 'N/A', style: 'tableCellTiny', alignment: 'left' }
+                        { text: 'IMPACTO: DESCRIÇÃO', style: 'tableHeaderTiny', alignment: 'left' },
+                        { text: cycle.plan.impact?.description || 'Não informado', style: 'tableCellTiny', alignment: 'left' }
                       ],
-                      // Subitem correspondente ao Impacto Atual, exibindo seu valor financeiro corrente e a melhoria esperada
-                      [
-                        { text: 'IMPACTO ATUAL', style: 'tableHeaderTiny', alignment: 'left' },
-                        { text: `Valor Atual: ${formatValueBrl(cycle.plan.impact?.value)} | Melhoria Esperada: ${cycle.plan.impact?.improvementPercentage || 0}%`, style: 'tableCellTiny', alignment: 'left', bold: true, color: '#003489' }
-                      ]
+                      ...(() => {
+                        const planLossRaw = cycle.plan.impact?.financialCurrentLoss ?? cycle.plan.impact?.tangibleFinancialLoss ?? cycle.plan.impact?.value;
+                        const numLoss = typeof planLossRaw === 'number' ? planLossRaw : (planLossRaw ? Number(planLossRaw) : undefined);
+                        const hasPlanFinancial = numLoss !== undefined && !isNaN(numLoss) && (numLoss > 0 || cycle.plan.impact?.financialCurrentLoss !== undefined);
+                        if (!hasPlanFinancial) return [];
+
+                        const fType = cycle.plan.impact?.financialType || 'Recorrente';
+                        const fPer = cycle.plan.impact?.financialPeriodicity || 'Mensal';
+                        const fPerOther = cycle.plan.impact?.financialPeriodicityOther;
+                        const perStr = fType === 'Único' ? ' (Único)' : ` / ${fPer === 'Outro' && fPerOther ? fPerOther : fPer.toLowerCase()}`;
+
+                        return [[
+                          { text: 'IMPACTO FINANCEIRO ATUAL', style: 'tableHeaderTiny', alignment: 'left' },
+                          { 
+                            text: `${formatValueBrl(numLoss)}${perStr}`, 
+                            style: 'tableCellTiny', 
+                            alignment: 'left', 
+                            bold: true, 
+                            color: '#003489' 
+                          }
+                        ]];
+                      })()
                     ]
                   },
                   layout: {
@@ -840,23 +858,6 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                   },
                   margin: [0, 0, 0, 10]
                 });
-
-                // Ganhos Esperados (PLAN)
-                if (cycle.plan.impact?.expectedGains && (cycle.plan.impact.expectedGains.tangible?.length > 0 || cycle.plan.impact.expectedGains.intangible?.length > 0)) {
-                  planItems.push({ text: 'GANHOS ESPERADOS (PLAN)', style: 'fieldLabel', margin: [0, 5, 0, 2] });
-                  if (cycle.plan.impact.expectedGains.tangible?.length > 0) {
-                    planItems.push(renderGainsTable(cycle.plan.impact.expectedGains));
-                  }
-                  if (cycle.plan.impact.expectedGains.intangible?.length > 0) {
-                    planItems.push({
-                      ul: cycle.plan.impact.expectedGains.intangible.map((ig: any) => ({
-                        text: `${ig.type}: ${ig.description} (Impacto: ${ig.impactLevel})`,
-                        fontSize: 7
-                      })),
-                      margin: [10, 4, 0, 8]
-                    });
-                  }
-                }
 
                 // Plano de Ação (5W2H)
                 if (mappedActions.length > 0) {
@@ -1090,7 +1091,66 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                   margin: [0, 4, 0, 10]
                 });
 
-                // Ganhos Reais
+                // Resultado Financeiro Consolidado do Ciclo PDCA
+                const finRes = getPDCAFinancialResult(cycle);
+                if (finRes.hasFinancialData) {
+                  const isGain = finRes.resultClassification === 'GANHO';
+                  const isLoss = finRes.resultClassification === 'PERDA';
+
+                  const perUnit = finRes.financialType === 'Recorrente' 
+                    ? ` / ${finRes.financialPeriodicity === 'Outro' && finRes.financialPeriodicityOther ? finRes.financialPeriodicityOther : finRes.financialPeriodicity.toLowerCase()}` 
+                    : '';
+
+                  let periodicityText = finRes.financialType === 'Único' ? 'Único' : finRes.financialPeriodicity;
+                  if (finRes.financialPeriodicity === 'Outro' && finRes.financialPeriodicityOther) {
+                    periodicityText = `Outro (${finRes.financialPeriodicityOther})`;
+                  }
+
+                  checkItems.push({ text: 'RESULTADO FINANCEIRO DO CICLO', style: 'fieldLabel', margin: [0, 8, 0, 4] });
+                  checkItems.push({
+                    table: {
+                      widths: ['25%', '27%', '26%', '22%'],
+                      body: [
+                        [
+                          { text: 'IMPACTO FINANCEIRO ATUAL', style: 'tableHeaderTiny', alignment: 'center' },
+                          { text: 'IMPACTO APÓS A MELHORIA', style: 'tableHeaderTiny', alignment: 'center' },
+                          { text: 'RESULTADO FINANCEIRO', style: 'tableHeaderTiny', alignment: 'center' },
+                          { text: 'TIPO / INÍCIO', style: 'tableHeaderTiny', alignment: 'center' }
+                        ],
+                        [
+                          { text: `${formatValueBrl(finRes.financialCurrentLoss)}${perUnit}`, style: 'tableCellTiny', alignment: 'center' },
+                          { text: `${formatValueBrl(finRes.financialPostImprovement)}${perUnit}`, style: 'tableCellTiny', alignment: 'center' },
+                          { 
+                            text: `${isGain ? '+ ' : isLoss ? '- ' : ''}${formatValueBrl(Math.abs(finRes.financialResult))}${perUnit}\n(${finRes.resultClassification === 'SEM_VARIACAO' ? 'Sem variação' : finRes.resultClassification})`, 
+                            style: 'tableCellTiny', 
+                            alignment: 'center', 
+                            bold: true, 
+                            color: isGain ? '#059669' : isLoss ? '#dc2626' : '#64748b' 
+                          },
+                          { 
+                            text: `${finRes.financialType}${finRes.financialType === 'Recorrente' ? ` (${periodicityText})` : ''}${finRes.financialStartDate ? `\nInício: ${finRes.financialStartDate}` : ''}`, 
+                            style: 'tableCellTiny', 
+                            alignment: 'center' 
+                          }
+                        ]
+                      ]
+                    },
+                    layout: {
+                      hLineWidth: () => 1,
+                      vLineWidth: () => 1,
+                      hLineColor: () => '#e2e8f0',
+                      vLineColor: () => '#e2e8f0',
+                      fillColor: (rowIndex: number) => rowIndex === 0 ? '#f8fafc' : (isGain ? '#ecfdf5' : isLoss ? '#fff1f2' : '#ffffff'),
+                      paddingLeft: () => 4,
+                      paddingRight: () => 4,
+                      paddingTop: () => 4,
+                      paddingBottom: () => 4
+                    },
+                    margin: [0, 2, 0, 8]
+                  });
+                }
+
+                // Ganhos Reais Legados por Ação
                 const actionsWithRealGains = mappedActions.filter(
                   (item: any) => item.realGains && (item.realGains.tangible?.length > 0 || item.realGains.intangible?.length > 0)
                 );
@@ -1340,8 +1400,6 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
                       "PLAN - Impacto - Descrição": cycle.plan.impact.description || '',
                       "PLAN - Impacto - Valor Atual": cycle.plan.impact.value ?? '',
                       "PLAN - Meta (%)": cycle.plan.impact.improvementPercentage ?? cycle.plan.impact.goal ?? '',
-                      "PLAN - Impacto - Ganhos Esperados Tangíveis": formatExpectedTangibleGains(cycle.plan.impact.expectedGains),
-                      "PLAN - Impacto - Ganhos Esperados Intangíveis": formatExpectedIntangibleGains(cycle.plan.impact.expectedGains),
                       "ODS": (project.scope?.odsSelecionadas && project.scope.odsSelecionadas.length > 0) ? project.scope.odsSelecionadas.join(', ') : '',
                       "ODS (Descrição)": project.scope?.odsDescricao || project.scope?.ods || '',
                       "ESG": (project.scope?.esgSelecionado && project.scope.esgSelecionado.length > 0) ? project.scope.esgSelecionado.join(', ') : '',
@@ -1421,7 +1479,13 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
 
     } catch (error) {
       console.error('Erro ao gerar relatório:', error);
-      alert('Erro ao gerar relatório. Verifique os logs do console.');
+      const isPDF = reportType === 'Relatório Completo';
+      setToastNotification({
+        type: 'error',
+        message: isPDF 
+          ? 'Não foi possível gerar o PDF. Tente novamente.' 
+          : 'Não foi possível gerar o relatório. Tente novamente.'
+      });
     } finally {
       setIsGenerating(false);
     }
@@ -1927,6 +1991,35 @@ export default function ReportsTab({ projects, users, actions }: ReportsTabProps
           )}
         </div>
       </div>
+
+      {/* Toast Notification Flutuante */}
+      <AnimatePresence>
+        {toastNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-6 right-6 z-[300] max-w-md shadow-2xl"
+          >
+            <div className={cn(
+              "px-5 py-4 rounded-2xl border flex items-center gap-3 font-bold text-sm backdrop-blur-md",
+              toastNotification.type === 'error' && "bg-rose-600 text-white border-rose-500 shadow-rose-500/20",
+              toastNotification.type === 'success' && "bg-emerald-600 text-white border-emerald-500 shadow-emerald-500/20"
+            )}>
+              {toastNotification.type === 'error' && <AlertCircle size={20} className="shrink-0 text-rose-100" />}
+              {toastNotification.type === 'success' && <CheckCircle2 size={20} className="shrink-0 text-emerald-100" />}
+              <span className="flex-1 text-xs sm:text-sm font-medium">{toastNotification.message}</span>
+              <button 
+                type="button" 
+                onClick={() => setToastNotification(null)}
+                className="p-1 hover:bg-white/20 rounded-lg transition-colors text-white/80 hover:text-white cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

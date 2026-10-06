@@ -210,7 +210,11 @@ export interface PDCACycle {
 
       // Melhores estruturais aditivas na análise de Impacto
       impactType?: 'Tangível' | 'Intangível' | 'Ambos';
-      tangibleFinancialLoss?: number; // Perda financeira estimada (R$)
+      financialCurrentLoss?: number; // Impacto financeiro atual do problema (R$)
+      financialType?: 'Único' | 'Recorrente'; // Tipo do impacto financeiro
+      financialPeriodicity?: 'Mensal' | 'Anual' | 'Outro'; // Periodicidade se recorrente
+      financialPeriodicityOther?: string; // Descrição quando periodicidade for 'Outro'
+      tangibleFinancialLoss?: number; // Perda financeira estimada (R$) - legado/compatibilidade
       tangibleWastedTime?: number; // Tempo desperdiçado (horas/mês)
       tangibleRework?: number | string; // Retrabalho (horas ou %)
       tangibleOtherCosts?: string; // Outros custos
@@ -227,8 +231,14 @@ export interface PDCACycle {
   };
   check?: { // Avaliação de vínculo e resultados consolidados na etapa CHECK
     realResultType?: 'Tangível' | 'Intangível' | 'Ambos'; // Tipo de resultado obtido na prática
+    financialPostImprovement?: number; // Impacto financeiro após a melhoria (R$)
+    financialResult?: number; // Resultado financeiro líquido (calculado: atual - após melhoria)
+    financialType?: 'Único' | 'Recorrente'; // Tipo do resultado financeiro
+    financialPeriodicity?: 'Mensal' | 'Anual' | 'Outro'; // Periodicidade do resultado
+    financialPeriodicityOther?: string; // Descrição quando periodicidade for 'Outro'
+    financialStartDate?: string; // Data de início do resultado financeiro (YYYY-MM-DD)
     expectedGainAchieved?: 'Sim' | 'Parcial' | 'Não'; // Se o ganho esperado foi atingido
-    realCostReduction?: number; // Redução de custo real obtida (R$)
+    realCostReduction?: number; // Redução de custo real obtida (R$) - legado/compatibilidade
     realTimeGain?: number; // Ganho de tempo real obtido (horas/mês)
     realIndicatorResult?: number; // Resultado percentual obtido (%)
     realIntangibleNotes?: string; // Detalhamento dos resultados intangíveis obtidos
@@ -299,11 +309,30 @@ export interface User {
   password?: string; // Senha em texto puro (usada temporariamente no formulário)
   passwordHash?: string; // Hash seguro da senha de acesso
   lastPasswordChange?: string; // Data da última alteração de senha
-  lastAccess?: string; // Data e hora do último acesso ao sistema
-  loginCount?: number; // Total de acessos (logins) realizados
-  actionCount?: number; // Quantidade de ações/operações realizadas
-  totalUsageMinutes?: number; // Tempo total estimado de uso do sistema em minutos
+  lastAccess?: string; // Data e hora do último login autenticado no sistema
+  lastLoginAt?: string; // Data e hora da última autenticação/login realizado com sucesso
+  lastActiveAt?: string; // Data e hora da última atividade/operação relevante realizada no sistema
+  lastPresenceAt?: string; // Data e hora do último heartbeat de presença ativa (com interação recente)
+  isOnline?: boolean; // Indicador de presença ativa em tempo real
+  loginCount?: number; // Total de acessos (sessões/logins) realizados
+  actionCount?: number; // Quantidade de ações/operações relevantes realizadas
+  totalActiveSeconds?: number; // Tempo total real ativo em segundos
+  totalUsageMinutes?: number; // Tempo total de uso em minutos
   status?: 'Ativo' | 'Inativo'; // Status de atividade recente do usuário
+}
+
+// Registro diário consolidado de atividade real e tempo ativo de cada usuário
+export interface UserDailyActivity {
+  id: string; // Formato: ${userId}_${YYYY-MM-DD}
+  userId: string;
+  userName: string;
+  userEmail?: string;
+  date: string; // Formato YYYY-MM-DD
+  activeSeconds: number; // Segundos efetivamente ativos no dia
+  activeMinutes: number; // Minutos ativos no dia
+  lastActiveAt: string; // Timestamp ISO da última atividade do dia
+  sessionsCount: number; // Quantidade de sessões autenticadas iniciadas no dia
+  actionsCount: number; // Quantidade de operações relevantes realizadas no dia
 }
 
 // Registro de log de auditoria e atividade de usuários

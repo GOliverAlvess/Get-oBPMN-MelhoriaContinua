@@ -20,7 +20,13 @@ interface MulterRequest extends Request {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3004;
+  const portEnv = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
+  const PORT =
+    portEnv && portEnv !== 8080
+      ? portEnv
+      : process.env.NODE_ENV === "production"
+        ? 3004
+        : 3000;
 
   app.use(express.json({ limit: "100mb" }));
   app.use(express.urlencoded({ limit: "100mb", extended: true }));
@@ -136,6 +142,30 @@ async function startServer() {
 
     const profile = user.profile || 'Usuário Analista';
 
+    // Notifications: Allow any authenticated user to create/manage their own notifications (and Masters all)
+    if (collection === 'notifications') {
+      if (method === 'DELETE' || method === 'PUT') {
+        if (id) {
+          let existingNotif: any = null;
+          if (db) {
+            existingNotif = await db.collection('notifications').findOne({ _id: id });
+          } else {
+            existingNotif = memoryDb['notifications']?.[id];
+          }
+          if (existingNotif) {
+            const isOwner = (
+              (existingNotif.usuario_id && existingNotif.usuario_id === user.id) ||
+              (existingNotif.usuario_id && user.email && existingNotif.usuario_id.toLowerCase() === user.email.toLowerCase())
+            );
+            if (!isOwner && profile !== 'Usuário Master') {
+              return { authorized: false, error: "Você só possui permissão para gerenciar suas próprias notificações." };
+            }
+          }
+        }
+      }
+      return { authorized: true };
+    }
+
     if (profile === 'Usuário Master') {
       return { authorized: true };
     }
@@ -180,7 +210,6 @@ async function startServer() {
       }
 
       if (collection === 'operationalActions') {
-        const payload = req.body?.data;
         if (method === 'DELETE') {
           let existingAction: any = null;
           if (db) {
@@ -188,14 +217,14 @@ async function startServer() {
           } else {
             existingAction = memoryDb['operationalActions']?.[id!];
           }
-          if (existingAction && existingAction.responsibleId !== user.id) {
-            return { authorized: false, error: "Você não é o responsável por esta ação." };
-          }
-        } else {
-          if (payload && payload.responsibleId && payload.responsibleId !== user.id) {
-            return { authorized: false, error: "Você só pode salvar ações atribuídas a você mesmo." };
+          if (existingAction && existingAction.status === 'Concluído') {
+            return { 
+              authorized: false, 
+              error: "Apenas usuários com perfil Master possuem permissão para excluir ações com status Concluído." 
+            };
           }
         }
+        return { authorized: true };
       }
 
       return { authorized: true };
@@ -453,6 +482,291 @@ async function startServer() {
     }
   });
 
+  // POST: Clear all notifications for authenticated user
+  app.post("/api/notifications/clear-all", async (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    const uid = req.headers['x-user-uid'] as string;
+    const { notificationIds } = req.body || {};
+
+    if (!email && !uid) {
+      return res.status(401).json({ error: "Usuário não autenticado." });
+    }
+
+    try {
+      const user = email ? await getUserByEmail(email) : null;
+      let userByUid: any = null;
+      if (uid && !user) {
+        if (db) {
+          userByUid = await db.collection("users").findOne({ _id: uid });
+        } else {
+          userByUid = memoryDb["users"]?.[uid];
+        }
+      }
+      const matchedUser = user || userByUid;
+
+      const validUserIds = new Set<string>();
+      if (uid) validUserIds.add(uid);
+      if (email) {
+        validUserIds.add(email);
+        validUserIds.add(email.toLowerCase());
+      }
+      if (matchedUser) {
+        if (matchedUser.id) validUserIds.add(matchedUser.id);
+        if (matchedUser._id) validUserIds.add(matchedUser._id);
+        if (matchedUser.email) {
+          validUserIds.add(matchedUser.email);
+          validUserIds.add(matchedUser.email.toLowerCase());
+        }
+      }
+
+      const validList = Array.from(validUserIds);
+
+      if (db) {
+        const userFilters: any[] = validList.map(id => ({
+          usuario_id: { $regex: new RegExp(`^${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i") }
+        }));
+
+        let filter: any;
+        if (Array.isArray(notificationIds) && notificationIds.length > 0) {
+          filter = {
+            _id: { $in: notificationIds },
+            $or: userFilters
+          };
+        } else {
+          filter = { $or: userFilters };
+        }
+
+        const docsToDelete = await db.collection("notifications").find(filter).toArray();
+        if (docsToDelete.length > 0) {
+          const idsToDelete = docsToDelete.map(d => d._id);
+          await db.collection("notifications").deleteMany({ _id: { $in: idsToDelete } });
+          for (const doc of docsToDelete) {
+            await broadcastDocChange("notifications", doc._id, "delete");
+          }
+        }
+        return res.json({ success: true, count: docsToDelete.length });
+      } else {
+        const notifs = memoryDb["notifications"] || {};
+        let count = 0;
+        const idsToRemove: string[] = [];
+        for (const [id, notif] of Object.entries(notifs)) {
+          const n = notif as any;
+          const matchesUser = validList.some(vid => 
+            n.usuario_id === vid || 
+            (typeof n.usuario_id === 'string' && typeof vid === 'string' && n.usuario_id.toLowerCase() === vid.toLowerCase())
+          );
+          if (matchesUser) {
+            if (Array.isArray(notificationIds) && notificationIds.length > 0) {
+              if (notificationIds.includes(id)) {
+                idsToRemove.push(id);
+              }
+            } else {
+              idsToRemove.push(id);
+            }
+          }
+        }
+        for (const id of idsToRemove) {
+          delete memoryDb["notifications"][id];
+          await broadcastDocChange("notifications", id, "delete");
+          count++;
+        }
+        return res.json({ success: true, count });
+      }
+    } catch (error: any) {
+      console.error("Erro ao limpar notificações:", error);
+      res.status(500).json({ error: error.message || "Erro ao limpar notificações." });
+    }
+  });
+
+  // POST: Atomic increment and update for user activity counters (prevents race conditions - AUD-001)
+  app.post("/api/user-activity/atomic-update", async (req, res) => {
+    const email = req.headers['x-user-email'] as string;
+    const uid = req.headers['x-user-uid'] as string;
+    const {
+      userId,
+      userName,
+      userEmail,
+      date,
+      dailyInc,
+      dailySet,
+      userInc,
+      userSet
+    } = req.body || {};
+
+    if (!userId || !date) {
+      return res.status(400).json({ error: "userId e date são obrigatórios." });
+    }
+
+    // Security validation: ensure the user only updates their own activity (or is Master)
+    if (email) {
+      const authUser = await getUserByEmail(email);
+      if (authUser) {
+        const isSelf = (authUser.id === userId || authUser.email?.toLowerCase() === (userEmail || '').toLowerCase());
+        const isMaster = authUser.profile === 'Usuário Master';
+        if (!isSelf && !isMaster) {
+          return res.status(403).json({ error: "Não autorizado a atualizar métricas de outro usuário." });
+        }
+      }
+    }
+
+    const docId = `${userId}_${date}`;
+
+    try {
+      if (db) {
+        // 1. Update userDailyActivity with $inc and $set
+        const dailyUpdateOp: any = {};
+        const incDaily: any = {};
+        if (typeof dailyInc?.activeSeconds === 'number' && dailyInc.activeSeconds > 0) incDaily.activeSeconds = dailyInc.activeSeconds;
+        if (typeof dailyInc?.actionsCount === 'number' && dailyInc.actionsCount > 0) incDaily.actionsCount = dailyInc.actionsCount;
+        if (typeof dailyInc?.sessionsCount === 'number' && dailyInc.sessionsCount > 0) incDaily.sessionsCount = dailyInc.sessionsCount;
+        if (Object.keys(incDaily).length > 0) dailyUpdateOp.$inc = incDaily;
+
+        const setDaily: any = {
+          id: docId,
+          userId,
+          date,
+          ...(userName ? { userName } : {}),
+          ...(userEmail ? { userEmail } : {}),
+          ...(dailySet || {})
+        };
+        dailyUpdateOp.$set = setDaily;
+
+        // Use $setOnInsert for defaults if document is newly inserted
+        dailyUpdateOp.$setOnInsert = {
+          activeSeconds: 0,
+          actionsCount: 0,
+          sessionsCount: 0,
+        };
+        // Remove from $setOnInsert any field that is in $inc to avoid MongoDB conflict
+        for (const incKey of Object.keys(incDaily)) {
+          delete dailyUpdateOp.$setOnInsert[incKey];
+        }
+        if (Object.keys(dailyUpdateOp.$setOnInsert).length === 0) {
+          delete dailyUpdateOp.$setOnInsert;
+        }
+
+        await db.collection("userDailyActivity").updateOne(
+          { _id: docId },
+          dailyUpdateOp,
+          { upsert: true }
+        );
+
+        // Sync activeMinutes from activeSeconds
+        const updatedDaily = await db.collection("userDailyActivity").findOne({ _id: docId });
+        if (updatedDaily && typeof updatedDaily.activeSeconds === 'number') {
+          const expectedMinutes = Math.round(updatedDaily.activeSeconds / 60);
+          if (updatedDaily.activeMinutes !== expectedMinutes) {
+            await db.collection("userDailyActivity").updateOne(
+              { _id: docId },
+              { $set: { activeMinutes: expectedMinutes } }
+            );
+          }
+        }
+        await broadcastDocChange("userDailyActivity", docId, "update");
+
+        // 2. Update users document if userInc or userSet provided
+        const hasUserInc = userInc && Object.keys(userInc).some(k => typeof userInc[k] === 'number' && userInc[k] > 0);
+        const hasUserSet = userSet && Object.keys(userSet).length > 0;
+
+        if (hasUserInc || hasUserSet) {
+          const userUpdateOp: any = {};
+          const incUser: any = {};
+          if (typeof userInc?.totalActiveSeconds === 'number' && userInc.totalActiveSeconds > 0) incUser.totalActiveSeconds = userInc.totalActiveSeconds;
+          if (typeof userInc?.actionCount === 'number' && userInc.actionCount > 0) incUser.actionCount = userInc.actionCount;
+          if (typeof userInc?.loginCount === 'number' && userInc.loginCount > 0) incUser.loginCount = userInc.loginCount;
+          if (Object.keys(incUser).length > 0) userUpdateOp.$inc = incUser;
+
+          if (hasUserSet) {
+            userUpdateOp.$set = { ...userSet };
+          }
+
+          await db.collection("users").updateOne(
+            { _id: userId },
+            userUpdateOp,
+            { upsert: true }
+          );
+
+          const updatedUser = await db.collection("users").findOne({ _id: userId });
+          if (updatedUser && typeof updatedUser.totalActiveSeconds === 'number') {
+            const expectedUsageMins = Math.round(updatedUser.totalActiveSeconds / 60);
+            if (updatedUser.totalUsageMinutes !== expectedUsageMins) {
+              await db.collection("users").updateOne(
+                { _id: userId },
+                { $set: { totalUsageMinutes: expectedUsageMins } }
+              );
+            }
+          }
+          await broadcastDocChange("users", userId, "update");
+        }
+
+        return res.json({ success: true, docId });
+      } else {
+        // Fallback: memoryDb atomic in-memory update
+        if (!memoryDb["userDailyActivity"]) memoryDb["userDailyActivity"] = {};
+        const existingDaily = memoryDb["userDailyActivity"][docId] || {
+          id: docId,
+          userId,
+          date,
+          userName: userName || 'Usuário',
+          userEmail: userEmail || '',
+          activeSeconds: 0,
+          activeMinutes: 0,
+          actionsCount: 0,
+          sessionsCount: 0,
+        };
+
+        const mergedDaily = { ...existingDaily };
+        if (userName) mergedDaily.userName = userName;
+        if (userEmail) mergedDaily.userEmail = userEmail;
+        if (dailySet) {
+          Object.assign(mergedDaily, dailySet);
+        }
+        if (typeof dailyInc?.activeSeconds === 'number') mergedDaily.activeSeconds = (Number(mergedDaily.activeSeconds) || 0) + dailyInc.activeSeconds;
+        if (typeof dailyInc?.actionsCount === 'number') mergedDaily.actionsCount = (Number(mergedDaily.actionsCount) || 0) + dailyInc.actionsCount;
+        if (typeof dailyInc?.sessionsCount === 'number') mergedDaily.sessionsCount = (Number(mergedDaily.sessionsCount) || 0) + dailyInc.sessionsCount;
+        mergedDaily.activeMinutes = Math.round((mergedDaily.activeSeconds || 0) / 60);
+        mergedDaily.id = docId;
+
+        memoryDb["userDailyActivity"][docId] = mergedDaily;
+        await broadcastDocChange("userDailyActivity", docId, "update");
+
+        // users collection update
+        const hasUserInc = userInc && Object.keys(userInc).some(k => typeof userInc[k] === 'number' && userInc[k] > 0);
+        const hasUserSet = userSet && Object.keys(userSet).length > 0;
+
+        if (hasUserInc || hasUserSet) {
+          if (!memoryDb["users"]) memoryDb["users"] = {};
+          const existingUser = memoryDb["users"][userId] || {
+            id: userId,
+            name: userName || 'Usuário',
+            email: userEmail || '',
+            totalActiveSeconds: 0,
+            totalUsageMinutes: 0,
+            actionCount: 0,
+            loginCount: 0,
+            status: 'Ativo'
+          };
+
+          const mergedUser = { ...existingUser };
+          if (userSet) Object.assign(mergedUser, userSet);
+          if (typeof userInc?.totalActiveSeconds === 'number') mergedUser.totalActiveSeconds = (Number(mergedUser.totalActiveSeconds) || 0) + userInc.totalActiveSeconds;
+          if (typeof userInc?.actionCount === 'number') mergedUser.actionCount = (Number(mergedUser.actionCount) || 0) + userInc.actionCount;
+          if (typeof userInc?.loginCount === 'number') mergedUser.loginCount = (Number(mergedUser.loginCount) || 0) + userInc.loginCount;
+          mergedUser.totalUsageMinutes = Math.round((mergedUser.totalActiveSeconds || 0) / 60);
+          mergedUser.id = userId;
+
+          memoryDb["users"][userId] = mergedUser;
+          await broadcastDocChange("users", userId, "update");
+        }
+
+        return res.json({ success: true, docId });
+      }
+    } catch (err: any) {
+      console.error("Error in atomic user activity update:", err);
+      return res.status(500).json({ error: err.message || "Erro na atualização atômica." });
+    }
+  });
+
   // GET: Get single document
   app.get("/api/db/:collection/:id", async (req, res) => {
     const { collection, id } = req.params;
@@ -680,28 +994,51 @@ async function startServer() {
   };
 
   // Helper to determine correct MIME type based on file extension and fallback
+  const mimeMap: Record<string, string> = {
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    ppt: 'application/vnd.ms-powerpoint',
+    ppsx: 'application/vnd.openxmlformats-officedocument.presentationml.slideshow',
+    pps: 'application/vnd.ms-powerpoint',
+    potx: 'application/vnd.openxmlformats-officedocument.presentationml.template',
+    pot: 'application/vnd.ms-powerpoint',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    doc: 'application/msword',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    xls: 'application/vnd.ms-excel',
+    pdf: 'application/pdf',
+    png: 'image/png',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    gif: 'image/gif',
+    svg: 'image/svg+xml',
+    webp: 'image/webp',
+    bmp: 'image/bmp',
+    ico: 'image/x-icon',
+    txt: 'text/plain',
+    csv: 'text/csv',
+    zip: 'application/zip',
+    rar: 'application/x-rar-compressed',
+    '7z': 'application/x-7z-compressed',
+  };
+
+  const allowedExtensions = new Set(Object.keys(mimeMap));
+
+  const isSupportedFileServer = (fileName: string, reportedMime?: string): boolean => {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    if (ext && allowedExtensions.has(ext)) {
+      return true;
+    }
+    if (reportedMime && reportedMime !== 'application/octet-stream' && reportedMime !== 'application/x-zip-compressed') {
+      const allowedMimes = Object.values(mimeMap);
+      if (allowedMimes.includes(reportedMime) || reportedMime.startsWith('image/')) {
+        return true;
+      }
+    }
+    return false;
+  };
+
   const getMimeType = (fileName: string, defaultMime?: string): string => {
     const ext = fileName.split('.').pop()?.toLowerCase();
-    const mimeMap: Record<string, string> = {
-      pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      ppt: 'application/vnd.ms-powerpoint',
-      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      doc: 'application/msword',
-      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      xls: 'application/vnd.ms-excel',
-      pdf: 'application/pdf',
-      png: 'image/png',
-      jpg: 'image/jpeg',
-      jpeg: 'image/jpeg',
-      gif: 'image/gif',
-      svg: 'image/svg+xml',
-      txt: 'text/plain',
-      csv: 'text/csv',
-      zip: 'application/zip',
-      rar: 'application/x-rar-compressed',
-      '7z': 'application/x-7z-compressed',
-    };
-
     if (ext && mimeMap[ext]) {
       return mimeMap[ext];
     }
@@ -710,13 +1047,33 @@ async function startServer() {
       : 'application/octet-stream';
   };
 
+  const MAX_UPLOAD_SIZE = 100 * 1024 * 1024; // 100MB em bytes
+
   const upload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
+    limits: { 
+      fileSize: MAX_UPLOAD_SIZE,
+      fieldSize: MAX_UPLOAD_SIZE
+    }
   });
 
   // API Routes
-  app.post("/api/drive/upload", upload.single("file"), async (req: MulterRequest, res: Response) => {
+  app.post("/api/drive/upload", (req: Request, res: Response, next) => {
+    upload.single("file")(req, res, (err: any) => {
+      if (err) {
+        if (err instanceof multer.MulterError) {
+          if (err.code === "LIMIT_FILE_SIZE") {
+            return res.status(413).json({ 
+              error: "O arquivo excede o limite máximo permitido para upload (100 MB)." 
+            });
+          }
+          return res.status(400).json({ error: `Erro no upload do arquivo: ${err.message}` });
+        }
+        return res.status(500).json({ error: err.message || "Erro durante o processamento do upload." });
+      }
+      next();
+    });
+  }, async (req: MulterRequest, res: Response) => {
     try {
       const { projectId, projectName, driveFolderId } = req.body;
       const file = req.file;
@@ -736,9 +1093,28 @@ async function startServer() {
       // Decode filename if received in latin1
       let originalName = file.originalname;
       try {
-        originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+        if (/[\x80-\xFF]/.test(file.originalname)) {
+          const decoded = Buffer.from(file.originalname, 'latin1').toString('utf8');
+          if (!decoded.includes('\ufffd')) {
+            originalName = decoded;
+          }
+        }
       } catch (e) {
         originalName = file.originalname;
+      }
+
+      // Validação de formato suportado no backend
+      if (!isSupportedFileServer(originalName, file.mimetype)) {
+        return res.status(400).json({ 
+          error: `Arquivo não suportado: "${originalName}". Formatos aceitos: PPTX, PPT, PDF, DOCX, XLSX, imagens, TXT, CSV, ZIP.` 
+        });
+      }
+
+      // Validação de tamanho no backend
+      if (file.size > MAX_UPLOAD_SIZE) {
+        return res.status(413).json({ 
+          error: `O arquivo ${originalName} excede o limite máximo permitido para upload (100 MB).` 
+        });
       }
 
       const fileMimeType = getMimeType(originalName, file.mimetype);

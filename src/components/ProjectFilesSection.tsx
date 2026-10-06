@@ -8,7 +8,11 @@ import {
   Loader2, 
   Paperclip,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Presentation,
+  FileSpreadsheet,
+  FileImage,
+  FileArchive
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { Project, ProjectFile } from '../types';
@@ -16,6 +20,12 @@ import { db, collection, query, where, onSnapshot, addDoc, doc, updateDoc, delet
 import { cn } from '../lib/utils';
 import { logUserActivity } from '../lib/activityLogger';
 import { getApiUrl } from '../utils/apiUrl';
+import { 
+  validateUploadFile, 
+  ACCEPT_FILE_STRING, 
+  MAX_FILE_SIZE_BYTES,
+  getFileExtension 
+} from '../lib/fileValidation';
 import ContextHelp from './ContextHelp';
 
 // Propriedades recebidas pelo componente de lista de anexos do projeto (ProjectFilesSection)
@@ -78,6 +88,14 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
 
     for (let i = 0; i < fileArray.length; i++) {
       const selectedFile = fileArray[i];
+
+      // 1. Validação estrita e robusta de formato e tamanho no frontend
+      const validation = validateUploadFile(selectedFile);
+      if (!validation.valid) {
+        errors.push(validation.error || `Arquivo não suportado: ${selectedFile.name}`);
+        continue;
+      }
+
       setUploadProgress(
         fileArray.length > 1 
           ? `Enviando (${i + 1}/${fileArray.length}): ${selectedFile.name}` 
@@ -117,7 +135,11 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
             }
           } catch (e) {
             if (response.status === 413) {
-              errorMsg = `O arquivo ${selectedFile.name} excede o limite máximo permitido para upload (100 MB).`;
+              if (selectedFile.size > MAX_FILE_SIZE_BYTES) {
+                errorMsg = `O arquivo ${selectedFile.name} excede o limite máximo permitido para upload (100 MB).`;
+              } else {
+                errorMsg = `O servidor recusou o envio do arquivo ${selectedFile.name} (HTTP 413 Payload Too Large).`;
+              }
             }
           }
           throw new Error(errorMsg);
@@ -229,6 +251,24 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
+  // Retorna o ícone correspondente ao formato do arquivo
+  const getFileIcon = (fileName: string) => {
+    const ext = getFileExtension(fileName);
+    if (['pptx', 'ppt', 'ppsx', 'pps', 'potx', 'pot'].includes(ext)) {
+      return { icon: <Presentation size={20} />, color: 'text-amber-600 bg-amber-50 group-hover:bg-amber-100/70 border-amber-100' };
+    }
+    if (['xlsx', 'xls', 'csv'].includes(ext)) {
+      return { icon: <FileSpreadsheet size={20} />, color: 'text-emerald-600 bg-emerald-50 group-hover:bg-emerald-100/70 border-emerald-100' };
+    }
+    if (['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'bmp'].includes(ext)) {
+      return { icon: <FileImage size={20} />, color: 'text-purple-600 bg-purple-50 group-hover:bg-purple-100/70 border-purple-100' };
+    }
+    if (['zip', 'rar', '7z'].includes(ext)) {
+      return { icon: <FileArchive size={20} />, color: 'text-slate-600 bg-slate-100 group-hover:bg-slate-200/70 border-slate-200' };
+    }
+    return { icon: <FileText size={20} />, color: 'text-indigo-600 bg-indigo-50 group-hover:bg-indigo-100/70 border-indigo-100' };
+  };
+
   return (
     <div 
       onDragOver={handleDragOver}
@@ -250,7 +290,7 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
           <div className="text-center">
             <h4 className="text-base font-black uppercase tracking-tight text-indigo-900">Solte os arquivos para enviar</h4>
             <p className="text-xs font-bold text-indigo-600 mt-1">
-              Suporta múltiplos arquivos simultaneamente (salvos no Google Drive)
+              Suporta apresentações (.pptx, .ppt), documentos, planilhas e imagens até 100 MB
             </p>
           </div>
         </div>
@@ -268,7 +308,7 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
               <ContextHelp contentKey="arquivos" size="xs" />
             </div>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">
-              Arraste e solte ou selecione múltiplos arquivos (Google Drive)
+              Arraste e solte ou selecione arquivos até 100 MB (Google Drive)
             </p>
           </div>
         </div>
@@ -295,7 +335,7 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
             className="hidden" 
             onChange={handleFileUpload}
             disabled={isUploading}
-            accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.svg,.txt,.csv,.zip,.rar,.7z,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,image/*"
+            accept={ACCEPT_FILE_STRING}
           />
         </label>
       </div>
@@ -325,58 +365,61 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
           </div>
         ) : files.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {files.map((file) => (
-              <div 
-                key={file.id} 
-                className="group p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:border-indigo-200 hover:bg-white transition-all shadow-sm hover:shadow-md"
-              >
-                <div className="flex items-start gap-3">
-                  <div className="p-2.5 bg-white border border-slate-100 rounded-xl text-slate-500 group-hover:text-indigo-600 group-hover:border-indigo-50 group-hover:bg-indigo-50/50 transition-all">
-                    <FileText size={20} />
+            {files.map((file) => {
+              const fileVisual = getFileIcon(file.fileName);
+              return (
+                <div 
+                  key={file.id} 
+                  className="group p-4 bg-slate-50 border border-slate-100 rounded-2xl hover:border-indigo-200 hover:bg-white transition-all shadow-sm hover:shadow-md"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={cn("p-2.5 rounded-xl border transition-all shrink-0", fileVisual.color)}>
+                      {fileVisual.icon}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <h4 className="text-xs font-black text-slate-700 truncate line-clamp-1" title={file.fileName}>
+                        {file.fileName}
+                      </h4>
+                      <p className="text-[10px] text-slate-400 font-bold mt-1">
+                        {format(new Date(file.uploadedAt), 'dd/MM/yyyy HH:mm')}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-medium">
+                        {formatFileSize(file.size)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-black text-slate-700 truncate line-clamp-1" title={file.fileName}>
-                      {file.fileName}
-                    </h4>
-                    <p className="text-[10px] text-slate-400 font-bold mt-1">
-                      {format(new Date(file.uploadedAt), 'dd/MM/yyyy HH:mm')}
-                    </p>
-                    <p className="text-[10px] text-slate-400 font-medium">
-                      {formatFileSize(file.size)}
-                    </p>
-                  </div>
-                </div>
 
-                {/* Ações disponíveis para os arquivos */}
-                <div className="flex items-center gap-2 mt-4">
-                  <a 
-                    href={file.fileUrl} 
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-600 hover:bg-slate-50 transition-all"
-                  >
-                    <ExternalLink size={12} />
-                    Visualizar
-                  </a>
-                  <a 
-                    href={file.fileUrl.replace('/view', '/download')} 
-                    target="_blank" 
-                    rel="noreferrer"
-                    className="p-1.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 transition-all"
-                    title="Baixar"
-                  >
-                    <Download size={14} />
-                  </a>
-                  <button 
-                    onClick={() => handleFileDelete(file.id)}
-                    className="p-1.5 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100 hover:text-rose-600 transition-all ml-1"
-                    title="Excluir"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  {/* Ações disponíveis para os arquivos */}
+                  <div className="flex items-center gap-2 mt-4">
+                    <a 
+                      href={file.fileUrl} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-[10px] font-black text-slate-600 hover:bg-slate-50 transition-all"
+                    >
+                      <ExternalLink size={12} />
+                      Visualizar
+                    </a>
+                    <a 
+                      href={file.fileUrl.replace('/view', '/download')} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="p-1.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                      title="Baixar"
+                    >
+                      <Download size={14} />
+                    </a>
+                    <button 
+                      onClick={() => handleFileDelete(file.id)}
+                      className="p-1.5 bg-rose-50 text-rose-500 rounded-lg hover:bg-rose-100 hover:text-rose-600 transition-all ml-1"
+                      title="Excluir"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="py-16 text-center border-2 border-dashed border-slate-200 rounded-[2.5rem] bg-slate-50/50 hover:bg-indigo-50/20 hover:border-indigo-300 transition-all cursor-pointer relative group">
@@ -387,14 +430,14 @@ export default function ProjectFilesSection({ project, onUpdateProject }: Projec
                 className="hidden" 
                 onChange={handleFileUpload}
                 disabled={isUploading}
-                accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.svg,.txt,.csv,.zip,.rar,.7z,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,image/*"
+                accept={ACCEPT_FILE_STRING}
               />
               <div className="w-16 h-16 bg-white rounded-3xl flex items-center justify-center text-slate-400 group-hover:text-indigo-600 group-hover:scale-110 mx-auto mb-4 shadow-sm border border-slate-100 transition-all">
                 <Upload size={28} />
               </div>
               <h4 className="text-sm font-black text-slate-700 uppercase tracking-tight">Arraste seus arquivos aqui</h4>
               <p className="text-xs text-slate-400 font-medium mt-2 max-w-xs mx-auto">
-                Ou clique para selecionar múltiplos arquivos (fotos, documentos, planilhas). Tudo será salvo no Google Drive.
+                Ou clique para selecionar arquivos (.pptx, .pdf, .docx, .xlsx, imagens até 100 MB). Tudo será salvo no Google Drive.
               </p>
             </label>
           </div>

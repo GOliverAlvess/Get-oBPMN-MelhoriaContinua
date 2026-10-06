@@ -1039,11 +1039,23 @@ export default function BPMNModeler({
     modelerRef.current = modeler;
 
     let isMounted = true;
+    let hasImported = false;
+    let resizeObserver: ResizeObserver | null = null;
+    let rafId: number | null = null;
     const xml = mapping.xml || INITIAL_XML;
     
-    // Small delay to ensure container is fully ready in the DOM
-    setTimeout(() => {
-      if (!isMounted || !modeler) return;
+    const doImportXML = () => {
+      if (!isMounted || hasImported || !modeler) return;
+      hasImported = true;
+
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+        resizeObserver = null;
+      }
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
 
       modeler.importXML(xml).then(() => {
         if (!isMounted) return;
@@ -1064,7 +1076,28 @@ export default function BPMNModeler({
           console.error('Error importing XML', err);
         }
       });
-    }, 100);
+    };
+
+    // Ensure container has valid dimensions in DOM before importing XML
+    if (container.offsetWidth > 0 && container.offsetHeight > 0) {
+      rafId = requestAnimationFrame(() => {
+        doImportXML();
+      });
+    } else if (typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+            doImportXML();
+            break;
+          }
+        }
+      });
+      resizeObserver.observe(container);
+    } else {
+      rafId = requestAnimationFrame(() => {
+        doImportXML();
+      });
+    }
 
     // Event Listeners
     modeler.on('selection.changed', (e: any) => {
@@ -1114,6 +1147,14 @@ export default function BPMNModeler({
 
     return () => {
       isMounted = false;
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+        resizeObserver = null;
+      }
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
       container.removeEventListener('wheel', handleWheel, { capture: true });
       modeler.destroy();
     };

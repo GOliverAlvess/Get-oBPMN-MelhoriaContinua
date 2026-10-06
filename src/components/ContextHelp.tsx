@@ -136,7 +136,7 @@ export default function ContextHelp({
         <AnimatePresence>
           {isOpen && (
             <div 
-              className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/50 dark:bg-slate-950/70 backdrop-blur-xs p-4 sm:p-6 overflow-hidden"
+              className="fixed inset-0 z-[99999] overflow-y-auto bg-slate-900/60 dark:bg-slate-950/80 backdrop-blur-xs p-3 sm:p-6 flex items-center justify-center min-h-screen"
               onClick={() => handleClose()}
             >
               <motion.div
@@ -145,7 +145,7 @@ export default function ContextHelp({
                 exit={{ opacity: 0, scale: 0.96, y: 8 }}
                 transition={{ duration: 0.18, ease: "easeOut" }}
                 onClick={(e) => e.stopPropagation()}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[calc(100vh-2rem)] sm:max-h-[calc(100vh-3.5rem)] my-auto"
+                className="relative w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] m-auto shrink-0"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="context-help-title"

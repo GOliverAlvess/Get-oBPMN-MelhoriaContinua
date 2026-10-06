@@ -13,7 +13,9 @@ import {
   Legend,
   LabelList,
   Label,
-  ReferenceLine
+  ReferenceLine,
+  AreaChart,
+  Area
 } from 'recharts';
 import { 
   TrendingUp, 
@@ -33,6 +35,9 @@ import {
   Sparkles,
   Zap,
   Award,
+  Calendar,
+  Layers,
+  ArrowDownRight,
   HelpCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -46,6 +51,13 @@ import {
 } from '../types';
 import { cn } from '../lib/utils';
 import { calculateProjectProgress, getCardProgress } from '../lib/projectUtils';
+import { 
+  getPDCAFinancialResult, 
+  getProjectFinancialSummary, 
+  calculateAccumulatedFinancialResult, 
+  getMonthlyFinancialEvolution, 
+  getAllFinancialCycles 
+} from '../utils/pdcaFinancialUtils';
 import ActionsDashboardView from './ActionsDashboardView';
 import FilterDropdown from './FilterDropdown';
 import DetailedOverviewTab from './DetailedOverviewTab';
@@ -59,6 +71,8 @@ interface DashboardViewProps {
   key?: string;
 }
 
+type PeriodFilterType = 'this_month' | 'this_year' | 'last_12_months' | 'all' | 'custom';
+
 export default function DashboardView({ projects, users, actions, onProjectClick }: DashboardViewProps) {
   const [activeTab, setActiveTab] = useState<'projects' | 'actions' | 'overview'>('projects');
   const [projectSubTab, setProjectSubTab] = useState<'geral' | 'ganhos'>('geral');
@@ -66,6 +80,29 @@ export default function DashboardView({ projects, users, actions, onProjectClick
   const [selectedStatuses, setSelectedStatuses] = useState<ProjectStatus[]>([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
   const [showAllSectors, setShowAllSectors] = useState(false);
+
+  // Filtro Temporal de Ganhos
+  const [periodFilter, setPeriodFilter] = useState<PeriodFilterType>('this_year');
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+
+  const userMap = useMemo(() => {
+    const map = new Map<string, User>();
+    users.forEach(u => map.set(u.id, u));
+    return map;
+  }, [users]);
+
+  const collaboratorOptions = useMemo(() => {
+    return users.map(u => ({ id: u.id, label: u.name }));
+  }, [users]);
+
+  const statusOptions = useMemo(() => {
+    return ['Planejamento', 'Em andamento', 'Em melhoria', 'Concluído'].map(s => ({ id: s, label: s }));
+  }, []);
+
+  const projectOptions = useMemo(() => {
+    return projects.map(p => ({ id: p.id, label: p.name }));
+  }, [projects]);
 
   const filteredProjects = useMemo(() => {
     return projects.filter(p => {
@@ -76,155 +113,212 @@ export default function DashboardView({ projects, users, actions, onProjectClick
     });
   }, [projects, selectedCollaborators, selectedStatuses, selectedProjectIds]);
 
-  const gainsStats = useMemo(() => {
-    let totalEstimatedGain = 0;
-    let totalRealizedGain = 0;
-    let totalEstimatedHours = 0;
-    let totalRealizedHours = 0;
-    let tangibleProjectsCount = 0;
-    let intangibleProjectsCount = 0;
+  // Intervalo de Datas para o Filtro de Período (Resultado Realizado até a Data Atual)
+  const dateRange = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
 
-    const projectRanking: Array<{
-      id: string;
-      name: string;
+    if (periodFilter === 'this_month') {
+      const start = new Date(currentYear, now.getMonth(), 1);
+      const end = now;
+      return { 
+        startDate: start, 
+        endDate: end, 
+        filterType: 'this_month',
+        label: format(start, 'MMMM/yyyy', { locale: ptBR }) 
+      };
+    }
+
+    if (periodFilter === 'this_year') {
+      const start = new Date(currentYear, 0, 1);
+      const end = now;
+      return { 
+        startDate: start, 
+        endDate: end, 
+        filterType: 'this_year',
+        label: `Ano de ${currentYear}` 
+      };
+    }
+
+    if (periodFilter === 'last_12_months') {
+      // Janela móvel de 12 meses terminando no mês atual (ex: Set/25 a Ago/26)
+      const start = new Date(now.getFullYear() - 1, now.getMonth() + 1, 1);
+      const end = now;
+      return { 
+        startDate: start, 
+        endDate: end, 
+        filterType: 'last_12_months',
+        label: 'Últimos 12 Meses' 
+      };
+    }
+
+    if (periodFilter === 'custom' && customStartDate && customEndDate) {
+      const start = new Date(customStartDate + 'T00:00:00');
+      const rawEnd = new Date(customEndDate + 'T23:59:59');
+      // Limitado a hoje para resultado realizado
+      const end = rawEnd > now ? now : rawEnd;
+      return { 
+        startDate: start, 
+        endDate: end, 
+        filterType: 'custom',
+        label: `${format(start, 'dd/MM/yyyy')} a ${format(rawEnd, 'dd/MM/yyyy')}` 
+      };
+    }
+
+    // 'all': Todo o histórico financeiro realizado até hoje (horizonte artificial 2035 removido)
+    return { 
+      startDate: new Date(2020, 0, 1), 
+      endDate: now, 
+      filterType: 'all',
+      label: 'Todos os Períodos' 
+    };
+  }, [periodFilter, customStartDate, customEndDate]);
+
+  // Cálculo Executivo de Ganhos e Resultados Financeiros no Período
+  const gainsStats = useMemo(() => {
+    let periodGains = 0;
+    let periodLosses = 0;
+    let totalRealizedHours = 0;
+    const projectsWithFinancialData = new Set<string>();
+
+    const allCycles = getAllFinancialCycles(filteredProjects, userMap);
+
+    // Linhas para a Tabela Executiva
+    const tableRows: Array<{
+      projectId: string;
+      projectTitle: string;
+      projectStatus: string;
       assignedToName: string;
-      status: string;
-      impactType: string;
-      estimatedFinancialGain: number;
-      realizedFinancialGain: number;
-      estimatedHours: number;
-      realizedHours: number;
-      gainAchievedStatus?: string;
+      cycleId: string;
+      cycleName: string;
+      subtaskTitle: string;
+      financialResult: number;
+      classification: 'GANHO' | 'PERDA' | 'SEM_VARIACAO' | 'NAO_APLICAVEL';
+      financialType: string;
+      financialPeriodicity: string;
+      financialStartDate?: string;
+      accumulatedInPeriod: number;
     }> = [];
 
+    // Consolidação por Projeto para o Gráfico de Resultados
+    const projectFinancialMap = new Map<string, {
+      projectId: string;
+      projectName: string;
+      assignedToName: string;
+      status: string;
+      gains: number;
+      losses: number;
+      netBalance: number;
+      accumulatedBalance: number;
+    }>();
+
     filteredProjects.forEach(p => {
-      const user = users.find(u => u.id === p.assignedTo);
-      let pEstGain = p.scope?.financial?.gainProjection?.value || 0;
-      let pRealGain = 0;
-      let pEstHours = 0;
-      let pRealHours = 0;
-      let hasTangible = false;
-      let hasIntangible = false;
-      let achievedStatuses: string[] = [];
+      const user = userMap.get(p.assignedTo);
+      projectFinancialMap.set(p.id, {
+        projectId: p.id,
+        projectName: p.name,
+        assignedToName: user?.name || 'Não atribuído',
+        status: p.status,
+        gains: 0,
+        losses: 0,
+        netBalance: 0,
+        accumulatedBalance: 0,
+      });
 
-      if (p.scope?.financial?.currentImpact?.value) {
-        hasTangible = true;
-      }
-
+      // Contagem de horas de ações legadas/atuais
       (p.subtasks || []).forEach(st => {
         (st.pdcaCycles || []).forEach(c => {
-          const impact = c.plan?.impact;
-          if (impact) {
-            if (impact.impactType === 'Tangível' || impact.impactType === 'Ambos') {
-              hasTangible = true;
-            }
-            if (impact.impactType === 'Intangível' || impact.impactType === 'Ambos') {
-              hasIntangible = true;
-            }
-            if (impact.tangibleFinancialLoss || (impact.value && impact.value > 0)) {
-              hasTangible = true;
-            }
-            if (
-              impact.intangibleCustomerImpact ||
-              impact.intangibleQualityImpact ||
-              impact.intangibleRiskImpact ||
-              impact.intangibleTeamImpact
-            ) {
-              hasIntangible = true;
-            }
-
-            const estCost = impact.expectedCostReduction || impact.value || 0;
-            pEstGain += estCost;
-
-            const estHours = impact.expectedTimeGain || impact.tangibleWastedTime || 0;
-            pEstHours += estHours;
-
-            (impact.expectedGains?.tangible || []).forEach(t => {
-              if (t.value) pEstGain += t.value;
-              if (t.unit && (t.unit.toLowerCase().includes('hora') || t.unit.toLowerCase() === 'h')) {
-                pEstHours += t.value || 0;
-              }
-            });
+          if (c.check?.realTimeGain) {
+            totalRealizedHours += c.check.realTimeGain;
           }
-
-          if (c.check) {
-            if (c.check.realCostReduction) {
-              pRealGain += c.check.realCostReduction;
-            }
-            if (c.check.realTimeGain) {
-              pRealHours += c.check.realTimeGain;
-            }
-            if (c.check.expectedGainAchieved) {
-              achievedStatuses.push(c.check.expectedGainAchieved);
-            }
-          }
-
-          (c.plan?.actionPlan || []).forEach(action => {
-            if (action.ativo !== false && action.realGains?.tangible) {
-              action.realGains.tangible.forEach(t => {
-                if (t.value) pRealGain += t.value;
+          (c.plan?.actionPlan || []).forEach(a => {
+            if (a.ativo !== false && a.realGains?.tangible) {
+              a.realGains.tangible.forEach(t => {
                 if (t.unit && (t.unit.toLowerCase().includes('hora') || t.unit.toLowerCase() === 'h')) {
-                  pRealHours += t.value || 0;
+                  totalRealizedHours += (t.value || 0);
                 }
               });
             }
           });
         });
       });
+    });
 
-      if (hasTangible) tangibleProjectsCount++;
-      if (hasIntangible) intangibleProjectsCount++;
+    allCycles.forEach(c => {
+      const fin = c.financialResult;
+      if (!fin.hasFinancialData && fin.financialResult === 0) return;
 
-      totalEstimatedGain += pEstGain;
-      totalRealizedGain += pRealGain;
-      totalEstimatedHours += pEstHours;
-      totalRealizedHours += pRealHours;
+      projectsWithFinancialData.add(c.projectId);
 
-      let impactTypeStr = 'Não definido';
-      if (hasTangible && hasIntangible) impactTypeStr = 'Ambos';
-      else if (hasTangible) impactTypeStr = 'Tangível';
-      else if (hasIntangible) impactTypeStr = 'Intangível';
+      const accumVal = calculateAccumulatedFinancialResult(fin, {
+        startDate: dateRange.startDate,
+        endDate: dateRange.endDate
+      });
 
-      let mainAchievedStatus = achievedStatuses.includes('Sim')
-        ? 'Sim'
-        : achievedStatuses.includes('Parcial')
-        ? 'Parcial'
-        : achievedStatuses.includes('Não')
-        ? 'Não'
-        : 'Em andamento';
+      if (accumVal > 0) {
+        periodGains += accumVal;
+      } else if (accumVal < 0) {
+        periodLosses += Math.abs(accumVal);
+      }
 
-      projectRanking.push({
-        id: p.id,
-        name: p.name,
-        assignedToName: user?.name || 'Não atribuído',
-        status: p.status,
-        impactType: impactTypeStr,
-        estimatedFinancialGain: pEstGain,
-        realizedFinancialGain: pRealGain,
-        estimatedHours: pEstHours,
-        realizedHours: pRealHours,
-        gainAchievedStatus: mainAchievedStatus,
+      // Atualiza mapa de projetos
+      const projItem = projectFinancialMap.get(c.projectId);
+      if (projItem) {
+        if (accumVal > 0) projItem.gains += accumVal;
+        else if (accumVal < 0) projItem.losses += Math.abs(accumVal);
+        projItem.accumulatedBalance += accumVal;
+        projItem.netBalance += fin.financialResult;
+      }
+
+      let periodicityStr = fin.financialType === 'Único' ? 'Único' : fin.financialPeriodicity;
+      if (fin.financialPeriodicity === 'Outro' && fin.financialPeriodicityOther) {
+        periodicityStr = `Outro (${fin.financialPeriodicityOther})`;
+      }
+
+      tableRows.push({
+        projectId: c.projectId,
+        projectTitle: c.projectTitle,
+        projectStatus: c.projectStatus,
+        assignedToName: c.assignedToName,
+        cycleId: c.cycleId,
+        cycleName: c.cycleName,
+        subtaskTitle: c.subtaskTitle,
+        financialResult: fin.financialResult,
+        classification: fin.resultClassification,
+        financialType: fin.financialType,
+        financialPeriodicity: periodicityStr,
+        financialStartDate: fin.financialStartDate,
+        accumulatedInPeriod: accumVal,
       });
     });
 
-    projectRanking.sort((a, b) => {
-      if (b.realizedFinancialGain !== a.realizedFinancialGain) {
-        return b.realizedFinancialGain - a.realizedFinancialGain;
-      }
-      return b.estimatedFinancialGain - a.estimatedFinancialGain;
+    const periodNetBalance = periodGains - periodLosses;
+
+    // Gráfico de Resultados Financeiros por Projeto (ordenado por saldo líquido acumulado)
+    const projectFinancialRanking = Array.from(projectFinancialMap.values())
+      .filter(p => p.accumulatedBalance !== 0 || p.netBalance !== 0 || projectsWithFinancialData.has(p.projectId))
+      .sort((a, b) => b.accumulatedBalance - a.accumulatedBalance);
+
+    // Evolução Mensal no Período Selecionado (somente realizado até hoje)
+    const monthlyEvolution = getMonthlyFinancialEvolution(filteredProjects, {
+      startDate: dateRange.startDate,
+      endDate: dateRange.endDate,
+      filterType: dateRange.filterType,
     });
 
     return {
-      totalEstimatedGain,
-      totalRealizedGain,
-      totalEstimatedHours,
+      periodGains,
+      periodLosses,
+      periodNetBalance,
+      financialProjectsCount: projectsWithFinancialData.size,
       totalRealizedHours,
-      tangibleProjectsCount,
-      intangibleProjectsCount,
-      projectRanking,
+      tableRows,
+      projectFinancialRanking,
+      monthlyEvolution,
     };
-  }, [filteredProjects, users]);
+  }, [filteredProjects, userMap, dateRange]);
 
+  // Estatísticas da Visão Geral (Geral de Projetos)
   const stats = useMemo(() => {
     const total = filteredProjects.length;
     const completed = filteredProjects.filter(p => p.status === 'Concluído').length;
@@ -235,11 +329,11 @@ export default function DashboardView({ projects, users, actions, onProjectClick
 
     // Process Status Data for Pie Chart
     const processStatusData = [
-      { name: 'Backlog', value: backlog, color: '#64748b' }, // Slate
-      { name: 'Planejamento', value: planning, color: '#EABE41' }, // Brand Gold
-      { name: 'Em andamento', value: inProgress, color: '#3b82f6' }, // Brighter Blue for Dark Mode
-      { name: 'Em melhoria', value: inImprovement, color: '#818cf8' }, // Lighter Indigo
-      { name: 'Concluídos', value: completed, color: '#10b981' }, // Emerald
+      { name: 'Backlog', value: backlog, color: '#64748b' },
+      { name: 'Planejamento', value: planning, color: '#EABE41' },
+      { name: 'Em andamento', value: inProgress, color: '#3b82f6' },
+      { name: 'Em melhoria', value: inImprovement, color: '#818cf8' },
+      { name: 'Concluídos', value: completed, color: '#10b981' },
     ].filter(d => d.value > 0);
 
     // Collaborators Ranking
@@ -257,43 +351,15 @@ export default function DashboardView({ projects, users, actions, onProjectClick
       .sort((a, b) => b.count - a.count)
       .slice(0, 5);
 
-    // Gain Impact (Ganho Geral do Dashboard considera PDCAs concluídos de qualquer projeto)
-    let totalGainValue = 0; // Ganho Realizado (PDCAs concluídos)
-    let potentialGainValue = 0; // Ganho Potencial (PDCAs em andamento)
+    // Saldo Geral Consolidado (Fonte única de verdade via getProjectFinancialSummary)
+    let totalGainValue = 0;
     const projectGainsMap: Record<string, { name: string; gain: number }> = {};
 
     filteredProjects.forEach(p => {
-      let pRealizedGain = 0;
-      const processedCycleIds = new Set<string>();
-
-      (p.subtasks || []).forEach(subtask => {
-        (subtask.pdcaCycles || []).forEach(cycle => {
-          if (processedCycleIds.has(cycle.id)) return;
-          processedCycleIds.add(cycle.id);
-
-          const isCycleCompleted = cycle.status === 'Concluído' || cycle.etapaAtual === 'REPORT';
-
-          if (isCycleCompleted) {
-            const cycleGain = (cycle.plan?.actionPlan || []).reduce((s, action) => {
-              if (action.ativo === false) return s;
-              const tangibleSum = (action.realGains?.tangible || []).reduce((acc, t) => acc + (t.value || 0), 0);
-              return s + tangibleSum;
-            }, 0);
-
-            pRealizedGain += cycleGain;
-            totalGainValue += cycleGain;
-          } else if (cycle.status !== 'Cancelado') {
-            const cycleExpected = (cycle.plan?.impact?.expectedGains?.tangible || []).reduce(
-              (acc, t) => acc + (t.value || 0),
-              0
-            );
-            potentialGainValue += cycleExpected;
-          }
-        });
-      });
-
-      if (pRealizedGain !== 0) {
-        projectGainsMap[p.id] = { name: p.name, gain: pRealizedGain };
+      const summary = getProjectFinancialSummary(p);
+      if (summary.hasFinancialImpact || summary.netBalance !== 0) {
+        projectGainsMap[p.id] = { name: p.name, gain: summary.netBalance };
+        totalGainValue += summary.netBalance;
       }
     });
 
@@ -339,7 +405,6 @@ export default function DashboardView({ projects, users, actions, onProjectClick
     // Involved Sectors Analysis
     const sectorCounts = filteredProjects.reduce((acc, p) => {
       const sectors = p.scope.involvedSectors || [];
-      // Rule: count only once per project
       const names = sectors.map(s => s.name?.trim()).filter(Boolean) as string[];
       const uniqueSectorNames = Array.from(new Set(names));
       
@@ -363,7 +428,6 @@ export default function DashboardView({ projects, users, actions, onProjectClick
       collaboratorRanking,
       projectGains,
       totalGainValue,
-      potentialGainValue,
       projectProgressList,
       avgProgress,
       recentActivities,
@@ -392,124 +456,130 @@ export default function DashboardView({ projects, users, actions, onProjectClick
     return [min, max];
   }, [stats.projectGains]);
 
+  const projectRankingDomain = useMemo(() => {
+    if (!gainsStats.projectFinancialRanking || gainsStats.projectFinancialRanking.length === 0) return [0, 100];
+    const vals = gainsStats.projectFinancialRanking.map(g => g.accumulatedBalance);
+    const minVal = Math.min(...vals);
+    const maxVal = Math.max(...vals);
+
+    let min = minVal < 0 ? minVal * 1.25 : 0;
+    let max = maxVal > 0 ? maxVal * 1.25 : (minVal < 0 ? 0 : 100);
+
+    if (min === 0 && max === 0) {
+      min = -100;
+      max = 100;
+    }
+    return [min, max];
+  }, [gainsStats.projectFinancialRanking]);
+
   const renderGainBarLabel = (props: any) => {
     const { x, y, width, height, value } = props;
     if (value === undefined || value === null) return null;
-
     const isNegative = value < 0;
-    const formattedValue = formatCurrency(value);
-    const color = isNegative ? '#f43f5e' : '#10b981';
-    const textY = y + height / 2 + 3;
+    const formatted = formatCurrency(value);
+    const textX = isNegative ? x - 8 : x + width + 8;
+    const anchor = isNegative ? 'end' : 'start';
 
-    if (isNegative) {
-      return (
-        <text
-          x={x - 6}
-          y={textY}
-          fill={color}
-          fontSize={10}
-          fontWeight={800}
-          textAnchor="end"
-        >
-          {formattedValue}
-        </text>
-      );
-    } else {
-      return (
-        <text
-          x={x + width + 6}
-          y={textY}
-          fill={color}
-          fontSize={10}
-          fontWeight={800}
-          textAnchor="start"
-        >
-          {formattedValue}
-        </text>
-      );
-    }
+    return (
+      <text
+        x={textX}
+        y={y + height / 2}
+        fill={isNegative ? '#f43f5e' : '#10b981'}
+        textAnchor={anchor}
+        dominantBaseline="central"
+        fontSize={11}
+        fontWeight={800}
+      >
+        {formatted}
+      </text>
+    );
   };
 
   const renderYAxisGainTick = (props: any) => {
     const { x, y, payload } = props;
-    const name = payload.value || '';
-    const displayName = name.length > 20 ? name.substring(0, 18) + '...' : name;
+    const label = payload.value || '';
+    const truncated = label.length > 14 ? `${label.slice(0, 14)}...` : label;
+
     return (
-      <g transform={`translate(${x},${y})`}>
-        <text
-          x={-8}
-          y={0}
-          dy={4}
-          textAnchor="end"
-          fill="#94a3b8"
-          fontSize={10}
-          fontWeight={700}
-        >
-          <title>{name}</title>
-          {displayName}
-        </text>
-      </g>
+      <text
+        x={x - 6}
+        y={y}
+        fill="#94a3b8"
+        textAnchor="end"
+        dominantBaseline="central"
+        fontSize={11}
+        fontWeight={700}
+      >
+        {truncated}
+      </text>
     );
   };
 
-  const toggleFilter = (list: any[], item: any, setter: (val: any[]) => void) => {
-    if (list.includes(item)) {
-      setter(list.filter(i => i !== item));
+  const toggleFilter = <T,>(current: T[], item: T, setter: (val: T[]) => void) => {
+    if (current.includes(item)) {
+      setter(current.filter(i => i !== item));
     } else {
-      setter([...list, item]);
+      setter([...current, item]);
     }
   };
 
-  const renderCustomPieLabel = ({ name, value, percent }: any) => {
-    return `${(percent * 100).toFixed(0)}% (${value})`;
-  };
-
   return (
-    <div className="space-y-8 pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 min-w-0">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2.5">
-            <h2 className="text-3xl font-black text-theme-foreground tracking-tight truncate">Dashboard Executivo</h2>
-            <ContextHelp contentKey="dashboard" size="sm" />
-          </div>
-          <p className="text-slate-400 mt-1 truncate">Visão estratégica e financeira do sistema.</p>
-        </div>
-        <div className="flex items-center gap-4 shrink-0 flex-wrap md:flex-nowrap">
-          <div className="bg-theme-card p-1 rounded-xl border border-theme-border shadow-sm flex items-center">
-            <button 
-              onClick={() => setActiveTab('projects')}
-              className={cn(
-                "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
-                activeTab === 'projects' ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-50"
-              )}
-            >
-              Projetos
-            </button>
-            <button 
-              onClick={() => setActiveTab('actions')}
-              className={cn(
-                "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
-                activeTab === 'actions' ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-50"
-              )}
-            >
-              Ações
-            </button>
-            <button 
-              onClick={() => setActiveTab('overview')}
-              className={cn(
-                "px-4 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all",
-                activeTab === 'overview' ? "bg-indigo-600 text-white shadow-md" : "text-slate-400 hover:bg-slate-50"
-              )}
-            >
-              Visão geral detalhada
-            </button>
-          </div>
-          <div className="bg-theme-card px-4 py-2 rounded-xl border border-theme-border shadow-sm flex items-center gap-2 hidden md:flex">
-            <Clock size={16} className="text-slate-400" />
-            <span className="text-xs font-bold text-slate-600 uppercase tracking-widest">
-              {format(new Date(), "dd 'de' MMMM, yyyy", { locale: ptBR })}
+    <div className="space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto px-2 sm:px-4">
+      {/* Top Header com Abas Principais */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-theme-border pb-6">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-md border border-indigo-100 dark:border-indigo-900">
+              Painel de Inteligência
             </span>
           </div>
+          <h1 className="text-2xl md:text-3xl font-black text-theme-foreground tracking-tight mt-1 flex items-center gap-3">
+            Dashboard Estratégico
+            <ContextHelp contentKey="dashboard" size="sm" />
+          </h1>
+          <p className="text-xs text-slate-400 mt-1">
+            Métricas executivas, controle operacional e acompanhamento de ganhos financeiros.
+          </p>
+        </div>
+
+        {/* Abas Superiores */}
+        <div className="flex items-center gap-2 bg-theme-card p-1.5 rounded-2xl border border-theme-border shadow-xs self-start md:self-auto">
+          <button
+            onClick={() => setActiveTab('projects')}
+            className={cn(
+              "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer",
+              activeTab === 'projects'
+                ? "bg-[#003489] text-white shadow-md"
+                : "text-slate-400 hover:text-theme-foreground"
+            )}
+          >
+            <Briefcase size={16} />
+            Projetos
+          </button>
+          <button
+            onClick={() => setActiveTab('actions')}
+            className={cn(
+              "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer",
+              activeTab === 'actions'
+                ? "bg-[#003489] text-white shadow-md"
+                : "text-slate-400 hover:text-theme-foreground"
+            )}
+          >
+            <Activity size={16} />
+            Ações
+          </button>
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={cn(
+              "px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer",
+              activeTab === 'overview'
+                ? "bg-[#003489] text-white shadow-md"
+                : "text-slate-400 hover:text-theme-foreground"
+            )}
+          >
+            <Sparkles size={16} />
+            Visão Geral
+          </button>
         </div>
       </div>
 
@@ -523,31 +593,109 @@ export default function DashboardView({ projects, users, actions, onProjectClick
             className="space-y-8"
           >
             {/* Sub-Abas de Projetos */}
-            <div className="flex items-center gap-2 border-b border-theme-border pb-3">
-              <button
-                onClick={() => setProjectSubTab('geral')}
-                className={cn(
-                  "px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer",
-                  projectSubTab === 'geral'
-                    ? "bg-indigo-600 text-white shadow-md"
-                    : "bg-theme-card border border-theme-border text-slate-400 hover:text-theme-foreground"
-                )}
-              >
-                <Activity size={16} />
-                Visão Geral
-              </button>
-              <button
-                onClick={() => setProjectSubTab('ganhos')}
-                className={cn(
-                  "px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer",
-                  projectSubTab === 'ganhos'
-                    ? "bg-indigo-600 text-white shadow-md"
-                    : "bg-theme-card border border-theme-border text-slate-400 hover:text-theme-foreground"
-                )}
-              >
-                <TrendingUp size={16} />
-                Ganhos & Impacto
-              </button>
+            <div className="flex items-center justify-between gap-4 border-b border-theme-border pb-3 flex-wrap">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setProjectSubTab('geral')}
+                  className={cn(
+                    "px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer",
+                    projectSubTab === 'geral'
+                      ? "bg-indigo-600 text-white shadow-md"
+                      : "bg-theme-card border border-theme-border text-slate-400 hover:text-theme-foreground"
+                  )}
+                >
+                  <Activity size={16} />
+                  Visão Geral
+                </button>
+                <button
+                  onClick={() => setProjectSubTab('ganhos')}
+                  className={cn(
+                    "px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 cursor-pointer",
+                    projectSubTab === 'ganhos'
+                      ? "bg-indigo-600 text-white shadow-md"
+                      : "bg-theme-card border border-theme-border text-slate-400 hover:text-theme-foreground"
+                  )}
+                >
+                  <TrendingUp size={16} />
+                  Ganhos & Impacto Financeiro
+                </button>
+              </div>
+
+              {/* Seletor de Período (Visível apenas na aba de Ganhos) */}
+              {projectSubTab === 'ganhos' && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1 bg-theme-card border border-theme-border p-1 rounded-xl shadow-2xs">
+                    <button
+                      type="button"
+                      onClick={() => setPeriodFilter('this_month')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer",
+                        periodFilter === 'this_month' ? "bg-indigo-600 text-white shadow-xs" : "text-slate-400 hover:text-theme-foreground"
+                      )}
+                    >
+                      Este Mês
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPeriodFilter('this_year')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer",
+                        periodFilter === 'this_year' ? "bg-indigo-600 text-white shadow-xs" : "text-slate-400 hover:text-theme-foreground"
+                      )}
+                    >
+                      Este Ano
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPeriodFilter('last_12_months')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer",
+                        periodFilter === 'last_12_months' ? "bg-indigo-600 text-white shadow-xs" : "text-slate-400 hover:text-theme-foreground"
+                      )}
+                    >
+                      Últimos 12M
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPeriodFilter('all')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer",
+                        periodFilter === 'all' ? "bg-indigo-600 text-white shadow-xs" : "text-slate-400 hover:text-theme-foreground"
+                      )}
+                    >
+                      Todos
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPeriodFilter('custom')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer",
+                        periodFilter === 'custom' ? "bg-indigo-600 text-white shadow-xs" : "text-slate-400 hover:text-theme-foreground"
+                      )}
+                    >
+                      Personalizado
+                    </button>
+                  </div>
+
+                  {periodFilter === 'custom' && (
+                    <div className="flex items-center gap-2 bg-theme-card border border-theme-border p-1.5 rounded-xl text-xs">
+                      <input 
+                        type="date"
+                        value={customStartDate}
+                        onChange={(e) => setCustomStartDate(e.target.value)}
+                        className="bg-transparent text-slate-700 dark:text-slate-200 text-xs px-2 py-1 rounded border border-theme-border"
+                      />
+                      <span className="text-slate-400">até</span>
+                      <input 
+                        type="date"
+                        value={customEndDate}
+                        onChange={(e) => setCustomEndDate(e.target.value)}
+                        className="bg-transparent text-slate-700 dark:text-slate-200 text-xs px-2 py-1 rounded border border-theme-border"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Filtros Dropdown */}
@@ -557,33 +705,28 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                 <span className="text-xs font-black uppercase tracking-widest">Filtros Estratégicos</span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Colaboradores Dropdown */}
                 <FilterDropdown
                   label="Colaboradores"
                   placeholder="Selecionar colaboradores"
-                  options={users.map(u => ({ id: u.id, label: u.name }))}
+                  options={collaboratorOptions}
                   selected={selectedCollaborators}
                   onToggle={(id) => toggleFilter(selectedCollaborators, id, setSelectedCollaborators)}
                   onClear={() => setSelectedCollaborators([])}
                   icon={<Users size={16} />}
                 />
-
-                {/* Status Dropdown */}
                 <FilterDropdown
                   label="Status"
                   placeholder="Selecionar status"
-                  options={['Planejamento', 'Em andamento', 'Em melhoria', 'Concluído'].map(s => ({ id: s, label: s }))}
+                  options={statusOptions}
                   selected={selectedStatuses}
                   onToggle={(id) => toggleFilter(selectedStatuses, id as ProjectStatus, setSelectedStatuses)}
                   onClear={() => setSelectedStatuses([])}
                   icon={<Target size={16} />}
                 />
-
-                {/* Projetos Dropdown */}
                 <FilterDropdown
                   label="Projetos"
                   placeholder="Selecionar projetos"
-                  options={projects.map(p => ({ id: p.id, label: p.name }))}
+                  options={projectOptions}
                   selected={selectedProjectIds}
                   onToggle={(id) => toggleFilter(selectedProjectIds, id, setSelectedProjectIds)}
                   onClear={() => setSelectedProjectIds([])}
@@ -594,63 +737,208 @@ export default function DashboardView({ projects, users, actions, onProjectClick
             </div>
 
             {projectSubTab === 'ganhos' ? (
-              /* Visão de Ganhos e Impacto */
+              /* Visão Executiva de Ganhos e Resultados Financeiros */
               <div className="space-y-8">
-                {/* 5 Indicadores Agregados */}
+                {/* 1. CARDS PRINCIPAIS EXECUTIVOS COM AJUDA CONTEXTUAL */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
                   <StatCard 
-                    title="Ganho Estimado" 
-                    value={gainsStats.totalEstimatedGain} 
-                    isCurrency
-                    icon={<DollarSign size={18} />} 
-                    color="bg-blue-600" 
-                    subtext={<span className="text-[10px] text-slate-400 font-bold">Total previsto (R$)</span>}
-                  />
-                  <StatCard 
-                    title="Ganho Realizado" 
-                    value={gainsStats.totalRealizedGain} 
+                    title="Ganhos no Período" 
+                    value={gainsStats.periodGains} 
                     isCurrency
                     icon={<DollarSign size={18} />} 
                     color="bg-emerald-600" 
-                    subtext={<span className="text-[10px] text-slate-400 font-bold">Total obtido (R$)</span>}
+                    helpContentKey="ganhosNoPeriodo"
+                    subtext={<span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">Resultados Positivos</span>}
+                  />
+                  <StatCard 
+                    title="Perdas no Período" 
+                    value={gainsStats.periodLosses === 0 ? 0 : -gainsStats.periodLosses} 
+                    isCurrency
+                    icon={<ArrowDownRight size={18} />} 
+                    color="bg-rose-600" 
+                    helpContentKey="perdasNoPeriodo"
+                    subtext={<span className="text-[10px] text-rose-500 font-bold">Aumentos / Variações Negativas</span>}
+                  />
+                  <StatCard 
+                    title="Saldo Financeiro" 
+                    value={gainsStats.periodNetBalance} 
+                    isCurrency
+                    icon={<TrendingUp size={18} />} 
+                    color={gainsStats.periodNetBalance < 0 ? "bg-rose-600" : "bg-emerald-600"} 
+                    helpContentKey="saldoFinanceiro"
+                    subtext={<span className="text-[10px] text-slate-400 font-bold">Ganhos - Perdas ({dateRange.label})</span>}
+                  />
+                  <StatCard 
+                    title="Projetos c/ Resultado" 
+                    value={gainsStats.financialProjectsCount} 
+                    icon={<Layers size={18} />} 
+                    color="bg-indigo-600" 
+                    helpContentKey="projetosComResultadoFinanceiro"
+                    subtext={<span className="text-[10px] text-slate-400 font-bold">Projetos com PDCA Financeiro</span>}
                   />
                   <StatCard 
                     title="Horas Economizadas" 
                     value={`${gainsStats.totalRealizedHours}h`} 
                     icon={<Clock size={18} />} 
                     color="bg-amber-500" 
-                    subtext={<span className="text-[10px] text-slate-400 font-bold">Previsto: {gainsStats.totalEstimatedHours}h</span>}
-                  />
-                  <StatCard 
-                    title="Impacto Tangível" 
-                    value={gainsStats.tangibleProjectsCount} 
-                    icon={<Zap size={18} />} 
-                    color="bg-indigo-600" 
-                    subtext={<span className="text-[10px] text-slate-400 font-bold">Qtd. Projetos</span>}
-                  />
-                  <StatCard 
-                    title="Impacto Intangível" 
-                    value={gainsStats.intangibleProjectsCount} 
-                    icon={<Award size={18} />} 
-                    color="bg-purple-600" 
-                    subtext={<span className="text-[10px] text-slate-400 font-bold">Qtd. Projetos</span>}
+                    subtext={<span className="text-[10px] text-slate-400 font-bold">Eficiência Operacional</span>}
                   />
                 </div>
 
-                {/* Ranking de Projetos por Impacto */}
+                {/* 2. GRÁFICOS: RESULTADO POR PROJETO E EVOLUÇÃO FINANCEIRA */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 w-full">
+                  {/* Gráfico 1: Resultado Financeiro por Projeto */}
+                  <div className="bg-theme-card p-6 md:p-8 rounded-[2rem] border border-theme-border shadow-sm space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-base md:text-lg font-black text-theme-foreground uppercase tracking-tight flex items-center gap-2">
+                          <TrendingUp size={20} className="text-emerald-500" />
+                          Resultado Financeiro por Projeto
+                          <ContextHelp contentKey="resultadoPorProjeto" size="xs" />
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Saldo líquido de melhorias por projeto ({dateRange.label}).
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="h-[280px] w-full">
+                      {gainsStats.projectFinancialRanking.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={gainsStats.projectFinancialRanking.slice(0, 8)}
+                            layout="vertical"
+                            margin={{ left: 10, right: 80, top: 10, bottom: 10 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
+                            <XAxis type="number" hide domain={projectRankingDomain} />
+                            <YAxis 
+                              dataKey="projectName" 
+                              type="category" 
+                              width={120} 
+                              tick={renderYAxisGainTick}
+                              axisLine={false}
+                              tickLine={false}
+                            />
+                            <Tooltip 
+                              cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                              contentStyle={{ 
+                                backgroundColor: '#1e293b', 
+                                borderRadius: '12px', 
+                                border: '1px solid #334155', 
+                                color: '#ffffff',
+                                padding: '8px 12px'
+                              }}
+                              labelStyle={{ color: '#ffffff', fontWeight: 700 }}
+                              formatter={(value: number) => [formatCurrency(value), 'Saldo no Período']}
+                            />
+                            <ReferenceLine x={0} stroke="#64748b" strokeWidth={1.5} strokeDasharray="3 3" />
+                            <Bar dataKey="accumulatedBalance" radius={[0, 8, 8, 0]} barSize={20}>
+                              {gainsStats.projectFinancialRanking.slice(0, 8).map((entry, index) => (
+                                <Cell 
+                                  key={`cell-proj-${index}`} 
+                                  fill={entry.accumulatedBalance < 0 ? '#f43f5e' : '#10b981'} 
+                                />
+                              ))}
+                              <LabelList 
+                                dataKey="accumulatedBalance" 
+                                content={renderGainBarLabel}
+                              />
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ) : (
+                        <div className="h-full flex items-center justify-center text-xs text-slate-400 italic">
+                          Nenhum projeto com resultado financeiro no período.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Gráfico 2: Evolução Financeira */}
+                  <div className="bg-theme-card p-6 md:p-8 rounded-[2rem] border border-theme-border shadow-sm space-y-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-base md:text-lg font-black text-theme-foreground uppercase tracking-tight flex items-center gap-2">
+                          <Activity size={20} className="text-indigo-500" />
+                          Evolução Financeira
+                          <ContextHelp contentKey="evolucaoFinanceira" size="xs" />
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Trajetória mensal de ganhos, perdas e saldo acumulado ({dateRange.label}).
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="h-[280px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={gainsStats.monthlyEvolution}
+                          margin={{ left: 0, right: 10, top: 10, bottom: 10 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                          <XAxis 
+                            dataKey="month" 
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 700 }}
+                          />
+                          <YAxis 
+                            axisLine={false}
+                            tickLine={false}
+                            tick={{ fill: '#94a3b8', fontSize: 10 }}
+                            tickFormatter={(val) => formatCompactValue(val, true)}
+                          />
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: '#1e293b', 
+                              borderRadius: '12px', 
+                              border: '1px solid #334155', 
+                              color: '#ffffff',
+                              padding: '8px 12px'
+                            }}
+                            labelStyle={{ color: '#ffffff', fontWeight: 700 }}
+                            formatter={(value: number, name: string) => {
+                              const labelMap: Record<string, string> = {
+                                gains: 'Ganhos',
+                                losses: 'Perdas',
+                                netBalance: 'Saldo do Mês',
+                                accumulatedBalance: 'Saldo Acumulado'
+                              };
+                              return [formatCurrency(value), labelMap[name] || name];
+                            }}
+                          />
+                          <Legend 
+                            wrapperStyle={{ fontSize: '11px', fontWeight: 700, paddingTop: '8px' }}
+                            formatter={(value) => {
+                              if (value === 'gains') return 'Ganhos';
+                              if (value === 'losses') return 'Perdas';
+                              if (value === 'accumulatedBalance') return 'Acumulado';
+                              return value;
+                            }}
+                          />
+                          <Bar dataKey="gains" fill="#10b981" radius={[4, 4, 0, 0]} />
+                          <Bar dataKey="losses" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. TABELA EXECUTIVA DE RESULTADOS FINANCEIROS */}
                 <div className="bg-theme-card p-6 md:p-8 rounded-[2rem] border border-theme-border shadow-sm space-y-6">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div>
                       <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight flex items-center gap-2">
                         <TrendingUp size={20} className="text-emerald-500" />
-                        Ranking de Projetos por Impacto e Ganhos
+                        Tabela Executiva de Resultados Financeiros
                       </h3>
                       <p className="text-xs text-slate-400 mt-1">
-                        Projetos ordenados pelo maior impacto financeiro obtido e estimado.
+                        Demonstrativo detalhado de cada PDCA com impacto financeiro reconhecido ({dateRange.label}).
                       </p>
                     </div>
                     <span className="text-xs font-bold text-slate-400 bg-theme-background px-3 py-1.5 rounded-xl border border-theme-border self-start sm:self-auto">
-                      {gainsStats.projectRanking.length} Projetos Mapeados
+                      {gainsStats.tableRows.length} Ciclos Mensurados
                     </span>
                   </div>
 
@@ -658,81 +946,89 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                     <table className="w-full text-left border-collapse">
                       <thead>
                         <tr className="border-b border-theme-border text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                          <th className="py-4 px-4"># / Projeto</th>
+                          <th className="py-4 px-4"># / Projeto & PDCA</th>
                           <th className="py-4 px-4">Responsável</th>
-                          <th className="py-4 px-4">Tipo de Impacto</th>
-                          <th className="py-4 px-4 text-right">Ganho Estimado (R$)</th>
-                          <th className="py-4 px-4 text-right">Ganho Realizado (R$)</th>
-                          <th className="py-4 px-4 text-right">Horas Economizadas</th>
-                          <th className="py-4 px-4 text-center">Status Ganho</th>
+                          <th className="py-4 px-4 text-center">Resultado</th>
+                          <th className="py-4 px-4 text-center">Tipo</th>
+                          <th className="py-4 px-4 text-center">Periodicidade</th>
+                          <th className="py-4 px-4 text-center">Início</th>
+                          <th className="py-4 px-4 text-right">Acumulado no Período</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-theme-border text-xs font-medium">
-                        {gainsStats.projectRanking.map((item, idx) => (
-                          <tr 
-                            key={item.id} 
-                            onClick={() => onProjectClick(item.id)}
-                            className="hover:bg-slate-50/5 dark:hover:bg-slate-800/20 transition-all cursor-pointer group"
-                          >
-                            <td className="py-4 px-4">
-                              <div className="flex items-center gap-3">
-                                <span className="w-6 h-6 rounded-lg bg-theme-background border border-theme-border flex items-center justify-center font-black text-[10px] text-slate-400">
-                                  {idx + 1}
-                                </span>
-                                <div>
-                                  <p className="font-bold text-theme-foreground group-hover:text-indigo-500 transition-colors">
-                                    {item.name}
-                                  </p>
-                                  <span className="text-[10px] text-slate-400">{item.status}</span>
+                        {gainsStats.tableRows.map((row, idx) => {
+                          const isGain = row.classification === 'GANHO' || row.financialResult > 0;
+                          const isLoss = row.classification === 'PERDA' || row.financialResult < 0;
+                          const isZero = row.classification === 'SEM_VARIACAO' || row.financialResult === 0;
+
+                          return (
+                            <tr 
+                              key={`${row.projectId}_${row.cycleId}_${idx}`} 
+                              onClick={() => onProjectClick(row.projectId)}
+                              className="hover:bg-slate-50/5 dark:hover:bg-slate-800/20 transition-all cursor-pointer group"
+                            >
+                              <td className="py-4 px-4">
+                                <div className="flex items-center gap-3">
+                                  <span className="w-6 h-6 rounded-lg bg-theme-background border border-theme-border flex items-center justify-center font-black text-[10px] text-slate-400">
+                                    {idx + 1}
+                                  </span>
+                                  <div>
+                                    <p className="font-bold text-theme-foreground group-hover:text-indigo-500 transition-colors">
+                                      {row.projectTitle}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400">
+                                      {row.subtaskTitle} • <span className="font-semibold text-slate-300">{row.cycleName}</span>
+                                    </p>
+                                  </div>
                                 </div>
-                              </div>
-                            </td>
-                            <td className="py-4 px-4 font-semibold text-slate-400">
-                              {item.assignedToName}
-                            </td>
-                            <td className="py-4 px-4">
-                              <span className={cn(
-                                "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-block",
-                                item.impactType === 'Ambos'
-                                  ? "bg-purple-500/10 text-purple-600 dark:text-purple-400"
-                                  : item.impactType === 'Tangível'
-                                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                                  : item.impactType === 'Intangível'
-                                  ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400"
-                                  : "bg-slate-500/10 text-slate-400"
-                              )}>
-                                {item.impactType}
-                              </span>
-                            </td>
-                            <td className="py-4 px-4 text-right font-black text-slate-400">
-                              R$ {item.estimatedFinancialGain.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </td>
-                            <td className="py-4 px-4 text-right font-black text-emerald-600 dark:text-emerald-400">
-                              R$ {item.realizedFinancialGain.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                            </td>
-                            <td className="py-4 px-4 text-right font-bold text-slate-400">
-                              {item.realizedHours}h <span className="text-[10px] text-slate-500">({item.estimatedHours}h est)</span>
-                            </td>
-                            <td className="py-4 px-4 text-center">
-                              <span className={cn(
-                                "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider inline-block",
-                                item.gainAchievedStatus === 'Sim'
-                                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                  : item.gainAchievedStatus === 'Parcial'
-                                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                                  : item.gainAchievedStatus === 'Não'
-                                  ? "bg-rose-500/10 text-rose-600 dark:text-rose-400"
-                                  : "bg-blue-500/10 text-blue-600 dark:text-blue-400"
-                              )}>
-                                {item.gainAchievedStatus || 'Em andamento'}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                        {gainsStats.projectRanking.length === 0 && (
+                              </td>
+                              <td className="py-4 px-4 font-semibold text-slate-400">
+                                {row.assignedToName}
+                              </td>
+                              <td className="py-4 px-4 text-center">
+                                <div className="inline-flex flex-col items-center">
+                                  <span className={cn(
+                                    "font-black text-xs",
+                                    isGain ? "text-emerald-600 dark:text-emerald-400" : isLoss ? "text-rose-600 dark:text-rose-400" : "text-slate-400"
+                                  )}>
+                                    {isGain ? '+' : ''}{formatCurrency(row.financialResult)}
+                                  </span>
+                                  <span className={cn(
+                                    "text-[9px] font-black uppercase px-2 py-0.5 rounded-full mt-0.5",
+                                    isGain ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : isLoss ? "bg-rose-500/10 text-rose-600 dark:text-rose-400" : "bg-slate-500/10 text-slate-400"
+                                  )}>
+                                    {isGain ? 'GANHO' : isLoss ? 'PERDA' : 'SEM VARIAÇÃO'}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="py-4 px-4 text-center font-bold text-slate-300">
+                                {row.financialType}
+                              </td>
+                              <td className="py-4 px-4 text-center text-slate-400">
+                                {row.financialPeriodicity}
+                              </td>
+                              <td className="py-4 px-4 text-center font-medium text-slate-400">
+                                {row.financialStartDate ? (
+                                  format(new Date(row.financialStartDate + 'T00:00:00'), 'dd/MM/yyyy')
+                                ) : (
+                                  <span className="italic text-[10px] text-slate-500">Não informada</span>
+                                )}
+                              </td>
+                              <td className="py-4 px-4 text-right font-black">
+                                <span className={cn(
+                                  "text-xs",
+                                  row.accumulatedInPeriod > 0 ? "text-emerald-600 dark:text-emerald-400" : row.accumulatedInPeriod < 0 ? "text-rose-600 dark:text-rose-400" : "text-slate-400"
+                                )}>
+                                  {row.accumulatedInPeriod > 0 ? '+' : ''}{formatCurrency(row.accumulatedInPeriod)}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {gainsStats.tableRows.length === 0 && (
                           <tr>
                             <td colSpan={7} className="py-12 text-center text-slate-400 italic">
-                              Nenhum projeto encontrado com os filtros selecionados.
+                              Nenhum ciclo PDCA com dados financeiros encontrado com os filtros selecionados.
                             </td>
                           </tr>
                         )}
@@ -742,198 +1038,69 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                 </div>
               </div>
             ) : (
-              /* Visão Geral Atual */
+              /* Visão Geral dos Projetos */
               <>
-                {/* 1. Visão Geral e Impacto Financeiro */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
-              <StatCard 
-                title="Ganho Geral" 
-                value={stats.totalGainValue} 
-                isCurrency
-                icon={<DollarSign size={18} />} 
-                color={stats.totalGainValue < 0 ? "bg-rose-600" : "bg-emerald-600"}
-              />
-              <StatCard 
-                title="Total Projetos" 
-                value={stats.total} 
-                icon={<Briefcase size={18} />} 
-                color="bg-[#003489]" 
-              />
-              <StatCard 
-                title="Concluídos" 
-                value={stats.completed} 
-                icon={<CheckCircle2 size={18} />} 
-                color="bg-emerald-500" 
-              />
-              <StatCard 
-                title="Em Planejamento" 
-                value={stats.planning} 
-                icon={<Clock size={18} />} 
-                color="bg-[#EABE41]" 
-              />
-              <StatCard 
-                title="Em Melhoria" 
-                value={stats.inImprovement} 
-                icon={<TrendingUp size={18} />} 
-                color="bg-indigo-400" 
-              />
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 w-full">
-              {/* 2. Impacto de Ganho por Projeto */}
-              <div className="bg-theme-card p-4 sm:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-theme-border shadow-sm space-y-6 overflow-hidden">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-base md:text-lg font-black text-theme-foreground uppercase tracking-tight">Ganhos por Projeto</h3>
-                  <TrendingUp size={20} className="text-emerald-500" />
+                {/* 1. Visão Geral e Indicadores Principais */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 w-full">
+                  <StatCard 
+                    title="Ganho Geral" 
+                    value={stats.totalGainValue} 
+                    isCurrency
+                    icon={<DollarSign size={18} />} 
+                    color={stats.totalGainValue < 0 ? "bg-rose-600" : "bg-emerald-600"}
+                    helpContentKey="saldoFinanceiro"
+                    subtext={<span className="text-[10px] text-slate-400 font-bold">Saldo de Melhorias (R$)</span>}
+                  />
+                  <StatCard 
+                    title="Total Projetos" 
+                    value={stats.total} 
+                    icon={<Briefcase size={18} />} 
+                    color="bg-[#003489]" 
+                  />
+                  <StatCard 
+                    title="Concluídos" 
+                    value={stats.completed} 
+                    icon={<CheckCircle2 size={18} />} 
+                    color="bg-emerald-500" 
+                  />
+                  <StatCard 
+                    title="Em Planejamento" 
+                    value={stats.planning} 
+                    icon={<Clock size={18} />} 
+                    color="bg-[#EABE41]" 
+                  />
+                  <StatCard 
+                    title="Em Melhoria" 
+                    value={stats.inImprovement} 
+                    icon={<TrendingUp size={18} />} 
+                    color="bg-indigo-400" 
+                  />
                 </div>
-                <div className="h-[250px] md:h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart
-                      data={stats.projectGains}
-                      layout="vertical"
-                      margin={{ left: 10, right: 75, top: 10, bottom: 10 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
-                      <XAxis type="number" hide domain={gainsXDomain} />
-                      <YAxis 
-                        dataKey="name" 
-                        type="category" 
-                        width={120} 
-                        tick={renderYAxisGainTick}
-                        axisLine={false}
-                        tickLine={false}
-                      />
-                      <Tooltip 
-                        cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                        contentStyle={{ 
-                          backgroundColor: '#1e293b', 
-                          borderRadius: '12px', 
-                          border: '1px solid #334155', 
-                          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)',
-                          color: '#ffffff',
-                          padding: '8px 12px'
-                        }}
-                        itemStyle={{ color: '#ffffff' }}
-                        labelStyle={{ color: '#ffffff', fontWeight: 700 }}
-                        formatter={(value: number) => [formatCurrency(value), 'Ganho']}
-                      />
-                      <ReferenceLine x={0} stroke="#64748b" strokeWidth={1.5} strokeDasharray="3 3" />
-                      <Bar dataKey="gain" radius={[0, 8, 8, 0]} barSize={20}>
-                        {stats.projectGains.map((entry, index) => (
-                          <Cell 
-                            key={`cell-gain-${index}`} 
-                            fill={entry.gain < 0 ? '#f43f5e' : '#10b981'} 
-                          />
-                        ))}
-                        <LabelList 
-                          dataKey="gain" 
-                          content={renderGainBarLabel}
-                        />
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
 
-              {/* 3. Status dos Processos */}
-              <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
-                <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Distribuição de Status</h3>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={stats.processStatusData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={100}
-                        paddingAngle={5}
-                        dataKey="value"
-                        label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}
-                      >
-                        {stats.processStatusData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} />
-                        ))}
-                        <Label 
-                          value={stats.total} 
-                          position="center" 
-                          style={{ fontSize: '24px', fontWeight: 900, fill: 'var(--foreground)' }} 
-                        />
-                      </Pie>
-                      <Tooltip 
-                         contentStyle={{ 
-                          backgroundColor: '#1e293b', 
-                          borderRadius: '12px', 
-                          border: '1px solid #334155', 
-                          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)',
-                          color: '#ffffff'
-                        }}
-                        itemStyle={{ color: '#ffffff' }}
-                        labelStyle={{ color: '#ffffff', fontWeight: 700 }}
-                      />
-                      <Legend verticalAlign="bottom" height={36}/>
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* 4. Colaboradores */}
-              <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
-                <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">QTD de projetos por colaborador</h3>
-                <div className="space-y-4">
-                  {stats.collaboratorRanking.map((collab, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-4 bg-theme-background rounded-2xl border border-theme-border">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-xs">
-                          {idx + 1}
-                        </div>
-                        <span className="font-bold text-theme-foreground">{collab.name}</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-xl font-black text-indigo-600">{collab.count}</span>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Projetos</p>
-                      </div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 md:gap-8 w-full">
+                  {/* 2. Impacto de Ganho por Projeto */}
+                  <div className="bg-theme-card p-4 sm:p-8 rounded-[1.5rem] md:rounded-[2.5rem] border border-theme-border shadow-sm space-y-6 overflow-hidden">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-base md:text-lg font-black text-theme-foreground uppercase tracking-tight flex items-center gap-2">
+                        Ganhos por Projeto
+                        <ContextHelp contentKey="resultadoPorProjeto" size="xs" />
+                      </h3>
+                      <TrendingUp size={20} className="text-emerald-500" />
                     </div>
-                  ))}
-                  {stats.collaboratorRanking.length === 0 && (
-                    <p className="text-slate-400 text-sm italic text-center py-10">Nenhum colaborador com projetos.</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* 4.5 Análise por Setores Envolvidos */}
-            <div className="bg-theme-card p-6 md:p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Setores Envolvidos</h3>
-                    {stats.sectorDistribution.length > 10 && (
-                      <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-400">
-                        {showAllSectors ? `Todos (${stats.sectorDistribution.length})` : `Top 10 de ${stats.sectorDistribution.length}`}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-slate-400 font-medium">Recorrência de setores nos escopos dos projetos ativos (ordenado por frequência).</p>
-                </div>
-                <div className="p-3 bg-theme-background rounded-2xl border border-theme-border">
-                  <Users size={20} className="text-indigo-400" />
-                </div>
-              </div>
-
-              {displayedSectors.length > 0 ? (
-                <div className="space-y-4">
-                  <div className="max-h-[450px] overflow-y-auto custom-scrollbar pr-2 w-full">
-                    <div style={{ height: `${Math.max(260, displayedSectors.length * 38)}px`, width: '100%' }}>
+                    <div className="h-[250px] md:h-[300px] w-full">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={displayedSectors} layout="vertical" margin={{ left: 10, right: 35, top: 10, bottom: 10 }}>
+                        <BarChart
+                          data={stats.projectGains}
+                          layout="vertical"
+                          margin={{ left: 10, right: 75, top: 10, bottom: 10 }}
+                        >
                           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
-                          <XAxis type="number" hide />
+                          <XAxis type="number" hide domain={gainsXDomain} />
                           <YAxis 
                             dataKey="name" 
                             type="category" 
-                            width={150} 
-                            tick={{ fontSize: 11, fontWeight: 700, fill: '#94a3b8' }}
+                            width={120} 
+                            tick={renderYAxisGainTick}
                             axisLine={false}
                             tickLine={false}
                           />
@@ -942,20 +1109,26 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                             contentStyle={{ 
                               backgroundColor: '#1e293b', 
                               borderRadius: '12px', 
-                              border: '1px solid #334155',
+                              border: '1px solid #334155', 
+                              boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)',
                               color: '#ffffff',
-                              boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)'
+                              padding: '8px 12px'
                             }}
                             itemStyle={{ color: '#ffffff' }}
                             labelStyle={{ color: '#ffffff', fontWeight: 700 }}
-                            formatter={(value: number) => [`${value} projeto(s)`, 'Ocorrência']}
+                            formatter={(value: number) => [formatCurrency(value), 'Saldo']}
                           />
-                          <Bar dataKey="count" fill="#EABE41" radius={[0, 8, 8, 0]} barSize={22}>
+                          <ReferenceLine x={0} stroke="#64748b" strokeWidth={1.5} strokeDasharray="3 3" />
+                          <Bar dataKey="gain" radius={[0, 8, 8, 0]} barSize={20}>
+                            {stats.projectGains.map((entry, index) => (
+                              <Cell 
+                                key={`cell-gain-${index}`} 
+                                fill={entry.gain < 0 ? '#f43f5e' : '#10b981'} 
+                              />
+                            ))}
                             <LabelList 
-                              dataKey="count" 
-                              position="right" 
-                              style={{ fontSize: 11, fontWeight: 900, fill: '#EABE41' }}
-                              offset={10}
+                              dataKey="gain" 
+                              content={renderGainBarLabel}
                             />
                           </Bar>
                         </BarChart>
@@ -963,107 +1136,118 @@ export default function DashboardView({ projects, users, actions, onProjectClick
                     </div>
                   </div>
 
+                  {/* 3. Status dos Processos */}
+                  <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
+                    <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Distribuição de Status</h3>
+                    <div className="h-[300px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={stats.processStatusData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={100}
+                            paddingAngle={5}
+                            dataKey="value"
+                            label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}
+                          >
+                            {stats.processStatusData.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} />
+                            ))}
+                            <Label 
+                              value={stats.total} 
+                              position="center" 
+                              style={{ fontSize: '24px', fontWeight: 900, fill: 'var(--foreground)' }} 
+                            />
+                          </Pie>
+                          <Tooltip 
+                            contentStyle={{ 
+                              backgroundColor: '#1e293b', 
+                              borderRadius: '12px', 
+                              border: '1px solid #334155', 
+                              boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.5)',
+                              color: '#ffffff'
+                            }}
+                            itemStyle={{ color: '#ffffff' }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* 4. Ranking de Colaboradores */}
+                  <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
+                    <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight flex items-center justify-between">
+                      <span>Colaboradores Ativos</span>
+                      <Users size={20} className="text-indigo-500" />
+                    </h3>
+                    <div className="space-y-4">
+                      {stats.collaboratorRanking.map((c, i) => (
+                        <div key={i} className="flex items-center justify-between p-3 rounded-2xl bg-theme-background border border-theme-border">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-indigo-500/10 text-indigo-500 font-black text-xs flex items-center justify-center border border-indigo-500/20">
+                              {i + 1}
+                            </div>
+                            <span className="text-xs font-bold text-theme-foreground">{c.name}</span>
+                          </div>
+                          <span className="text-xs font-black text-indigo-500 bg-indigo-500/10 px-3 py-1 rounded-full border border-indigo-500/20">
+                            {c.count} {c.count === 1 ? 'projeto' : 'projetos'}
+                          </span>
+                        </div>
+                      ))}
+                      {stats.collaboratorRanking.length === 0 && (
+                        <p className="text-xs text-slate-400 italic text-center py-8">Nenhum dado encontrado</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Setores Envolvidos */}
+                <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight flex items-center gap-2">
+                        Setores Envolvidos
+                        <span className="text-xs font-bold text-slate-400 bg-theme-background px-2.5 py-0.5 rounded-full border border-theme-border">
+                          {stats.sectorDistribution.length} Total
+                        </span>
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Concentração de projetos por setor mapeado.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                    {displayedSectors.map((sector, idx) => (
+                      <div 
+                        key={idx} 
+                        className="p-3.5 rounded-2xl bg-theme-background border border-theme-border flex items-center justify-between gap-2"
+                      >
+                        <span className="text-xs font-bold text-theme-foreground truncate" title={sector.name}>
+                          {sector.name}
+                        </span>
+                        <span className="text-xs font-black text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2 py-0.5 rounded-lg shrink-0">
+                          {sector.count}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
                   {stats.sectorDistribution.length > 10 && (
-                    <div className="flex justify-center pt-2 border-t border-theme-border">
+                    <div className="pt-2 text-center">
                       <button
                         type="button"
                         onClick={() => setShowAllSectors(!showAllSectors)}
-                        className="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 transition-colors flex items-center gap-2"
+                        className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                       >
-                        {showAllSectors ? (
-                          <>
-                            Ver apenas Top 10 <ChevronUp size={14} />
-                          </>
-                        ) : (
-                          <>
-                            Ver todos os {stats.sectorDistribution.length} setores <ChevronDown size={14} />
-                          </>
-                        )}
+                        {showAllSectors ? 'Ver menos setores' : `Ver mais ${stats.sectorDistribution.length - 10} setores`}
                       </button>
                     </div>
                   )}
                 </div>
-              ) : (
-                <div className="py-20 text-center space-y-4 bg-theme-background rounded-3xl border border-dashed border-theme-border mx-auto max-w-sm">
-                  <p className="text-slate-400 text-sm font-medium">Nenhum setor informado nos escopos.</p>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* 5. Progresso dos Projetos */}
-              <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Progresso dos Projetos</h3>
-                  <div className="text-right">
-                    <span className="text-2xl font-black text-indigo-400">{stats.avgProgress}%</span>
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Média Geral</p>
-                  </div>
-                </div>
-                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                  {stats.projectProgressList.map((p) => (
-                    <div 
-                      key={p.id} 
-                      onClick={() => onProjectClick(p.id)}
-                      className="group p-4 bg-theme-background rounded-2xl border border-theme-border hover:border-indigo-400 transition-all cursor-pointer"
-                    >
-                      <div className="flex items-center justify-between mb-2 min-w-0 gap-2">
-                        <span className="font-bold text-theme-foreground group-hover:text-indigo-400 transition-colors truncate">{p.name}</span>
-                        <span className="text-xs font-black text-slate-400 shrink-0">{p.progress}%</span>
-                      </div>
-                      <div className="w-full h-2 bg-theme-card rounded-full overflow-hidden border border-theme-border">
-                        <motion.div 
-                          initial={{ width: 0 }}
-                          animate={{ width: `${p.progress}%` }}
-                          className={cn(
-                            "h-full transition-all duration-1000",
-                            p.progress === 100 ? "bg-emerald-500" : "bg-indigo-500"
-                          )}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* 6. Atividade Recente */}
-              <div className="bg-theme-card p-8 rounded-[2.5rem] border border-theme-border shadow-sm space-y-6">
-                <h3 className="text-lg font-black text-theme-foreground uppercase tracking-tight">Atividade Recente</h3>
-                <div className="space-y-6">
-                  {stats.recentActivities.map((activity, idx) => (
-                    <div key={idx} className="flex gap-4 relative">
-                      {idx !== stats.recentActivities.length - 1 && (
-                        <div className="absolute left-5 top-10 bottom-0 w-0.5 bg-theme-border" />
-                      )}
-                      <div className={cn(
-                        "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 shadow-sm",
-                        activity.type.includes('Concluído') ? "bg-emerald-500/10 text-emerald-500" : "bg-indigo-500/10 text-indigo-400"
-                      )}>
-                        {activity.type.includes('Concluído') ? <CheckCircle2 size={20} /> : <TrendingUp size={20} />}
-                      </div>
-                      <div className="space-y-1 min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-black text-slate-400 uppercase tracking-widest truncate">{activity.type}</span>
-                          <span className="text-[10px] text-slate-500">•</span>
-                          <span className="text-[10px] font-bold text-slate-400 shrink-0">{format(new Date(activity.date), "dd/MM HH:mm")}</span>
-                        </div>
-                        <p className="font-bold text-theme-foreground break-words line-clamp-2" title={activity.title}>{activity.title}</p>
-                        <p className="text-xs text-slate-400 font-medium truncate">Projeto: {activity.projectName}</p>
-                      </div>
-                    </div>
-                  ))}
-                  {stats.recentActivities.length === 0 && (
-                    <div className="py-20 text-center space-y-4">
-                      <div className="w-16 h-16 bg-theme-background rounded-full flex items-center justify-center mx-auto text-slate-500">
-                        <Activity size={32} />
-                      </div>
-                      <p className="text-slate-400 text-sm italic">Nenhuma atividade recente registrada.</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            </>
+              </>
             )}
           </motion.div>
         ) : activeTab === 'actions' ? (
@@ -1136,7 +1320,8 @@ function StatCard({
   color, 
   highlight,
   isCurrency = false,
-  subtext
+  subtext,
+  helpContentKey
 }: { 
   title: string, 
   value: string | number, 
@@ -1144,7 +1329,8 @@ function StatCard({
   color: string,
   highlight?: boolean,
   isCurrency?: boolean,
-  subtext?: React.ReactNode
+  subtext?: React.ReactNode,
+  helpContentKey?: string
 }) {
   const fullValue = typeof value === 'number' 
     ? (isCurrency ? formatCurrency(value) : value.toLocaleString('pt-BR'))
@@ -1175,12 +1361,17 @@ function StatCard({
           {icon}
         </div>
         <div className="min-w-0 flex-1 overflow-hidden">
-          <p className={cn(
-            "text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400 truncate"
-          )}>{title}</p>
+          <div className="flex items-center gap-1.5">
+            <p className={cn(
+              "text-[9px] md:text-[10px] font-black uppercase tracking-widest text-slate-400 truncate"
+            )}>{title}</p>
+            {helpContentKey && (
+              <ContextHelp contentKey={helpContentKey} size="xs" />
+            )}
+          </div>
           <h4 
             className={cn(
-              "font-black tracking-tight leading-none overflow-hidden text-ellipsis whitespace-nowrap",
+              "font-black tracking-tight leading-none overflow-hidden text-ellipsis whitespace-nowrap mt-1",
               isCurrency && (isNegative ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400")
             )}
             style={{ 

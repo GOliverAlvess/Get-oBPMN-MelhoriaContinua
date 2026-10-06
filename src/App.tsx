@@ -32,7 +32,6 @@ import {
   Activity,
   ExternalLink,
   Globe,
-  TrendingUp,
   Zap,
   Award,
   CheckCircle,
@@ -86,9 +85,6 @@ import {
   SavedColor, 
   UserProfile,
   GlobalConfig,
-  TangibleGainType,
-  IntangibleGainType,
-  UnitMeasure,
   NotificationItem
 } from './types';
 import { cn, isValidUrl, formatUrl, cleanObject } from './lib/utils';
@@ -102,6 +98,7 @@ import NotificationBell from './components/NotificationBell';
 import UserActivityMonitoringTab from './components/UserActivityMonitoringTab';
 import ContextHelp from './components/ContextHelp';
 import { logUserActivity } from './lib/activityLogger';
+import { initUserActivityTracker, clearUserSessionTracker } from './lib/userActivityTracker';
 import { notifyProjectChanges, notifySubtaskChanges, checkAndNotifyActionDeadlines } from './lib/notificationService';
 import { calculateProjectProgress, calculateProjectStatus, calculateSubtaskStatus, getCardProgress, hasPendingSubtasksOrPDCA } from './lib/projectUtils';
 import { calculateActionAlert } from './utils/calculations';
@@ -247,6 +244,7 @@ export default function App() {
 
   const hasChangesRef = useRef(hasChanges);
   const selectedProjectIdRef = useRef(selectedProjectId);
+  const persistedProjectsRef = useRef<Project[]>([]);
 
   useEffect(() => {
     hasChangesRef.current = hasChanges;
@@ -275,13 +273,13 @@ export default function App() {
 
   const currentUserProfile = users.find(u => u.id === user?.uid);
 
-  // Prevent accidental close
+  // Prevent accidental close (AUD-004)
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (hasChanges) {
         e.preventDefault();
-        e.returnValue = "Salve as últimas alterações para que não sejam perdidas";
-        return e.returnValue;
+        e.returnValue = '';
+        return '';
       }
     };
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -314,6 +312,17 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Rastreamento contínuo de tempo ativo, foco de aba e inatividade de 10 min
+  useEffect(() => {
+    if (!user) return;
+    const cleanupTracker = initUserActivityTracker({
+      id: user.uid,
+      name: user.displayName || currentUserProfile?.name || user.email || 'Usuário',
+      email: user.email || currentUserProfile?.email || '',
+    });
+    return () => cleanupTracker();
+  }, [user, currentUserProfile?.name, currentUserProfile?.email]);
+
   // Firestore Data Listeners
   useEffect(() => {
     if (!user) return;
@@ -327,6 +336,7 @@ export default function App() {
     // Listen for Projects
     const projectsUnsubscribe = onSnapshot(collection(db, 'projects'), (snapshot) => {
       const projectsData = snapshot.docs.map(doc => doc.data() as Project);
+      persistedProjectsRef.current = projectsData;
       setProjects(prevProjects => {
         return projectsData.map(dbProj => {
           if (dbProj.id === selectedProjectIdRef.current && hasChangesRef.current) {
@@ -428,7 +438,12 @@ export default function App() {
     }
   };
 
-  const handleLogout = () => auth.signOut();
+  const handleLogout = () => {
+    if (user?.uid) {
+      clearUserSessionTracker(user.uid);
+    }
+    auth.signOut();
+  };
 
   const updateProjectInFirestore = async (updatedProjects: Project[] | ((prev: Project[]) => Project[])) => {
     // If it's a function, we need to get the current state
@@ -450,20 +465,9 @@ export default function App() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
 
   const handleConfirmNavigation = () => {
-    setHasChanges(false);
-    setShowUnsavedModal(false);
-    if (pendingNavigationAction) {
-      pendingNavigationAction();
-      setPendingNavigationAction(null);
-    }
-  };
-
-  const handleSaveAndExitNavigation = async () => {
-    if (selectedProjectId) {
-      const proj = projects.find(p => p.id === selectedProjectId);
-      if (proj) {
-        await persistProject(proj, true);
-      }
+    // Reverte o estado dos projetos para a versão persistida em banco de dados
+    if (persistedProjectsRef.current.length > 0) {
+      setProjects(persistedProjectsRef.current);
     }
     setHasChanges(false);
     setShowUnsavedModal(false);
@@ -608,10 +612,12 @@ export default function App() {
   };
 
   const handleProjectClick = (id: string) => {
-    setSelectedProjectId(id);
-    setActiveTab('scope');
-    setTargetSubtaskId(null);
-    setTargetProjectId(null);
+    handleNavigation(() => {
+      setSelectedProjectId(id);
+      setActiveTab('scope');
+      setTargetSubtaskId(null);
+      setTargetProjectId(null);
+    });
   };
 
   const handleCreateProject = async (data: { name: string, description: string, assignedTo: string, priority: ProjectPriority }) => {
@@ -689,48 +695,50 @@ export default function App() {
   const selectedProject = projects.find(p => p.id === selectedProjectId);
 
   const handleSelectNotification = (item: NotificationItem) => {
-    if (item.tipo === 'card') {
-      setActiveView('kanban');
-      setSelectedProjectId(null);
-      if (item.referencia_id) {
-        setTargetProjectId(item.referencia_id);
-      }
-    } else if (item.tipo === 'acao') {
-      const isDeadlineAlert =
-        item.subtask_id === 'daily_deadline_alert' ||
-        (item.mensagem && (
-          item.mensagem.toLowerCase().includes('vencer') ||
-          item.mensagem.toLowerCase().includes('prazo')
-        ));
+    handleNavigation(() => {
+      if (item.tipo === 'card') {
+        setActiveView('kanban');
+        setSelectedProjectId(null);
+        if (item.referencia_id) {
+          setTargetProjectId(item.referencia_id);
+        }
+      } else if (item.tipo === 'acao') {
+        const isDeadlineAlert =
+          item.subtask_id === 'daily_deadline_alert' ||
+          item.referencia_id === 'all_deadline_actions' ||
+          (item.mensagem && (
+            item.mensagem.toLowerCase().includes('vencer') ||
+            item.mensagem.toLowerCase().includes('prazo')
+          ));
 
-      setTargetActionId(item.referencia_id || null);
-      setIsDeadlineAlertFilter(isDeadlineAlert);
-      setActionsNavSource(isDeadlineAlert ? 'notification_deadline' : 'notification_action');
-      setActiveView('actions');
-    } else if (item.tipo === 'tarefa') {
-      setActiveView('kanban');
-      setSelectedProjectId(item.referencia_id);
-      if (item.subtask_id) {
-        setTargetSubtaskId(item.subtask_id);
-      } else {
-        setTargetSubtaskId(null);
+        if (isDeadlineAlert) {
+          setTargetActionId(null);
+          setIsDeadlineAlertFilter(true);
+          setActionsNavSource('notification_deadline');
+        } else {
+          setTargetActionId(item.referencia_id || null);
+          setIsDeadlineAlertFilter(false);
+          setActionsNavSource('notification_action');
+        }
+        setActiveView('actions');
+        setSelectedProjectId(null);
+      } else if (item.tipo === 'tarefa') {
+        setActiveView('kanban');
+        setSelectedProjectId(item.referencia_id);
+        if (item.subtask_id) {
+          setTargetSubtaskId(item.subtask_id);
+        } else {
+          setTargetSubtaskId(null);
+        }
+        setActiveTab('scope');
       }
-      setActiveTab('scope');
-    }
+    });
   };
 
   const handleBackToKanban = () => {
     handleNavigation(() => {
       setSelectedProjectId(null);
-      setHasChanges(false);
     });
-  };
-
-  const confirmNavigation = () => {
-    if (hasChanges) {
-      return confirm("Salve as últimas alterações para que não sejam perdidas");
-    }
-    return true;
   };
 
   if (!isAuthReady) {
@@ -998,7 +1006,7 @@ export default function App() {
                 <LogOut 
                   size={18} 
                   className="text-slate-400 hover:text-red-500 cursor-pointer shrink-0 transition-colors" 
-                  onClick={handleLogout}
+                  onClick={() => handleNavigation(() => handleLogout())}
                 />
               )}
             </div>
@@ -1121,44 +1129,36 @@ export default function App() {
             <motion.div 
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              className="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-200"
+              className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800"
             >
               <div className="p-8 space-y-6">
-                <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <div className="w-16 h-16 bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
                   <AlertCircle size={32} />
                 </div>
                 
                 <div className="text-center space-y-2">
-                  <h3 className="text-xl font-black text-slate-900 tracking-tight">Alterações não salvas</h3>
-                  <p className="text-slate-500 font-medium leading-relaxed">
-                    Salve as últimas alterações para que não sejam perdidas
+                  <h3 className="text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight">Alterações não salvas</h3>
+                  <p className="text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+                    Existem alterações que ainda não foram salvas. Se você sair agora, essas alterações serão perdidas.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3">
                   <button 
-                    onClick={handleSaveAndExitNavigation}
-                    className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
-                  >
-                    <Save size={18} />
-                    Salvar e Sair
-                  </button>
-                  
-                  <button 
-                    onClick={handleConfirmNavigation}
-                    className="w-full bg-slate-50 text-slate-600 py-3 rounded-2xl font-bold hover:bg-slate-100 transition-all border border-slate-200"
-                  >
-                    Sair sem Salvar
-                  </button>
-
-                  <button 
                     onClick={() => {
                       setShowUnsavedModal(false);
                       setPendingNavigationAction(null);
                     }}
-                    className="w-full text-slate-400 py-2 rounded-2xl font-bold hover:text-slate-600 transition-all text-sm"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-3.5 rounded-2xl font-bold transition-all shadow-lg shadow-indigo-100 dark:shadow-none flex items-center justify-center gap-2"
                   >
-                    Permanecer na Tela
+                    Continuar editando
+                  </button>
+                  
+                  <button 
+                    onClick={handleConfirmNavigation}
+                    className="w-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 py-3 rounded-2xl font-bold transition-all border border-slate-200 dark:border-slate-700"
+                  >
+                    Sair sem salvar
                   </button>
                 </div>
               </div>
@@ -1541,6 +1541,12 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
             groupBy === 'status' ? p.status === colId : (p.assignedTo === colId && p.status !== 'Backlog')
           );
 
+          // Priorização visual dos cards: progresso < 100% primeiro, progresso === 100% depois (preservando ordem original em cada grupo)
+          const sortedColProjects = [
+            ...colProjects.filter(p => (p.progress ?? 0) < 100),
+            ...colProjects.filter(p => (p.progress ?? 0) >= 100)
+          ];
+
           return (
             <div key={colId} className="flex flex-col gap-4 min-w-[320px] flex-1">
               <div className="flex items-center justify-between px-2">
@@ -1566,7 +1572,7 @@ function KanbanView({ projects, users, onProjectClick, onCreateProject, onDelete
               </div>
 
               <div className="bg-slate-100/50 dark:bg-slate-900/30 p-3 rounded-2xl flex-1 space-y-4 border border-slate-200/50 dark:border-slate-800/50">
-                {colProjects.map(project => (
+                {sortedColProjects.map(project => (
                   <ProjectCard 
                     key={project.id} 
                     project={project} 
@@ -3598,8 +3604,7 @@ function SettingsView({ users, globalConfig, projects, actions }: {
         id: 'setores-ferramentas', 
         label: 'Setores e Ferramentas', 
         icon: <Settings size={18} /> 
-      },
-      { id: 'ganhos', label: 'Tipos de Ganhos', icon: <TrendingUp size={18} /> }
+      }
     ] : []),
     { id: 'relatorios', label: 'Relatórios', icon: <FileText size={18} /> },
     { id: 'alterar-senha', label: 'Alterar Senha', icon: <Lock size={18} /> }
@@ -3669,7 +3674,6 @@ function SettingsView({ users, globalConfig, projects, actions }: {
               <UserActivityMonitoringTab users={users} currentUser={currentUserProfile} />
             )}
             {activeSubTab === 'setores-ferramentas' && <GlobalConfigTab config={globalConfig} />}
-            {activeSubTab === 'ganhos' && <GainTypesTab config={globalConfig} />}
             {activeSubTab === 'relatorios' && (
               <ReportsTab projects={projects} users={users} actions={actions} />
             )}
@@ -3798,600 +3802,6 @@ function GlobalConfigTab({ config }: {
           onUpdate={updateConfig}
         />
       </div>
-    </div>
-  );
-}
-
-function GainTypesTab({ config }: { config: GlobalConfig }) {
-  const [activeTab, setActiveTab] = useState<'tangible' | 'intangible' | 'unit'>('tangible');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<TangibleGainType | IntangibleGainType | UnitMeasure | null>(null);
-  
-  // Form state
-  const [name, setName] = useState('');
-  const [selectedUnits, setSelectedUnits] = useState<string[]>([]); // Used for tangible gain type
-  const [symbol, setSymbol] = useState(''); // Used for unit measure
-  const [description, setDescription] = useState(''); // Used for unit measure description
-  const [active, setActive] = useState(true);
-
-  // Deletion confirmation state
-  const [idToDelete, setIdToDelete] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (editingItem) {
-      setName((editingItem as any).name || '');
-      setSelectedUnits((editingItem as TangibleGainType).units || ((editingItem as any).unit ? [(editingItem as any).unit] : []));
-      setSymbol((editingItem as UnitMeasure).symbol || '');
-      setDescription((editingItem as UnitMeasure).description || '');
-      setActive(editingItem.active);
-    } else {
-      setName('');
-      setSelectedUnits([]);
-      setSymbol('');
-      setDescription('');
-      setActive(true);
-    }
-  }, [editingItem, isModalOpen]);
-
-  const updateConfig = async (updates: any) => {
-    try {
-      await setDoc(doc(db, 'config', 'global'), { ...config, ...updates }, { merge: true });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, 'config/global');
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!idToDelete) return;
-
-    if (activeTab === 'tangible') {
-      const next = (config.structuredTangibleGains || []).filter(i => i.id !== idToDelete);
-      await updateConfig({ structuredTangibleGains: next });
-    } else if (activeTab === 'intangible') {
-      const next = (config.structuredIntangibleGains || []).filter(i => i.id !== idToDelete);
-      await updateConfig({ structuredIntangibleGains: next });
-    } else {
-      const next = (config.structuredUnits || []).filter(i => i.id !== idToDelete);
-      await updateConfig({ structuredUnits: next });
-    }
-    setIdToDelete(null);
-  };
-
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (activeTab !== 'unit' && !name) return;
-    if (activeTab === 'unit' && !symbol) return;
-
-    if (activeTab === 'tangible') {
-      const current = config.structuredTangibleGains || [];
-      const data: TangibleGainType = { id: editingItem?.id || uuidv4(), name, units: selectedUnits, active };
-      let next: TangibleGainType[];
-      if (editingItem) {
-        next = current.map(item => item.id === editingItem.id ? data : item);
-      } else {
-        next = [...current, data];
-      }
-      await updateConfig({ structuredTangibleGains: next });
-    } else if (activeTab === 'intangible') {
-      const current = config.structuredIntangibleGains || [];
-      const data = { id: editingItem?.id || uuidv4(), name, active };
-      let next: IntangibleGainType[];
-      if (editingItem) {
-        next = current.map(item => item.id === editingItem.id ? data : item);
-      } else {
-        next = [...current, data];
-      }
-      await updateConfig({ structuredIntangibleGains: next });
-    } else {
-      const current = config.structuredUnits || [];
-      const data = { id: editingItem?.id || uuidv4(), symbol, description, active };
-      let next: UnitMeasure[];
-      if (editingItem) {
-        next = current.map(item => item.id === editingItem.id ? data : item);
-      } else {
-        next = [...current, data];
-      }
-      await updateConfig({ structuredUnits: next });
-    }
-
-    setIsModalOpen(false);
-    setEditingItem(null);
-  };
-
-  const toggleStatus = async (item: TangibleGainType | IntangibleGainType | UnitMeasure) => {
-    if (activeTab === 'tangible') {
-      const next = (config.structuredTangibleGains || []).map(i => i.id === item.id ? { ...i, active: !i.active } : i);
-      await updateConfig({ structuredTangibleGains: next });
-    } else if (activeTab === 'intangible') {
-      const next = (config.structuredIntangibleGains || []).map(i => i.id === item.id ? { ...i, active: !i.active } : i);
-      await updateConfig({ structuredIntangibleGains: next });
-    } else {
-      const next = (config.structuredUnits || []).map(i => i.id === item.id ? { ...i, active: !i.active } : i);
-      await updateConfig({ structuredUnits: next });
-    }
-  };
-
-  return (
-    <div className="flex-1 flex flex-col min-h-0 bg-slate-50/30">
-      <div className="p-8 border-b border-slate-100 bg-white">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shadow-inner">
-              <TrendingUp size={24} />
-            </div>
-            <div>
-              <h3 className="text-xl font-bold text-slate-900 leading-tight">Tipos de Ganhos</h3>
-              <p className="text-slate-500 text-sm mt-1">Configure os tipos de ganhos para uso no PDCA.</p>
-            </div>
-          </div>
-          
-          <button 
-            onClick={() => {
-              setEditingItem(null);
-              setIsModalOpen(true);
-            }}
-            className="flex items-center justify-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-2xl font-bold text-sm shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all"
-          >
-            <Plus size={18} />
-            {activeTab === 'tangible' ? 'Novo Ganho Tangível' : activeTab === 'intangible' ? 'Novo Ganho Intangível' : 'Nova Unidade'}
-          </button>
-        </div>
-
-        <div className="flex gap-2 mt-8 p-1 bg-slate-100 rounded-2xl w-fit">
-          <button 
-            onClick={() => setActiveTab('tangible')}
-            className={cn(
-              "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
-              activeTab === 'tangible' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
-            )}
-          >
-            Tangíveis
-          </button>
-          <button 
-            onClick={() => setActiveTab('intangible')}
-            className={cn(
-              "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
-              activeTab === 'intangible' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
-            )}
-          >
-            Intangíveis
-          </button>
-          <button 
-            onClick={() => setActiveTab('unit')}
-            className={cn(
-              "px-6 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all",
-              activeTab === 'unit' ? "bg-white text-indigo-600 shadow-sm" : "text-slate-400 hover:text-slate-600"
-            )}
-          >
-            Unidades de Medida
-          </button>
-        </div>
-      </div>
-
-      <div className="flex-1 p-8 overflow-y-auto">
-        <div className="bg-white rounded-[2rem] border border-slate-200 shadow-sm overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50/50 border-b border-slate-100">
-                {activeTab === 'unit' ? (
-                  <>
-                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Sigla</th>
-                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Descrição</th>
-                  </>
-                ) : (
-                  <>
-                    <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Nome</th>
-                    {activeTab === 'tangible' && (
-                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Unidade</th>
-                    )}
-                  </>
-                )}
-                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
-                <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50">
-              {activeTab === 'tangible' ? (
-                (config.structuredTangibleGains || []).length > 0 ? (
-                  config.structuredTangibleGains?.map(item => (
-                    <tr key={item.id} className="group hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-bold text-slate-700">{item.name}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-wrap gap-1">
-                          {item.units && item.units.length > 0 ? item.units.map((u, uIdx) => (
-                            <span key={`${u}-${uIdx}`} className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg border border-slate-200">{u}</span>
-                          )) : <span className="text-[10px] text-slate-400">Nenhuma</span>}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={cn(
-                          "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider",
-                          item.active 
-                            ? "bg-emerald-50 text-emerald-600" 
-                            : "bg-slate-100 text-slate-400 line-through"
-                        )}>
-                          {item.active ? <CheckCircle size={10} /> : <XCircle size={10} />}
-                          {item.active ? 'Ativo' : 'Inativo'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-2">
-                          <button 
-                            onClick={() => toggleStatus(item)}
-                            title={item.active ? 'Inativar' : 'Ativar'}
-                            className={cn(
-                              "p-2 rounded-xl transition-all",
-                              item.active ? "text-slate-400 hover:text-rose-500 hover:bg-rose-50" : "text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50"
-                            )}
-                          >
-                            {item.active ? <XCircle size={18} /> : <CheckCircle size={18} />}
-                          </button>
-                          <button 
-                            onClick={() => {
-                              setEditingItem(item);
-                              setIsModalOpen(true);
-                            }}
-                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
-                          >
-                            <Edit2 size={18} />
-                          </button>
-                          <button 
-                            onClick={() => setIdToDelete(item.id)}
-                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center">
-                      <div className="flex flex-col items-center gap-2 text-slate-400">
-                        <Zap size={32} strokeWidth={1} />
-                        <span className="text-sm font-medium">Nenhum ganho tangível cadastrado</span>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              ) : activeTab === 'intangible' ? (
-                (config.structuredIntangibleGains || []).length > 0 ? (
-                  config.structuredIntangibleGains?.map(item => (
-                    <tr key={item.id} className="group hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-bold text-slate-700">{item.name}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={cn(
-                          "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider",
-                          item.active 
-                            ? "bg-emerald-50 text-emerald-600" 
-                            : "bg-slate-100 text-slate-400 line-through"
-                        )}>
-                          {item.active ? <CheckCircle size={10} /> : <XCircle size={10} />}
-                          {item.active ? 'Ativo' : 'Inativo'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-2">
-                          <button 
-                            onClick={() => toggleStatus(item)}
-                            title={item.active ? 'Inativar' : 'Ativar'}
-                            className={cn(
-                              "p-2 rounded-xl transition-all",
-                              item.active ? "text-slate-400 hover:text-rose-500 hover:bg-rose-50" : "text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50"
-                            )}
-                          >
-                            {item.active ? <XCircle size={18} /> : <CheckCircle size={18} />}
-                          </button>
-                          <button 
-                            onClick={() => {
-                              setEditingItem(item);
-                              setIsModalOpen(true);
-                            }}
-                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
-                          >
-                            <Edit2 size={18} />
-                          </button>
-                          <button 
-                            onClick={() => setIdToDelete(item.id)}
-                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={3} className="px-6 py-12 text-center">
-                      <div className="flex flex-col items-center gap-2 text-slate-400">
-                        <Award size={32} strokeWidth={1} />
-                        <span className="text-sm font-medium">Nenhum ganho intangível cadastrado</span>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              ) : (
-                (config.structuredUnits || []).length > 0 ? (
-                  config.structuredUnits?.map(item => (
-                    <tr key={item.id} className="group hover:bg-slate-50/50 transition-colors">
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-bold text-slate-900 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">{item.symbol}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-sm font-medium text-slate-600">{item.description || '-'}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={cn(
-                          "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider",
-                          item.active 
-                            ? "bg-emerald-50 text-emerald-600" 
-                            : "bg-slate-100 text-slate-400 line-through"
-                        )}>
-                          {item.active ? <CheckCircle size={10} /> : <XCircle size={10} />}
-                          {item.active ? 'Ativo' : 'Inativo'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-end gap-2">
-                          <button 
-                            onClick={() => toggleStatus(item)}
-                            title={item.active ? 'Inativar' : 'Ativar'}
-                            className={cn(
-                              "p-2 rounded-xl transition-all",
-                              item.active ? "text-slate-400 hover:text-rose-500 hover:bg-rose-50" : "text-emerald-400 hover:text-emerald-600 hover:bg-emerald-50"
-                            )}
-                          >
-                            {item.active ? <XCircle size={18} /> : <CheckCircle size={18} />}
-                          </button>
-                          <button 
-                            onClick={() => {
-                              setEditingItem(item);
-                              setIsModalOpen(true);
-                            }}
-                            className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all"
-                          >
-                            <Edit2 size={18} />
-                          </button>
-                          <button 
-                            onClick={() => setIdToDelete(item.id)}
-                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-all"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center">
-                      <div className="flex flex-col items-center gap-2 text-slate-400">
-                        <Globe size={32} strokeWidth={1} />
-                        <span className="text-sm font-medium">Nenhuma unidade de medida cadastrada</span>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Modal / Sidebar Formulário */}
-      <AnimatePresence>
-        {isModalOpen && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsModalOpen(false)}
-              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100]"
-            />
-            <motion.div 
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-2xl z-[101] flex flex-col"
-            >
-              <div className="p-8 border-b border-slate-100 flex items-center justify-between">
-                <h3 className="text-xl font-bold text-slate-900">
-                  {editingItem ? 'Editar Tipo de Ganho' : 'Novo Tipo de Ganho'}
-                </h3>
-                <button onClick={() => setIsModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-xl transition-all">
-                  <X size={20} />
-                </button>
-              </div>
-
-              <form onSubmit={handleSave} className="flex-1 p-8 space-y-6 overflow-y-auto">
-                {activeTab !== 'unit' && (
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Nome do tipo de ganho</label>
-                    <input 
-                      required
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Ex: Redução de Custos"
-                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
-                    />
-                  </div>
-                )}
-
-                {activeTab === 'tangible' && (
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Unidades de medida vinculadas</label>
-                    <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto p-2 bg-slate-50 rounded-2xl border border-slate-100 shadow-inner">
-                      {(config.structuredUnits?.filter(u => u.active).map(u => u.symbol) || config.units || []).map((u, uIdx) => {
-                        const isSelected = selectedUnits.includes(u);
-                        return (
-                          <label 
-                            key={`${u}-${uIdx}`} 
-                            className={cn(
-                              "flex items-center gap-3 p-3 rounded-xl border-2 transition-all cursor-pointer",
-                              isSelected 
-                                ? "bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm" 
-                                : "bg-white border-transparent text-slate-500 hover:bg-slate-100"
-                            )}
-                          >
-                            <input 
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => {
-                                if (isSelected) {
-                                  setSelectedUnits(selectedUnits.filter(curr => curr !== u));
-                                } else {
-                                  setSelectedUnits([...selectedUnits, u]);
-                                }
-                              }}
-                              className="hidden"
-                            />
-                            <div className={cn(
-                              "w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all",
-                              isSelected ? "bg-indigo-600 border-indigo-600" : "bg-white border-slate-200"
-                            )}>
-                              {isSelected && <Check size={12} className="text-white" />}
-                            </div>
-                            <span className="text-sm font-bold">{u}</span>
-                          </label>
-                        );
-                      })}
-                      {(config.structuredUnits?.filter(u => u.active).length || 0) === 0 && (
-                        <div className="col-span-2 py-4 text-center text-slate-400 text-xs italic">
-                          Nenhuma unidade cadastrada. Cadastre em "Unidades de Medida" primeiro.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'unit' && (
-                  <div className="space-y-6">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Sigla (Obrigatório)</label>
-                      <input 
-                        required
-                        value={symbol}
-                        onChange={(e) => setSymbol(e.target.value)}
-                        placeholder="Ex: R$, %, h"
-                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Descrição (Opcional)</label>
-                      <input 
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        placeholder="Ex: Reais"
-                        className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-slate-700"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-4 pt-4">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Status</label>
-                  <div className="flex gap-4">
-                    <button 
-                      type="button"
-                      onClick={() => setActive(true)}
-                      className={cn(
-                        "flex-1 p-4 rounded-2xl border-2 transition-all flex items-center justify-center gap-2 font-bold text-sm",
-                        active ? "bg-emerald-50 border-emerald-500 text-emerald-700" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
-                      )}
-                    >
-                      <CheckCircle size={18} />
-                      Ativo
-                    </button>
-                    <button 
-                      type="button"
-                      onClick={() => setActive(false)}
-                      className={cn(
-                        "flex-1 p-4 rounded-2xl border-2 transition-all flex items-center justify-center gap-2 font-bold text-sm",
-                        !active ? "bg-rose-50 border-rose-500 text-rose-700" : "bg-white border-slate-100 text-slate-400 hover:border-slate-200"
-                      )}
-                    >
-                      <XCircle size={18} />
-                      Inativo
-                    </button>
-                  </div>
-                </div>
-              </form>
-
-              <div className="p-8 border-t border-slate-100 flex gap-4 bg-slate-50/50">
-                <button 
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="flex-1 py-4 px-6 border border-slate-200 rounded-2xl font-bold text-slate-600 hover:bg-white transition-all"
-                >
-                  Cancelar
-                </button>
-                <button 
-                  onClick={handleSave}
-                  className="flex-1 py-4 px-6 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
-                >
-                  Salvar
-                </button>
-              </div>
-            </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* Confirmação de Exclusão */}
-      <AnimatePresence>
-        {idToDelete && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIdToDelete(null)}
-              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110]"
-            />
-            <div className="fixed inset-0 flex items-center justify-center p-4 z-[111]">
-              <motion.div 
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.9, opacity: 0 }}
-                className="bg-white rounded-[2.5rem] p-10 max-w-sm w-full shadow-2xl border border-slate-100 space-y-6"
-              >
-                <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
-                  <Trash2 size={32} />
-                </div>
-                
-                <div className="text-center space-y-2">
-                  <h3 className="text-xl font-bold text-slate-900">Confirmar exclusão?</h3>
-                  <p className="text-slate-500 text-sm">
-                    Deseja realmente excluir este registro? Essa ação não poderá ser desfeita.
-                  </p>
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button 
-                    onClick={() => setIdToDelete(null)}
-                    className="flex-1 py-4 px-6 border border-slate-200 rounded-2xl font-bold text-slate-600 hover:bg-slate-50 transition-all text-sm"
-                  >
-                    Cancelar
-                  </button>
-                  <button 
-                    onClick={handleDelete}
-                    className="flex-1 py-4 px-6 bg-rose-600 text-white rounded-2xl font-bold hover:bg-rose-700 transition-all shadow-lg shadow-rose-100 text-sm"
-                  >
-                    Confirmar exclusão
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          </>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

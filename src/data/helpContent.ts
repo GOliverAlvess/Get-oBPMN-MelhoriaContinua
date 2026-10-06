@@ -69,13 +69,6 @@ export const HELP_CONTENT: Record<string, HelpItemContent> = {
     whatToDo: 'Avalie se o impacto é tangível, intangível ou possui os dois tipos e registre as informações que permitam compreender sua relevância.',
     objective: 'Demonstrar a dimensão do problema e criar uma base para comparar os resultados obtidos após as ações de melhoria.',
   },
-  ganhoEsperado: {
-    key: 'ganhoEsperado',
-    title: 'Ganho Esperado',
-    whatIs: 'Representa o resultado esperado após a implementação das ações planejadas.',
-    whatToDo: 'Defina metas coerentes com o impacto identificado e com aquilo que será posteriormente acompanhado.',
-    objective: 'Criar uma referência clara para comparar o resultado planejado com o resultado efetivamente alcançado.',
-  },
   do: {
     key: 'do',
     title: 'DO — Executar',
@@ -135,8 +128,51 @@ export const HELP_CONTENT: Record<string, HelpItemContent> = {
   monitoramento: {
     key: 'monitoramento',
     title: 'Monitoramento de Usuários',
-    whatIs: 'Esta área permite acompanhar a utilização do GIP Flow pelos usuários autorizados.',
-    whatToDo: 'Consulte informações de acesso e atividades relevantes registradas pelo sistema.',
-    objective: 'Entender a utilização da ferramenta e apoiar o acompanhamento da adoção do GIP Flow.',
+    whatIs: 'Painel gerencial e auditável para acompanhamento de utilização efetiva, tempo ativo real, acessos e operações no GIP Flow.',
+    whatToDo: 'Consulte quem está ativo agora (interação nos últimos 5 min), tempo ativo acumulado, dias ativos, sessões válidas e histórico de ações.',
+    objective: 'Medir a adoção e utilização real do GIP Flow com base em critérios objetivos e transparentes, diferenciando presença ativa de simples tela aberta.',
+    tip: 'O sistema pausa a contagem de tempo ativo automaticamente se o usuário ficar mais de 5 minutos sem interagir ou se a aba for para segundo plano.',
+  },
+  ganhosNoPeriodo: {
+    key: 'ganhosNoPeriodo',
+    title: 'Ganhos no Período',
+    whatIs: 'Soma dos resultados financeiros positivos efetivamente reconhecidos no período selecionado, considerando os PDCAs com resultado financeiro registrado.',
+    whatToDo: 'Analise os valores financeiros positivos trazidos pelas melhorias.',
+    objective: 'Mensurar o retorno positivo gerado pelas iniciativas de melhoria.',
+  },
+  perdasNoPeriodo: {
+    key: 'perdasNoPeriodo',
+    title: 'Perdas no Período',
+    whatIs: 'Soma dos resultados financeiros negativos identificados nos projetos durante o período selecionado.',
+    whatToDo: 'Acompanhe aumentos de custo ou perdas financeiras identificadas nos projetos.',
+    objective: 'Identificar impactos financeiros negativos para direcionar planos de contenção.',
+  },
+  saldoFinanceiro: {
+    key: 'saldoFinanceiro',
+    title: 'Saldo Financeiro',
+    whatIs: 'Resultado líquido entre ganhos e perdas dos projetos no período selecionado.',
+    whatToDo: 'Avalie o resultado consolidado (Ganhos - Perdas) das iniciativas no período.',
+    objective: 'Demonstrar o valor financeiro líquido final gerado pelas melhorias.',
+  },
+  projetosComResultadoFinanceiro: {
+    key: 'projetosComResultadoFinanceiro',
+    title: 'Projetos com Resultado Financeiro',
+    whatIs: 'Quantidade de projetos que possuem pelo menos um PDCA com ganho ou perda financeira registrada.',
+    whatToDo: 'Veja a proporção de projetos que geraram resultado financeiro mensurado.',
+    objective: 'Acompanhar a abrangência das iniciativas com impacto financeiro.',
+  },
+  resultadoPorProjeto: {
+    key: 'resultadoPorProjeto',
+    title: 'Resultado Financeiro por Projeto',
+    whatIs: 'Mostra quanto cada projeto contribuiu para o resultado financeiro geral. Valores positivos representam ganhos e valores negativos representam perdas.',
+    whatToDo: 'Compare o desempenho financeiro de cada projeto individualmente.',
+    objective: 'Identificar quais projetos foram os maiores geradores de valor ou tiveram variações de custo.',
+  },
+  evolucaoFinanceira: {
+    key: 'evolucaoFinanceira',
+    title: 'Evolução Financeira',
+    whatIs: 'Mostra como os ganhos e perdas reconhecidos evoluíram ao longo dos meses.',
+    whatToDo: 'Acompanhe a trajetória mês a mês dos resultados financeiros consolidados.',
+    objective: 'Visualizar a tendência e o acúmulo de resultados ao longo do tempo.',
   }
 };

@@ -3,6 +3,7 @@ import { db } from '../firebase';
 import { NotificationItem, Project, OperationalAction, Subtask } from '../types';
 import { logFeature } from './changelogService';
 import { calculateActionAlert } from '../utils/calculations';
+import { getApiUrl } from '../utils/apiUrl';
 
 export async function createNotification(params: {
   usuario_id: string;
@@ -56,17 +57,74 @@ export async function deleteNotification(notificationId: string) {
     await deleteDoc(doc(db, 'notifications', notificationId));
   } catch (error) {
     console.error('Erro ao excluir notificação:', error);
+    throw error;
+  }
+}
+
+export async function clearAllNotifications(
+  notifications: NotificationItem[],
+  currentUserId?: string,
+  currentUserEmail?: string
+) {
+  const todayStr = new Date().toISOString().substring(0, 10);
+  // Mark daily deadline check in localStorage for all user identifier permutations
+  // so clearing notifications doesn't trigger immediate resurrection
+  try {
+    const idsToMark = new Set<string>();
+    if (currentUserId) idsToMark.add(currentUserId);
+    if (currentUserEmail) {
+      idsToMark.add(currentUserEmail);
+      idsToMark.add(currentUserEmail.toLowerCase());
+    }
+    notifications.forEach((n) => {
+      if (n.usuario_id) {
+        idsToMark.add(n.usuario_id);
+        idsToMark.add(n.usuario_id.toLowerCase());
+      }
+    });
+    idsToMark.forEach((k) => {
+      localStorage.setItem(`daily_deadline_alert_${todayStr}_${k}`, 'true');
+    });
+  } catch (e) {}
+
+  const notificationIds = notifications.map((n) => n.id);
+
+  const authHeaders: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (currentUserEmail) {
+    authHeaders['x-user-email'] = currentUserEmail;
+  }
+  if (currentUserId) {
+    authHeaders['x-user-uid'] = currentUserId;
+  }
+
+  const url = getApiUrl('/api/notifications/clear-all');
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: authHeaders,
+    body: JSON.stringify({ notificationIds }),
+  });
+
+  if (!response.ok) {
+    let errorMsg = 'Falha ao limpar notificações no servidor';
+    try {
+      const errData = await response.json();
+      if (errData?.error) errorMsg = errData.error;
+    } catch (_) {}
+    throw new Error(errorMsg);
   }
 }
 
 export async function markAllAsRead(notifications: NotificationItem[]) {
   try {
     const unread = notifications.filter((n) => !n.lida);
-    for (const notif of unread) {
-      await updateDoc(doc(db, 'notifications', notif.id), { lida: true });
-    }
+    if (unread.length === 0) return;
+    await Promise.all(unread.map(notif => updateDoc(doc(db, 'notifications', notif.id), { lida: true })));
   } catch (error) {
     console.error('Erro ao marcar todas como lidas:', error);
+    throw error;
   }
 }
 
@@ -155,6 +213,22 @@ export async function checkAndNotifyActionDeadlines(
 
   const todayStr = new Date().toISOString().substring(0, 10);
 
+  const keysToCheck = [
+    userId,
+    userEmail,
+    userEmail?.toLowerCase(),
+  ].filter(Boolean) as string[];
+
+  // Check localStorage if this user was already processed for daily deadline alert today
+  try {
+    const alreadyProcessed = keysToCheck.some(
+      (k) => localStorage.getItem(`daily_deadline_alert_${todayStr}_${k}`) === 'true'
+    );
+    if (alreadyProcessed) {
+      return;
+    }
+  } catch (e) {}
+
   // Anti-spam / Daily Rule: Regra de 1 notificação por dia
   const alreadyNotifiedToday = existingNotifications.some((n) => {
     const notifDateStr = n.data ? n.data.substring(0, 10) : '';
@@ -164,7 +238,14 @@ export async function checkAndNotifyActionDeadlines(
     );
   });
 
-  if (alreadyNotifiedToday) return;
+  if (alreadyNotifiedToday) {
+    try {
+      keysToCheck.forEach((k) => {
+        localStorage.setItem(`daily_deadline_alert_${todayStr}_${k}`, 'true');
+      });
+    } catch (e) {}
+    return;
+  }
 
   // Filtrar ações não concluídas atribuídas ao usuário logado que estão próximas de vencer ou atrasadas
   const userPendingActions = actions.filter((action) => {
@@ -192,11 +273,18 @@ export async function checkAndNotifyActionDeadlines(
     ? `Atenção: Você possui 1 ação no histórico de ações próxima de vencer o prazo ("${firstAction.action}").`
     : `Atenção: Você possui ${count} ações no histórico de ações próximas de vencer o prazo.`;
 
+  // Mark in localStorage before creating to prevent race condition
+  try {
+    keysToCheck.forEach((k) => {
+      localStorage.setItem(`daily_deadline_alert_${todayStr}_${k}`, 'true');
+    });
+  } catch (e) {}
+
   await createNotification({
     usuario_id: userId,
     tipo: 'acao',
     mensagem,
-    referencia_id: firstAction.id,
+    referencia_id: 'all_deadline_actions',
     subtask_id: 'daily_deadline_alert',
   });
 }

@@ -130,7 +130,7 @@ GOOGLE_DRIVE_PARENT_FOLDER_ID=0AFf6OFctpR_7Uk9PVA
 PORT=3002
 ```
 
-> ⚠️ **Atenção:** Nunca suba o arquivo `.env` para o repositório Git público. Mantenha as chaves salvas como **Secrets** no GitHub Actions e injete-as diretamente no Portainer/Docker da VPS.
+> ⚠️ **AVISO:** Nunca suba o arquivo `.env` para o repositório Git público. Mantenha as chaves salvas como **Secrets** no GitHub Actions e injete-as diretamente no Portainer/Docker da VPS.
 
 ---
 
@@ -177,6 +177,7 @@ Isso iniciará o contêiner da aplicação mapeando a porta `3002`.
     ```bash
     docker restart pdca-system-app
     ```
+    
 2.  **Backups Regulares:** Agende rotinas de backup da pasta de dados física do MongoDB (`/data/db` mapeada na sua VPS) para garantir segurança máxima das informações estratégicas cadastradas no sistema PDCA.
 
 ---

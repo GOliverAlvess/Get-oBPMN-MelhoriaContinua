@@ -22,10 +22,16 @@ import {
   UploadCloud, 
   Settings,
   TrendingUp,
-  X
+  X,
+  Info,
+  ChevronDown,
+  Layers,
+  Sparkles,
+  MousePointerClick,
+  UserCheck
 } from 'lucide-react';
 import { db, collection, onSnapshot, query, orderBy, handleFirestoreError, OperationType } from '../firebase';
-import { User, UserActivityLog } from '../types';
+import { User, UserActivityLog, UserDailyActivity } from '../types';
 import { cn, exportarCSVPadrao } from '../lib/utils';
 import ContextHelp from './ContextHelp';
 
@@ -40,32 +46,52 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
 
   // Estados de Filtros e Busca
   const [searchTerm, setSearchTerm] = useState('');
-  const [periodFilter, setPeriodFilter] = useState<'today' | '7days' | '30days' | 'all'>('30days');
+  const [periodFilter, setPeriodFilter] = useState<'today' | '7days' | '30days' | 'custom' | 'all'>('30days');
+  const [customStartDate, setCustomStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().split('T')[0];
+  });
+  const [customEndDate, setCustomEndDate] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
   const [statusFilter, setStatusFilter] = useState<'all' | 'Ativo' | 'Inativo'>('all');
-  const [sortBy, setSortBy] = useState<'actions_desc' | 'actions_asc' | 'last_access' | 'time_desc'>('last_access');
+  const [sortBy, setSortBy] = useState<'last_active' | 'last_access' | 'time_desc' | 'actions_desc' | 'actions_asc'>('last_active');
 
   // Estados de Paginação
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
-  // Logs de atividade em tempo real
+  // Logs de atividade e registros diários em tempo real
   const [activityLogs, setActivityLogs] = useState<UserActivityLog[]>([]);
+  const [dailyActivities, setDailyActivities] = useState<UserDailyActivity[]>([]);
   const [selectedUserForAudit, setSelectedUserForAudit] = useState<User | null>(null);
   const [auditActionFilter, setAuditActionFilter] = useState<string>('all');
+  const [isRulesExpanded, setIsRulesExpanded] = useState<boolean>(false);
 
-  // Busca logs de auditoria no Firestore
+  // Busca logs de auditoria e registros diários no Firestore
   useEffect(() => {
     if (!isMaster) return;
 
-    const q = query(collection(db, 'userActivityLogs'), orderBy('timestamp', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const qLogs = query(collection(db, 'userActivityLogs'), orderBy('timestamp', 'desc'));
+    const unsubscribeLogs = onSnapshot(qLogs, (snapshot) => {
       const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserActivityLog));
       setActivityLogs(logs);
     }, (error) => {
       handleFirestoreError(error, OperationType.GET, 'userActivityLogs');
     });
 
-    return () => unsubscribe();
+    const unsubscribeDaily = onSnapshot(collection(db, 'userDailyActivity'), (snapshot) => {
+      const dailies = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserDailyActivity));
+      setDailyActivities(dailies);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, 'userDailyActivity');
+    });
+
+    return () => {
+      unsubscribeLogs();
+      unsubscribeDaily();
+    };
   }, [isMaster]);
 
   // Se não for master, bloqueia a interface por segurança
@@ -78,158 +104,329 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
         <div>
           <h3 className="text-xl font-bold text-slate-900">Acesso Restrito ao Usuário Master</h3>
           <p className="text-slate-500 text-sm max-w-md mt-1">
-            Esta aba contém relatórios confidenciais de auditoria de uso do sistema e está disponível exclusivamente para Administradores Principais (Usuário Master).
+            Esta aba contém relatórios confidenciais de monitoramento e auditoria de uso do sistema e está disponível exclusivamente para Administradores Principais (Usuário Master).
           </p>
         </div>
       </div>
     );
   }
 
-  // Define limite de data conforme o período selecionado
-  const getPeriodStartDate = () => {
+  // Intervalo de datas no formato YYYY-MM-DD e Timestamps
+  const { periodStartTimestamp, periodEndTimestamp, periodStartDateStr, periodEndDateStr } = useMemo(() => {
     const now = new Date();
-    if (periodFilter === 'today') {
-      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      return startOfDay.getTime();
-    }
-    if (periodFilter === '7days') {
-      return now.getTime() - (7 * 24 * 60 * 60 * 1000);
-    }
-    if (periodFilter === '30days') {
-      return now.getTime() - (30 * 24 * 60 * 60 * 1000);
-    }
-    return 0; // Todos
-  };
+    const todayStr = now.toISOString().split('T')[0];
 
-  const periodStartTime = getPeriodStartDate();
+    if (periodFilter === 'today') {
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+      const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      return {
+        periodStartTimestamp: startOfDay.getTime(),
+        periodEndTimestamp: endOfDay.getTime(),
+        periodStartDateStr: todayStr,
+        periodEndDateStr: todayStr
+      };
+    }
+
+    if (periodFilter === '7days') {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6, 0, 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      return {
+        periodStartTimestamp: start.getTime(),
+        periodEndTimestamp: end.getTime(),
+        periodStartDateStr: start.toISOString().split('T')[0],
+        periodEndDateStr: todayStr
+      };
+    }
+
+    if (periodFilter === '30days') {
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29, 0, 0, 0, 0);
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+      return {
+        periodStartTimestamp: start.getTime(),
+        periodEndTimestamp: end.getTime(),
+        periodStartDateStr: start.toISOString().split('T')[0],
+        periodEndDateStr: todayStr
+      };
+    }
+
+    if (periodFilter === 'custom') {
+      const start = customStartDate ? new Date(`${customStartDate}T00:00:00`) : new Date(0);
+      const end = customEndDate ? new Date(`${customEndDate}T23:59:59.999`) : new Date();
+      return {
+        periodStartTimestamp: start.getTime(),
+        periodEndTimestamp: end.getTime(),
+        periodStartDateStr: customStartDate || '1970-01-01',
+        periodEndDateStr: customEndDate || todayStr
+      };
+    }
+
+    // Todos
+    return {
+      periodStartTimestamp: 0,
+      periodEndTimestamp: Number.MAX_SAFE_INTEGER,
+      periodStartDateStr: '1970-01-01',
+      periodEndDateStr: '2999-12-31'
+    };
+  }, [periodFilter, customStartDate, customEndDate]);
 
   // Logs filtrados pelo período
   const filteredLogsInPeriod = useMemo(() => {
-    if (periodStartTime === 0) return activityLogs;
     return activityLogs.filter(log => {
       const logTime = new Date(log.timestamp).getTime();
-      return !isNaN(logTime) && logTime >= periodStartTime;
+      if (isNaN(logTime)) return false;
+      return logTime >= periodStartTimestamp && logTime <= periodEndTimestamp;
     });
-  }, [activityLogs, periodStartTime]);
+  }, [activityLogs, periodStartTimestamp, periodEndTimestamp]);
 
-  // Consolidação de estatísticas por usuário
-  const userStats = useMemo(() => {
+  // Registros diários filtrados pelo período
+  const filteredDailiesInPeriod = useMemo(() => {
+    return dailyActivities.filter(d => {
+      if (!d.date) return false;
+      return d.date >= periodStartDateStr && d.date <= periodEndDateStr;
+    });
+  }, [dailyActivities, periodStartDateStr, periodEndDateStr]);
+
+  // Consolidação precisa e auditável de métricas por usuário (ÚNICA FONTE DE VERDADE)
+  const userStatsMap = useMemo(() => {
     const map = new Map<string, {
-      logins: number;
-      actions: number;
-      lastAccess: string | null;
+      lastLogin: string | null;
+      lastActive: string | null;
+      lastPresence: string | null;
+      activeSeconds: number;
+      sessionsCount: number;
+      actionsCount: number;
+      activeDaysSet: Set<string>;
       logs: UserActivityLog[];
     }>();
 
-    // Inicializa todos os usuários cadastrados
+    // 1. Inicializa todos os usuários com dados base
     users.forEach(u => {
       map.set(u.id, {
-        logins: u.loginCount || 0,
-        actions: u.actionCount || 0,
-        lastAccess: u.lastAccess || null,
+        lastLogin: u.lastLoginAt || u.lastAccess || null,
+        lastActive: u.lastActiveAt || u.lastAccess || null,
+        lastPresence: u.lastPresenceAt || u.lastActiveAt || null,
+        activeSeconds: 0,
+        sessionsCount: 0,
+        actionsCount: 0,
+        activeDaysSet: new Set<string>(),
         logs: [],
       });
     });
 
-    // Agrega logs reais dentro do período
-    filteredLogsInPeriod.forEach(log => {
-      if (!log.userId) return;
-      const current = map.get(log.userId) || {
-        logins: 0,
-        actions: 0,
-        lastAccess: null,
+    // 2. Agrega tempo ativo, sessões e dias ativos a partir de userDailyActivity no período selecionado
+    filteredDailiesInPeriod.forEach(d => {
+      if (!d.userId) return;
+      const current = map.get(d.userId) || {
+        lastLogin: null,
+        lastActive: null,
+        lastPresence: null,
+        activeSeconds: 0,
+        sessionsCount: 0,
+        actionsCount: 0,
+        activeDaysSet: new Set<string>(),
         logs: [],
       };
 
-      if (log.actionType === 'login') {
-        current.logins += 1;
-      } else {
-        current.actions += 1;
+      const daySeconds = d.activeSeconds || 0;
+      const dayActions = d.actionsCount || 0;
+
+      current.activeSeconds += daySeconds;
+
+      // REGRA OFICIAL DE DIA ATIVO: Mínimo de 1 minuto (>= 60s) de Tempo Ativo ou pelo menos 1 ação relevante
+      if (daySeconds >= 60 || dayActions > 0) {
+        current.activeDaysSet.add(d.date);
+        // Sessão válida com utilização efetiva
+        current.sessionsCount += Math.max(1, d.sessionsCount || 0);
       }
+
+      current.actionsCount += dayActions;
+
+      if (d.lastActiveAt) {
+        if (!current.lastActive || new Date(d.lastActiveAt) > new Date(current.lastActive)) {
+          current.lastActive = d.lastActiveAt;
+        }
+      }
+
+      map.set(d.userId, current);
+    });
+
+    // 3. Agrega logs reais dentro do período
+    filteredLogsInPeriod.forEach(log => {
+      if (!log.userId) return;
+      const current = map.get(log.userId) || {
+        lastLogin: null,
+        lastActive: null,
+        lastPresence: null,
+        activeSeconds: 0,
+        sessionsCount: 0,
+        actionsCount: 0,
+        activeDaysSet: new Set<string>(),
+        logs: [],
+      };
 
       current.logs.push(log);
 
-      if (!current.lastAccess || new Date(log.timestamp) > new Date(current.lastAccess)) {
-        current.lastAccess = log.timestamp;
+      const logDate = log.timestamp.split('T')[0];
+      if (logDate && log.actionType !== 'login') {
+        current.activeDaysSet.add(logDate);
+      }
+
+      if (log.actionType === 'login') {
+        if (!current.lastLogin || new Date(log.timestamp) > new Date(current.lastLogin)) {
+          current.lastLogin = log.timestamp;
+        }
+      } else {
+        // Operação relevante concluída
+        if (!current.lastActive || new Date(log.timestamp) > new Date(current.lastActive)) {
+          current.lastActive = log.timestamp;
+        }
       }
 
       map.set(log.userId, current);
     });
 
-    return map;
-  }, [users, filteredLogsInPeriod]);
+    // 4. Fallback retrocompatível de tempo caso o usuário ainda não possua registros diários
+    users.forEach(u => {
+      const stats = map.get(u.id);
+      if (stats && stats.activeSeconds === 0 && u.totalActiveSeconds) {
+        stats.activeSeconds = u.totalActiveSeconds;
+      }
+      if (stats && stats.sessionsCount === 0 && u.loginCount) {
+        stats.sessionsCount = u.loginCount;
+      }
+      if (stats && stats.actionsCount === 0 && u.actionCount) {
+        stats.actionsCount = u.actionCount;
+      }
+    });
 
-  // Lista processada de usuários para tabela
+    return map;
+  }, [users, filteredDailiesInPeriod, filteredLogsInPeriod]);
+
+  // Lista processada de usuários para tabela e cards
   const processedUsers = useMemo(() => {
-    const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+    const nowTime = Date.now();
+    // REGRA OFICIAL: Interação e presença nos últimos 5 MINUTOS (300.000 ms)
+    const fiveMinutesAgo = nowTime - (5 * 60 * 1000);
+    const sevenDaysAgo = nowTime - (7 * 24 * 60 * 60 * 1000);
 
     return users.map(user => {
-      const stats = userStats.get(user.id) || {
-        logins: user.loginCount || 0,
-        actions: user.actionCount || 0,
-        lastAccess: user.lastAccess || null,
+      const stats = userStatsMap.get(user.id) || {
+        lastLogin: user.lastLoginAt || user.lastAccess || null,
+        lastActive: user.lastActiveAt || user.lastAccess || null,
+        lastPresence: user.lastPresenceAt || user.lastActiveAt || null,
+        activeSeconds: user.totalActiveSeconds || (user.totalUsageMinutes ? user.totalUsageMinutes * 60 : 0),
+        sessionsCount: user.loginCount || 0,
+        actionsCount: user.actionCount || 0,
+        activeDaysSet: new Set<string>(),
         logs: [],
       };
 
-      const lastAccessTime = stats.lastAccess ? new Date(stats.lastAccess).getTime() : 0;
-      // Define se está "Ativo" (teve acesso recente nos últimos 7 dias ou ações no período)
-      const isActive = lastAccessTime > sevenDaysAgo || stats.actions > 0 || stats.logins > 0;
-      const computedStatus: 'Ativo' | 'Inativo' = isActive ? 'Ativo' : 'Inativo';
+      // Avaliação de "Ativo Agora":
+      // 1. Presença recente (lastPresenceAt ou lastActiveAt nos últimos 5 minutos)
+      // 2. Não possui flag explícita de offline/logout
+      const rawPresenceTime = stats.lastPresence || user.lastPresenceAt || stats.lastActive || user.lastActiveAt;
+      const lastPresenceTimestamp = rawPresenceTime ? new Date(rawPresenceTime).getTime() : 0;
+      const isOnlineNow = (lastPresenceTimestamp > fiveMinutesAgo) && (user.isOnline !== false);
 
-      // Estimativa de minutos de uso
-      const totalMinutes = user.totalUsageMinutes || (stats.logins * 5 + stats.actions * 2);
+      const isRecentlyActive = lastPresenceTimestamp > sevenDaysAgo || stats.actionsCount > 0 || stats.activeSeconds >= 60;
+      const computedStatus: 'Ativo' | 'Inativo' = isRecentlyActive ? 'Ativo' : 'Inativo';
+
+      const activeMinutes = Math.round(stats.activeSeconds / 60);
+      const activeDays = stats.activeDaysSet.size;
+      const sessions = Math.max(stats.sessionsCount, activeDays > 0 ? activeDays : (stats.actionsCount > 0 ? 1 : 0));
+      const avgSecondsPerSession = sessions > 0 ? Math.round(stats.activeSeconds / sessions) : 0;
 
       return {
         ...user,
-        periodLogins: stats.logins,
-        periodActions: stats.actions,
-        effectiveLastAccess: stats.lastAccess,
+        effectiveLastLogin: stats.lastLogin,
+        effectiveLastActive: stats.lastActive,
+        effectiveLastPresence: stats.lastPresence || user.lastPresenceAt,
+        periodActiveSeconds: stats.activeSeconds,
+        periodActiveMinutes: activeMinutes,
+        periodActions: stats.actionsCount,
+        periodSessions: sessions,
+        periodActiveDays: activeDays,
+        avgSecondsPerSession,
+        isOnlineNow,
         computedStatus,
-        totalMinutes,
         userLogs: stats.logs,
       };
     });
-  }, [users, userStats]);
+  }, [users, userStatsMap]);
 
   // Aplicação de busca e filtros de status/ordenação
   const filteredUsers = useMemo(() => {
     return processedUsers.filter(u => {
-      // Busca textual
       const matchesSearch = 
         u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (u.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (u.sector || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-      // Filtro de status
-      const matchesStatus = statusFilter === 'all' || u.computedStatus === statusFilter;
+      const matchesStatus = statusFilter === 'all' || (
+        statusFilter === 'Ativo' ? (u.isOnlineNow || u.computedStatus === 'Ativo') : (!u.isOnlineNow && u.computedStatus === 'Inativo')
+      );
 
       return matchesSearch && matchesStatus;
     }).sort((a, b) => {
-      if (sortBy === 'actions_desc') return b.periodActions - a.periodActions;
-      if (sortBy === 'actions_asc') return a.periodActions - b.periodActions;
-      if (sortBy === 'time_desc') return b.totalMinutes - a.totalMinutes;
-      if (sortBy === 'last_access') {
-        const timeA = a.effectiveLastAccess ? new Date(a.effectiveLastAccess).getTime() : 0;
-        const timeB = b.effectiveLastAccess ? new Date(b.effectiveLastAccess).getTime() : 0;
+      if (sortBy === 'last_active') {
+        const timeA = a.effectiveLastActive ? new Date(a.effectiveLastActive).getTime() : 0;
+        const timeB = b.effectiveLastActive ? new Date(b.effectiveLastActive).getTime() : 0;
         return timeB - timeA;
+      }
+      if (sortBy === 'last_access') {
+        const timeA = a.effectiveLastLogin ? new Date(a.effectiveLastLogin).getTime() : 0;
+        const timeB = b.effectiveLastLogin ? new Date(b.effectiveLastLogin).getTime() : 0;
+        return timeB - timeA;
+      }
+      if (sortBy === 'time_desc') {
+        return b.periodActiveSeconds - a.periodActiveSeconds;
+      }
+      if (sortBy === 'actions_desc') {
+        return b.periodActions - a.periodActions;
+      }
+      if (sortBy === 'actions_asc') {
+        return a.periodActions - b.periodActions;
       }
       return 0;
     });
   }, [processedUsers, searchTerm, statusFilter, sortBy]);
 
-  // Métricas para os Cards de Topo
-  const totalUsersCount = users.length;
-  const activeUsersCount = processedUsers.filter(u => u.computedStatus === 'Ativo').length;
-  const totalActionsInPeriod = filteredLogsInPeriod.length;
-  const avgActionsPerUser = activeUsersCount > 0 ? (totalActionsInPeriod / activeUsersCount).toFixed(1) : '0';
+  // Formatação de Segundos em Horas, Minutos e Segundos
+  const formatActiveTime = (totalSeconds: number) => {
+    if (!totalSeconds || totalSeconds <= 0) return '0 min';
+    if (totalSeconds < 60) return `${totalSeconds}s`;
+    const totalMinutes = Math.floor(totalSeconds / 60);
+    if (totalMinutes < 60) {
+      const remainingSeconds = totalSeconds % 60;
+      return remainingSeconds > 0 ? `${totalMinutes}m ${remainingSeconds}s` : `${totalMinutes} min`;
+    }
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    return `${hours}h ${mins}m`;
+  };
+
+  // -------------------------------------------------------------
+  // MÉTRICAS CONSOLIDADAS PARA OS CARDS DE TOPO (EXATAMENTE A MESMA FONTE)
+  // -------------------------------------------------------------
+  // 1. Usuários Ativos Agora: Presença real com interação nos últimos 5 minutos
+  const activeNowCount = processedUsers.filter(u => u.isOnlineNow).length;
+  // 2. Usuários que Utilizaram no Período: Usuários com pelo menos 1 Dia Ativo (>= 1 min de uso) no período
+  const periodUsersCount = processedUsers.filter(u => u.periodActiveDays >= 1 || u.periodActiveSeconds >= 60 || u.periodActions > 0).length;
+  // 3. Tempo Ativo Total no Período: Soma dos tempos ativos reais
+  const totalPeriodActiveSeconds = processedUsers.reduce((sum, u) => sum + u.periodActiveSeconds, 0);
+  // 4. Ações Realizadas no Período: Soma das operações concluídas com sucesso
+  const totalPeriodActions = processedUsers.reduce((sum, u) => sum + u.periodActions, 0);
+  // 5. Média por Sessão: Tempo ativo total / total de sessões válidas
+  const totalPeriodSessions = processedUsers.reduce((sum, u) => sum + u.periodSessions, 0);
+  const overallAvgSecondsPerSession = totalPeriodSessions > 0 ? Math.round(totalPeriodActiveSeconds / totalPeriodSessions) : 0;
 
   // Lógica de Paginação
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage) || 1;
   const paginatedUsers = filteredUsers.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
-  // Formatação amigável de datas
+  // Formatação amigável de datas e horários
   const formatFriendlyDate = (isoString?: string | null) => {
-    if (!isoString) return 'Nunca acessou';
+    if (!isoString) return 'Sem registro';
     const date = new Date(isoString);
     if (isNaN(date.getTime())) return 'Inválido';
 
@@ -250,15 +447,6 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ` às ${timeStr}`;
   };
 
-  // Formatação de minutos em Horas e Minutos
-  const formatUsageTime = (minutes: number) => {
-    if (!minutes || minutes <= 0) return '0 min';
-    if (minutes < 60) return `${minutes} min`;
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${hours}h ${mins}m`;
-  };
-
   // Exportar dados agregados em CSV
   const handleExportCSV = () => {
     const headers = [
@@ -266,11 +454,14 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
       'E-mail',
       'Perfil',
       'Setor',
-      'Último Acesso',
-      'Logins no Período',
-      'Ações no Período',
-      'Tempo de Uso Estimado',
-      'Status'
+      'Último Acesso (Login)',
+      'Última Atividade Relevante',
+      'Tempo Ativo Real',
+      'Ações Relevantes',
+      'Dias Ativos no Período',
+      'Sessões Válidas no Período',
+      'Tempo Médio por Sessão',
+      'Status Atual'
     ];
 
     const rows = filteredUsers.map(u => [
@@ -278,11 +469,14 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
       u.email || 'N/A',
       u.profile || 'Usuário Analista',
       u.sector || 'N/A',
-      u.effectiveLastAccess ? new Date(u.effectiveLastAccess).toLocaleString('pt-BR') : 'Sem registro',
-      u.periodLogins,
+      u.effectiveLastLogin ? new Date(u.effectiveLastLogin).toLocaleString('pt-BR') : 'Sem registro',
+      u.effectiveLastActive ? new Date(u.effectiveLastActive).toLocaleString('pt-BR') : 'Sem registro',
+      formatActiveTime(u.periodActiveSeconds),
       u.periodActions,
-      formatUsageTime(u.totalMinutes),
-      u.computedStatus
+      u.periodActiveDays,
+      u.periodSessions,
+      formatActiveTime(u.avgSecondsPerSession),
+      u.isOnlineNow ? 'Ativo agora' : u.computedStatus
     ]);
 
     exportarCSVPadrao(headers, rows, `monitoramento_uso_usuarios_${new Date().toISOString().slice(0, 10)}.csv`);
@@ -296,18 +490,16 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
     return logs.filter(l => l.actionType === auditActionFilter);
   }, [activityLogs, selectedUserForAudit, auditActionFilter]);
 
-  // 5. Suporte à navegação de retorno (Tecla ESC e Botão Voltar do Navegador)
+  // Suporte à navegação de retorno (Tecla ESC e Botão Voltar do Navegador)
   useEffect(() => {
     if (!selectedUserForAudit) return;
 
-    // Listener para tecla ESC
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setSelectedUserForAudit(null);
       }
     };
 
-    // Suporte ao botão 'Voltar' do navegador
     window.history.pushState({ auditOpen: true }, '');
     const handlePopState = () => {
       setSelectedUserForAudit(null);
@@ -327,7 +519,7 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
       case 'login':
         return { label: 'Login', icon: <LogIn size={13} />, bg: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
       case 'project_create':
-        return { label: 'Novo Card', icon: <FolderPlus size={13} />, bg: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
+        return { label: 'Criação de Card', icon: <FolderPlus size={13} />, bg: 'bg-indigo-50 text-indigo-700 border-indigo-200' };
       case 'project_update':
       case 'project_move':
         return { label: 'Edição Card / Kanban', icon: <Activity size={13} />, bg: 'bg-blue-50 text-blue-700 border-blue-200' };
@@ -359,63 +551,173 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
             <ContextHelp contentKey="monitoramento" size="sm" />
           </div>
           <p className="text-slate-500 text-sm mt-1">
-            Painel exclusivo do perfil Master para acompanhamento da frequência de acessos, engajamento e auditoria de atividades.
+            Painel auditável para acompanhamento de tempo de uso ativo real, acessos e operações realizadas pelos usuários.
           </p>
         </div>
 
         <button 
           onClick={handleExportCSV}
-          className="flex items-center gap-2 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900 px-4 py-2.5 rounded-2xl font-bold text-sm border border-slate-200 shadow-sm transition-all"
+          className="flex items-center gap-2 bg-white text-slate-700 hover:bg-slate-100 hover:text-slate-900 px-4 py-2.5 rounded-2xl font-bold text-sm border border-slate-200 shadow-sm transition-all cursor-pointer"
         >
           <Download size={16} />
           <span>Exportar Relatório</span>
         </button>
       </div>
 
-      {/* 2. Cards de KPIs executivos */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 2. Cards de KPIs Executivos */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Card 1: Usuários Ativos Agora */}
+        <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xl relative">
+            <UserCheck size={22} />
+            {activeNowCount > 0 && (
+              <span className="absolute top-2 right-2 w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping" />
+            )}
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ativos Agora</p>
+            <h3 className="text-2xl font-black text-slate-900 mt-0.5">{activeNowCount}</h3>
+            <p className="text-[10px] text-emerald-600 font-bold">Interação nos últimos 5 min</p>
+          </div>
+        </div>
+
+        {/* Card 2: Usuários que Utilizaram no Período */}
         <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold text-xl">
             <Users size={22} />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Usuários Totais</p>
-            <h3 className="text-2xl font-black text-slate-900 mt-0.5">{totalUsersCount}</h3>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Utilizaram no Período</p>
+            <h3 className="text-2xl font-black text-slate-900 mt-0.5">{periodUsersCount} <span className="text-xs text-slate-400 font-semibold">/ {users.length}</span></h3>
+            <p className="text-[10px] text-slate-400 font-semibold">Com ≥ 1 dia ativo</p>
           </div>
         </div>
 
+        {/* Card 3: Tempo Ativo Total */}
         <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-xl">
-            <CheckCircle2 size={22} />
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xl">
+            <Clock size={22} />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Usuários Ativos</p>
-            <h3 className="text-2xl font-black text-slate-900 mt-0.5">{activeUsersCount}</h3>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tempo Ativo Total</p>
+            <h3 className="text-2xl font-black text-slate-900 mt-0.5">{formatActiveTime(totalPeriodActiveSeconds)}</h3>
+            <p className="text-[10px] text-slate-400 font-semibold">Utilização real no período</p>
           </div>
         </div>
 
+        {/* Card 4: Ações Realizadas */}
         <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-xl">
             <Zap size={22} />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ações no Período</p>
-            <h3 className="text-2xl font-black text-slate-900 mt-0.5">{totalActionsInPeriod}</h3>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Ações Realizadas</p>
+            <h3 className="text-2xl font-black text-slate-900 mt-0.5">{totalPeriodActions}</h3>
+            <p className="text-[10px] text-slate-400 font-semibold">Operações concluídas</p>
           </div>
         </div>
 
+        {/* Card 5: Média por Sessão */}
         <div className="bg-white p-5 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-xl">
+          <div className="w-12 h-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold text-xl">
             <TrendingUp size={22} />
           </div>
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Média Ações/Usuário</p>
-            <h3 className="text-2xl font-black text-slate-900 mt-0.5">{avgActionsPerUser}</h3>
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Média / Sessão</p>
+            <h3 className="text-2xl font-black text-slate-900 mt-0.5">{formatActiveTime(overallAvgSecondsPerSession)}</h3>
+            <p className="text-[10px] text-slate-400 font-semibold">Por sessão válida</p>
           </div>
         </div>
       </div>
 
-      {/* 3. Barra de Filtros e Busca */}
+      {/* 3. Guia de Transparência das Regras de Cálculo e Auditoria */}
+      <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden transition-all">
+        <button 
+          onClick={() => setIsRulesExpanded(!isRulesExpanded)}
+          className="w-full p-4 md:p-5 flex items-center justify-between text-left hover:bg-slate-50/80 transition-colors cursor-pointer"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold shrink-0">
+              <Info size={18} />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-900">Como essas métricas são calculadas? (Regras e Critérios Oficiais)</h4>
+              <p className="text-xs text-slate-500 font-medium mt-0.5">
+                Clique para visualizar as definições matemáticas e as regras de medição de presença, tempo ativo e ações.
+              </p>
+            </div>
+          </div>
+          <ChevronDown size={18} className={cn("text-slate-400 transition-transform duration-200 shrink-0", isRulesExpanded && "rotate-180")} />
+        </button>
+
+        {isRulesExpanded && (
+          <div className="px-5 pb-6 pt-2 border-t border-slate-100 text-xs text-slate-600 space-y-4 bg-slate-50/40 animate-in fade-in duration-150">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-slate-900">
+                  <UserCheck size={15} className="text-emerald-600" />
+                  <span>Ativo Agora</span>
+                </div>
+                <p className="text-slate-600 leading-relaxed">
+                  Usuário autenticado com aba visível e interação comprovada nos últimos <strong>5 minutos</strong>. Após 5 minutos sem interação ou se a aba for minimizada/fechada, o status passa imediatamente para <strong>Inativo</strong>.
+                </p>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-slate-900">
+                  <Clock size={15} className="text-blue-600" />
+                  <span>Tempo Ativo Real</span>
+                </div>
+                <p className="text-slate-600 leading-relaxed">
+                  Soma dos períodos em que o usuário esteve efetivamente utilizando o GIP Flow. Janelas de inatividade (&gt;5 min), abas em segundo plano (Excel, Teams, etc.) e navegador fechado são automaticamente pausados. Múltiplas abas não duplicam o tempo.
+                </p>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-slate-900">
+                  <Calendar size={15} className="text-purple-600" />
+                  <span>Dia Ativo</span>
+                </div>
+                <p className="text-slate-600 leading-relaxed">
+                  Dia calendário com pelo menos <strong>1 minuto de tempo ativo real</strong> (≥ 60s) ou pelo menos uma operação relevante concluída. Um mesmo dia conta no máximo 1 vez, independente da quantidade de acessos.
+                </p>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-slate-900">
+                  <LogIn size={15} className="text-indigo-600" />
+                  <span>Sessões Válidas</span>
+                </div>
+                <p className="text-slate-600 leading-relaxed">
+                  Entrada autenticada que gerou pelo menos 1 minuto de utilização real. Recarregar a página (F5) ou abrir novas abas não cria sessões adicionais.
+                </p>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-slate-900">
+                  <Zap size={15} className="text-amber-600" />
+                  <span>Ações Realizadas</span>
+                </div>
+                <p className="text-slate-600 leading-relaxed">
+                  Total de operações relevantes <strong>concluídas com sucesso</strong> (cards, subtarefas, ações operacionais, PDCA, BPMN, uploads e relatórios). Cliques vazios, navegação e filtros não são contados como ações de alteração de dados.
+                </p>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-1.5">
+                <div className="flex items-center gap-2 font-bold text-slate-900">
+                  <Activity size={15} className="text-cyan-600" />
+                  <span>Último Acesso vs Atividade</span>
+                </div>
+                <p className="text-slate-600 leading-relaxed">
+                  <strong>Último Acesso</strong> é o momento do login. <strong>Última Atividade</strong> é o momento da última operação relevante ou interação ativa registrada.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 4. Barra de Filtros e Busca */}
       <div className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
         {/* Campo de Busca */}
         <div className="relative flex-1">
@@ -435,29 +737,55 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
           <div className="flex items-center gap-1 bg-slate-50 p-1 rounded-2xl border border-slate-200 text-xs font-semibold">
             <button 
               onClick={() => { setPeriodFilter('today'); setCurrentPage(1); }}
-              className={cn("px-3 py-1.5 rounded-xl transition-all", periodFilter === 'today' ? "bg-indigo-600 text-white shadow-sm font-bold" : "text-slate-600 hover:text-slate-900")}
+              className={cn("px-3 py-1.5 rounded-xl transition-all cursor-pointer", periodFilter === 'today' ? "bg-indigo-600 text-white shadow-sm font-bold" : "text-slate-600 hover:text-slate-900")}
             >
               Hoje
             </button>
             <button 
               onClick={() => { setPeriodFilter('7days'); setCurrentPage(1); }}
-              className={cn("px-3 py-1.5 rounded-xl transition-all", periodFilter === '7days' ? "bg-indigo-600 text-white shadow-sm font-bold" : "text-slate-600 hover:text-slate-900")}
+              className={cn("px-3 py-1.5 rounded-xl transition-all cursor-pointer", periodFilter === '7days' ? "bg-indigo-600 text-white shadow-sm font-bold" : "text-slate-600 hover:text-slate-900")}
             >
               7 Dias
             </button>
             <button 
               onClick={() => { setPeriodFilter('30days'); setCurrentPage(1); }}
-              className={cn("px-3 py-1.5 rounded-xl transition-all", periodFilter === '30days' ? "bg-indigo-600 text-white shadow-sm font-bold" : "text-slate-600 hover:text-slate-900")}
+              className={cn("px-3 py-1.5 rounded-xl transition-all cursor-pointer", periodFilter === '30days' ? "bg-indigo-600 text-white shadow-sm font-bold" : "text-slate-600 hover:text-slate-900")}
             >
               30 Dias
             </button>
             <button 
+              onClick={() => { setPeriodFilter('custom'); setCurrentPage(1); }}
+              className={cn("px-3 py-1.5 rounded-xl transition-all cursor-pointer", periodFilter === 'custom' ? "bg-indigo-600 text-white shadow-sm font-bold" : "text-slate-600 hover:text-slate-900")}
+            >
+              Personalizado
+            </button>
+            <button 
               onClick={() => { setPeriodFilter('all'); setCurrentPage(1); }}
-              className={cn("px-3 py-1.5 rounded-xl transition-all", periodFilter === 'all' ? "bg-indigo-600 text-white shadow-sm font-bold" : "text-slate-600 hover:text-slate-900")}
+              className={cn("px-3 py-1.5 rounded-xl transition-all cursor-pointer", periodFilter === 'all' ? "bg-indigo-600 text-white shadow-sm font-bold" : "text-slate-600 hover:text-slate-900")}
             >
               Todos
             </button>
           </div>
+
+          {/* Seletores de Data Personalizada */}
+          {periodFilter === 'custom' && (
+            <div className="flex items-center gap-2 bg-slate-50 px-3 py-1 rounded-2xl border border-slate-200 text-xs">
+              <span className="font-semibold text-slate-500">De:</span>
+              <input 
+                type="date" 
+                value={customStartDate} 
+                onChange={(e) => setCustomStartDate(e.target.value)}
+                className="bg-transparent font-bold text-slate-800 outline-none"
+              />
+              <span className="font-semibold text-slate-500">Até:</span>
+              <input 
+                type="date" 
+                value={customEndDate} 
+                onChange={(e) => setCustomEndDate(e.target.value)}
+                className="bg-transparent font-bold text-slate-800 outline-none"
+              />
+            </div>
+          )}
 
           {/* Status */}
           <select 
@@ -476,15 +804,16 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
             onChange={(e) => setSortBy(e.target.value as any)}
             className="bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500"
           >
-            <option value="last_access">Mais Recentes</option>
-            <option value="actions_desc">Mais Ativos (Ações)</option>
-            <option value="actions_asc">Menos Ativos</option>
-            <option value="time_desc">Maior Tempo de Uso</option>
+            <option value="last_active">Última Atividade</option>
+            <option value="last_access">Último Acesso (Login)</option>
+            <option value="time_desc">Maior Tempo Ativo</option>
+            <option value="actions_desc">Mais Ações Realizadas</option>
+            <option value="actions_asc">Menos Ações</option>
           </select>
         </div>
       </div>
 
-      {/* 4. Tabela de Uso dos Usuários */}
+      {/* 5. Tabela de Monitoramento de Usuários */}
       <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
@@ -493,9 +822,11 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
                 <th className="py-4 px-6">Usuário</th>
                 <th className="py-4 px-6">E-mail / Perfil</th>
                 <th className="py-4 px-6">Último Acesso</th>
-                <th className="py-4 px-6 text-center">Logins</th>
-                <th className="py-4 px-6 text-center">Ações Realizadas</th>
-                <th className="py-4 px-6 text-center">Tempo Est.</th>
+                <th className="py-4 px-6">Última Atividade</th>
+                <th className="py-4 px-6 text-center">Tempo Ativo</th>
+                <th className="py-4 px-6 text-center">Ações</th>
+                <th className="py-4 px-6 text-center">Dias Ativos</th>
+                <th className="py-4 px-6 text-center">Sessões</th>
                 <th className="py-4 px-6 text-center">Status</th>
                 <th className="py-4 px-6 text-right">Auditoria</th>
               </tr>
@@ -537,54 +868,72 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
                         </div>
                       </td>
 
-                      {/* Último Acesso */}
+                      {/* Último Acesso (Login) */}
                       <td className="py-4 px-6 whitespace-nowrap">
                         <div className="flex items-center gap-1.5 text-xs text-slate-600 font-semibold">
-                          <Clock size={14} className="text-slate-400 shrink-0" />
-                          <span>{formatFriendlyDate(u.effectiveLastAccess)}</span>
+                          <LogIn size={14} className="text-emerald-500 shrink-0" />
+                          <span>{formatFriendlyDate(u.effectiveLastLogin)}</span>
                         </div>
                       </td>
 
-                      {/* Logins */}
-                      <td className="py-4 px-6 text-center">
-                        <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-xl bg-slate-100 font-bold text-xs text-slate-800 border border-slate-200">
-                          {u.periodLogins}
+                      {/* Última Atividade Relevante */}
+                      <td className="py-4 px-6 whitespace-nowrap">
+                        <div className="flex items-center gap-1.5 text-xs text-slate-600 font-semibold">
+                          <Clock size={14} className="text-indigo-500 shrink-0" />
+                          <span>{formatFriendlyDate(u.effectiveLastActive)}</span>
+                        </div>
+                      </td>
+
+                      {/* Tempo Ativo Real */}
+                      <td className="py-4 px-6 text-center font-bold text-xs text-slate-800 whitespace-nowrap">
+                        <span className="px-2.5 py-1 rounded-xl bg-blue-50 text-blue-700 border border-blue-200/60 font-black">
+                          {formatActiveTime(u.periodActiveSeconds)}
                         </span>
                       </td>
 
                       {/* Ações Realizadas */}
                       <td className="py-4 px-6 text-center">
-                        <div className="inline-flex flex-col items-center gap-1">
-                          <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2.5 rounded-xl bg-amber-50 font-black text-xs text-amber-700 border border-amber-200">
-                            {u.periodActions}
-                          </span>
-                        </div>
-                      </td>
-
-                      {/* Tempo Estimado */}
-                      <td className="py-4 px-6 text-center font-bold text-xs text-slate-700 whitespace-nowrap">
-                        {formatUsageTime(u.totalMinutes)}
-                      </td>
-
-                      {/* Status */}
-                      <td className="py-4 px-6 text-center">
-                        <span className={cn(
-                          "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border shadow-2xs",
-                          u.computedStatus === 'Ativo' 
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
-                            : "bg-slate-100 text-slate-500 border-slate-200"
-                        )}>
-                          <span className={cn("w-2 h-2 rounded-full", u.computedStatus === 'Ativo' ? "bg-emerald-500 animate-pulse" : "bg-slate-400")} />
-                          {u.computedStatus}
+                        <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2.5 rounded-xl bg-amber-50 font-black text-xs text-amber-700 border border-amber-200">
+                          {u.periodActions}
                         </span>
                       </td>
 
-                      {/* Auditoria / Ações */}
+                      {/* Dias Ativos */}
+                      <td className="py-4 px-6 text-center font-bold text-xs text-slate-700">
+                        {u.periodActiveDays}
+                      </td>
+
+                      {/* Sessões Válidas */}
+                      <td className="py-4 px-6 text-center font-bold text-xs text-slate-700">
+                        {u.periodSessions}
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-4 px-6 text-center whitespace-nowrap">
+                        {u.isOnlineNow ? (
+                          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                            Ativo agora
+                          </span>
+                        ) : (
+                          <span className={cn(
+                            "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border shadow-2xs",
+                            u.computedStatus === 'Ativo' 
+                              ? "bg-slate-100 text-slate-700 border-slate-200" 
+                              : "bg-slate-50 text-slate-400 border-slate-200"
+                          )}>
+                            <span className={cn("w-2 h-2 rounded-full", u.computedStatus === 'Ativo' ? "bg-slate-500" : "bg-slate-300")} />
+                            {u.computedStatus}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Auditoria / Detalhes */}
                       <td className="py-4 px-6 text-right">
                         <button 
                           onClick={() => setSelectedUserForAudit(u)}
-                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-xl font-bold text-xs border border-slate-200 hover:border-indigo-200 transition-all"
-                          title="Ver histórico detalhado de ações"
+                          className="inline-flex items-center gap-1.5 px-3 py-2 bg-slate-50 hover:bg-indigo-50 text-slate-700 hover:text-indigo-600 rounded-xl font-bold text-xs border border-slate-200 hover:border-indigo-200 transition-all cursor-pointer"
+                          title="Ver histórico detalhado de ações e auditoria"
                         >
                           <Eye size={14} />
                           <span>Detalhes</span>
@@ -595,7 +944,7 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
                 })
               ) : (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={10} className="py-12 text-center text-slate-400">
                     <p className="text-sm font-semibold">Nenhum usuário encontrado com os filtros aplicados.</p>
                   </td>
                 </tr>
@@ -614,14 +963,14 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
               <button 
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                className="p-2 bg-white rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="p-2 bg-white rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
               >
                 <ChevronLeft size={16} />
               </button>
               <button 
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                className="p-2 bg-white rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                className="p-2 bg-white rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
               >
                 <ChevronRight size={16} />
               </button>
@@ -630,7 +979,7 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
         )}
       </div>
 
-      {/* 5. Modal Slide-Over de Auditoria Detalhada do Usuário */}
+      {/* 6. Modal Slide-Over de Auditoria Detalhada do Usuário */}
       {selectedUserForAudit && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex justify-end animate-in fade-in duration-200">
           <div className="w-full max-w-2xl bg-white h-full shadow-2xl border-l border-slate-200 flex flex-col p-6 overflow-hidden">
@@ -641,7 +990,7 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
                 <ChevronRight size={12} className="text-slate-400 shrink-0" />
                 <button 
                   onClick={() => setSelectedUserForAudit(null)} 
-                  className="hover:text-indigo-600 font-semibold hover:underline transition-colors shrink-0"
+                  className="hover:text-indigo-600 font-semibold hover:underline transition-colors shrink-0 cursor-pointer"
                 >
                   Monitoramento de Usuários
                 </button>
@@ -652,7 +1001,7 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
               <div className="flex items-center justify-between gap-3">
                 <button 
                   onClick={() => setSelectedUserForAudit(null)}
-                  className="inline-flex items-center gap-2 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 px-3.5 py-2 rounded-2xl font-bold text-xs transition-all border border-slate-200 hover:border-indigo-200 shadow-2xs"
+                  className="inline-flex items-center gap-2 bg-slate-100 hover:bg-indigo-50 text-slate-700 hover:text-indigo-700 px-3.5 py-2 rounded-2xl font-bold text-xs transition-all border border-slate-200 hover:border-indigo-200 shadow-2xs cursor-pointer"
                 >
                   <ChevronLeft size={16} />
                   <span>Voltar para Monitoramento de Usuários</span>
@@ -660,7 +1009,7 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
 
                 <button 
                   onClick={() => setSelectedUserForAudit(null)}
-                  className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                  className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
                   title="Fechar (Pressione ESC)"
                 >
                   <X size={20} />
@@ -680,24 +1029,36 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
             </div>
 
             {/* Resumo do Usuário no Modal */}
-            <div className="my-4 grid grid-cols-3 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200/80 text-center">
+            <div className="my-4 grid grid-cols-4 gap-2.5 p-4 bg-slate-50 rounded-2xl border border-slate-200/80 text-center">
               <div>
-                <p className="text-[10px] uppercase font-bold text-slate-400">Logins Registrados</p>
-                <p className="text-base font-black text-slate-900 mt-0.5">{selectedUserForAudit.periodLogins || selectedUserForAudit.loginCount || 0}</p>
+                <p className="text-[10px] uppercase font-bold text-slate-400">Último Login</p>
+                <p className="text-xs font-black text-slate-900 mt-1 truncate">
+                  {selectedUserForAudit.effectiveLastLogin ? formatFriendlyDate(selectedUserForAudit.effectiveLastLogin) : 'Sem registro'}
+                </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase font-bold text-slate-400">Total de Ações</p>
-                <p className="text-base font-black text-indigo-600 mt-0.5">{selectedUserForAudit.periodActions || selectedUserForAudit.actionCount || 0}</p>
+                <p className="text-[10px] uppercase font-bold text-slate-400">Última Atividade</p>
+                <p className="text-xs font-black text-slate-900 mt-1 truncate">
+                  {selectedUserForAudit.effectiveLastActive ? formatFriendlyDate(selectedUserForAudit.effectiveLastActive) : 'Sem registro'}
+                </p>
               </div>
               <div>
-                <p className="text-[10px] uppercase font-bold text-slate-400">Tempo de Uso</p>
-                <p className="text-base font-black text-slate-900 mt-0.5">{formatUsageTime(selectedUserForAudit.totalMinutes || 0)}</p>
+                <p className="text-[10px] uppercase font-bold text-slate-400">Tempo Ativo</p>
+                <p className="text-xs font-black text-blue-600 mt-1">
+                  {formatActiveTime(selectedUserForAudit.periodActiveSeconds || selectedUserForAudit.totalActiveSeconds || 0)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase font-bold text-slate-400">Ações Realizadas</p>
+                <p className="text-xs font-black text-amber-600 mt-1">
+                  {selectedUserForAudit.periodActions || selectedUserForAudit.actionCount || 0}
+                </p>
               </div>
             </div>
 
             {/* Filtro de Tipo de Ação na Auditoria */}
             <div className="flex items-center justify-between gap-2 mb-3">
-              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Histórico de Atividades</h4>
+              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Histórico de Atividades Auditadas</h4>
               <select 
                 value={auditActionFilter}
                 onChange={(e) => setAuditActionFilter(e.target.value)}
@@ -705,45 +1066,47 @@ export default function UserActivityMonitoringTab({ users, currentUser }: UserAc
               >
                 <option value="all">Todas as Ações</option>
                 <option value="login">Logins</option>
-                <option value="project_create">Criação de Projetos</option>
+                <option value="project_create">Criação de Cards</option>
                 <option value="project_update">Edições / Kanban</option>
+                <option value="subtask_update">Subtarefas</option>
+                <option value="pdca_update">Atualizações PDCA</option>
                 <option value="operational_action">Ações Operacionais</option>
                 <option value="file_upload">Upload de Arquivos</option>
                 <option value="report_download">Relatórios</option>
               </select>
             </div>
 
-            {/* Lista com Scroll de Logs */}
-            <div className="flex-1 overflow-y-auto pr-1 space-y-3 custom-scrollbar">
+            {/* Lista com Scroll dos Logs de Auditoria */}
+            <div className="flex-1 overflow-y-auto space-y-3 pr-1">
               {selectedUserLogs.length > 0 ? (
                 selectedUserLogs.map((log) => {
                   const badge = getActionTypeBadge(log.actionType);
 
                   return (
-                    <div key={log.id} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                    <div key={log.id} className="p-3.5 bg-slate-50/70 hover:bg-slate-50 rounded-2xl border border-slate-200/80 transition-colors space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
-                        <span className={cn("inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider border", badge.bg)}>
-                          {badge.icon}
-                          <span>{badge.label}</span>
-                        </span>
-                        <span className="text-[11px] text-slate-400 font-medium">
+                        <div className="flex items-center gap-2">
+                          <span className={cn("inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[10px] font-bold border", badge.bg)}>
+                            {badge.icon}
+                            <span>{badge.label}</span>
+                          </span>
+                          <span className="text-xs font-bold text-slate-900">{log.actionName}</span>
+                        </div>
+                        <span className="text-[11px] text-slate-400 font-semibold whitespace-nowrap">
                           {formatFriendlyDate(log.timestamp)}
                         </span>
                       </div>
 
-                      <p className="text-xs font-bold text-slate-800">{log.actionName}</p>
                       {log.details && (
-                        <p className="text-xs text-slate-600 bg-white p-2 rounded-xl border border-slate-100">
-                          {log.details}
-                        </p>
+                        <p className="text-xs text-slate-600 font-medium pl-1">{log.details}</p>
                       )}
                     </div>
                   );
                 })
               ) : (
-                <div className="p-8 text-center text-slate-400 space-y-2">
-                  <Activity size={32} className="mx-auto text-slate-300" />
-                  <p className="text-xs font-semibold">Nenhum registro de atividade capturado para este filtro.</p>
+                <div className="h-48 flex flex-col items-center justify-center text-center p-6 text-slate-400">
+                  <Activity size={32} className="text-slate-300 mb-2" />
+                  <p className="text-sm font-semibold">Nenhuma atividade registrada para este filtro.</p>
                 </div>
               )}
             </div>

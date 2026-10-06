@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { 
   BarChart, 
   Bar, 
@@ -19,6 +19,7 @@ import {
   CheckCircle2, 
   Clock, 
   AlertTriangle, 
+  AlertCircle,
   TrendingUp, 
   Users, 
   Target, 
@@ -70,6 +71,16 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
   const [sortField, setSortField] = useState<'tempo_etapa' | 'tempo_total' | 'nivel_alerta'>('tempo_etapa');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [toastNotification, setToastNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  useEffect(() => {
+    if (toastNotification) {
+      const timer = setTimeout(() => {
+        setToastNotification(null);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastNotification]);
 
   // 1. ORIGEM DOS DADOS (Cards não cancelados ou excluídos)
   const activeProjects = useMemo(() => {
@@ -90,6 +101,24 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
   const uniqueSetores = useMemo(() => {
     return Array.from(new Set(computedData.map(d => d.setor_atual).filter(Boolean))).map(name => ({ id: name, label: name }));
   }, [computedData]);
+
+  const alertOptions = useMemo(() => [
+    { id: 'Muito crítico', label: 'Muito crítico (Crítico)' },
+    { id: 'Crítico', label: 'Crítico (Alto)' },
+    { id: 'Parado', label: 'Parado (Médio)' },
+    { id: 'Normal', label: 'Normal (Baixo)' },
+    { id: 'Finalizado', label: 'Finalizado' }
+  ], []);
+
+  const statusFilterOptions = useMemo(() => [
+    { id: 'Planejamento', label: 'Planejamento' },
+    { id: 'Em mapeamento', label: 'Em mapeamento' },
+    { id: 'Análise do problema', label: 'Análise do problema' },
+    { id: 'Plano de ação', label: 'Plano de ação' },
+    { id: 'Período de teste', label: 'Período de teste' },
+    { id: 'Em implantação', label: 'Em implantação' },
+    { id: 'Concluído', label: 'Concluído' }
+  ], []);
 
   // Aplicar filtros e busca
   const filteredData = useMemo(() => {
@@ -417,6 +446,10 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
       pdfMake.createPdf(docDefinition).download(`visao-geral-detalhada-${format(new Date(), 'dd-MM-yyyy')}.pdf`);
     } catch (error) {
       console.error("Erro ao exportar PDF:", error);
+      setToastNotification({
+        type: 'error',
+        message: 'Não foi possível gerar o PDF. Tente novamente.'
+      });
     } finally {
       setIsExportingPDF(false);
     }
@@ -550,13 +583,7 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
           <FilterDropdown
             label="Criticidade (Alerta)"
             placeholder="Escolher criticidade"
-            options={[
-              { id: 'Muito crítico', label: 'Muito crítico (Crítico)' },
-              { id: 'Crítico', label: 'Crítico (Alto)' },
-              { id: 'Parado', label: 'Parado (Médio)' },
-              { id: 'Normal', label: 'Normal (Baixo)' },
-              { id: 'Finalizado', label: 'Finalizado' }
-            ]}
+            options={alertOptions}
             selected={selectedAlerts}
             onToggle={(id) => toggleFilter(selectedAlerts, id, setSelectedAlerts)}
             onClear={() => setSelectedAlerts([])}
@@ -567,15 +594,7 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
           <FilterDropdown
             label="Mapeamento Geral"
             placeholder="Escolher status"
-            options={[
-              { id: 'Planejamento', label: 'Planejamento' },
-              { id: 'Em mapeamento', label: 'Em mapeamento' },
-              { id: 'Análise do problema', label: 'Análise do problema' },
-              { id: 'Plano de ação', label: 'Plano de ação' },
-              { id: 'Período de teste', label: 'Período de teste' },
-              { id: 'Em implantação', label: 'Em implantação' },
-              { id: 'Concluído', label: 'Concluído' }
-            ]}
+            options={statusFilterOptions}
             selected={selectedStatuses}
             onToggle={(id) => toggleFilter(selectedStatuses, id, setSelectedStatuses)}
             onClear={() => setSelectedStatuses([])}
@@ -917,6 +936,35 @@ export default function DetailedOverviewTab({ projects, users, onProjectClick }:
           </table>
         </div>
       </div>
+
+      {/* Toast Notification Flutuante */}
+      <AnimatePresence>
+        {toastNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-6 right-6 z-[300] max-w-md shadow-2xl"
+          >
+            <div className={cn(
+              "px-5 py-4 rounded-2xl border flex items-center gap-3 font-bold text-sm backdrop-blur-md",
+              toastNotification.type === 'error' && "bg-rose-600 text-white border-rose-500 shadow-rose-500/20",
+              toastNotification.type === 'success' && "bg-emerald-600 text-white border-emerald-500 shadow-emerald-500/20"
+            )}>
+              {toastNotification.type === 'error' && <AlertCircle size={20} className="shrink-0 text-rose-100" />}
+              {toastNotification.type === 'success' && <CheckCircle2 size={20} className="shrink-0 text-emerald-100" />}
+              <span className="flex-1 text-xs sm:text-sm font-medium">{toastNotification.message}</span>
+              <button 
+                type="button" 
+                onClick={() => setToastNotification(null)}
+                className="p-1 hover:bg-white/20 rounded-lg transition-colors text-white/80 hover:text-white cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
